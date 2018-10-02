@@ -1,0 +1,6 @@
+add_subdirectory(InstrumentMemAccesses)
+add_subdirectory(HeapifyObjects)
+add_subdirectory(LowerAtomics)
+add_subdirectory(LowerMemIntrinsics)
+add_subdirectory(RewriteNews)
+add_subdirectory(TagDynamicAllocs)
