@@ -41,8 +41,20 @@ include_directories(${LLVM_INCLUDE_DIRS})
 set(AFL_DIR "${CMAKE_SOURCE_DIR}/ext/aflplusplus")
 
 add_custom_target(aflplusplus ALL
-  COMMAND LLVM_CONFIG="${LLVM_TOOLS_BINARY_DIR}/llvm-config" make -j
+  COMMAND
+    LLVM_CONFIG="${LLVM_TOOLS_BINARY_DIR}/llvm-config"
+    PREFIX=${CMAKE_INSTALL_PREFIX}
+    make -j
   WORKING_DIRECTORY ${AFL_DIR}
 )
+
+set(AFL_INSTALL_CMD "make -C ${AFL_DIR} install PREFIX=${CMAKE_INSTALL_PREFIX}")
+install(CODE
+    "execute_process(COMMAND ${AFL_INSTALL_CMD})"
+)
+
+#
+# datAFLow
+#
 
 add_subdirectory(src)
