@@ -16,12 +16,12 @@ add_definitions(-DFUZZALLOC_LLVM_DIR="${FUZZALLOC_LLVM_DIR}"
 
 add_executable(dataflow-cc dataflow-cc.c common.c)
 add_executable(dataflow-cc++ dataflow-cc.c common.c)
-add_executable(dataflow-preprocess dataflow-preprocess.c common.c)
-add_executable(dataflow-preprocess++ dataflow-preprocess.c common.c)
+add_executable(dataflow-pp dataflow-pp.c common.c)
+add_executable(dataflow-pp++ dataflow-pp.c common.c)
 add_executable(dataflow-stats dataflow-stats.c)
 
 install(TARGETS dataflow-cc RUNTIME DESTINATION bin)
 install(TARGETS dataflow-cc++ RUNTIME DESTINATION bin)
-install(TARGETS dataflow-preprocess RUNTIME DESTINATION bin)
-install(TARGETS dataflow-preprocess++ RUNTIME DESTINATION bin)
+install(TARGETS dataflow-pp RUNTIME DESTINATION bin)
+install(TARGETS dataflow-pp++ RUNTIME DESTINATION bin)
 install(TARGETS dataflow-stats RUNTIME DESTINATION bin)

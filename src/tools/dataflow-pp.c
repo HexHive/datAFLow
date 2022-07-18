@@ -27,7 +27,7 @@ static void edit_params(u32 argc, char **argv) {
     name++;
   }
 
-  if (!strcmp(name, "dataflow-preprocess++")) {
+  if (!strcmp(name, "dataflow-pp++")) {
     u8 *alt_cxx = getenv("AFL_CXX");
     cc_params[0] = alt_cxx ? alt_cxx : (u8 *)"clang++";
   } else {
@@ -91,7 +91,7 @@ static void edit_params(u32 argc, char **argv) {
 
 int main(int argc, char **argv) {
   if (isatty(2) && !getenv("AFL_QUIET")) {
-    SAYF(cCYA "dataflow-preprocess " cBRI VERSION cRST
+    SAYF(cCYA "dataflow-pp" cBRI VERSION cRST
               " by <adrian.herrera@anu.edu.au>\n");
   }
 
@@ -102,7 +102,7 @@ int main(int argc, char **argv) {
          "required to be tagged by dataflow-clang-fast. A typical usage would "
          "be:\n\n"
 
-         "  dataflow-preprocess /path/to/file\n\n");
+         "  dataflow-pp /path/to/file\n\n");
 
     exit(1);
   }
