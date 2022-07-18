@@ -37,51 +37,8 @@
 #include "common.h"
 #include "fuzzalloc.h"
 
-static u8 *obj_path;       /* Path to runtime libraries         */
 static u8 **cc_params;     /* Parameters passed to the real CC  */
 static u32 cc_par_cnt = 1; /* Param count, including argv0      */
-
-/* Try to find the runtime libraries. If that fails, abort. */
-
-static void find_obj(u8 *argv0) {
-  u8 *afl_path = getenv("AFL_PATH");
-  u8 *slash, *tmp;
-
-  if (afl_path) {
-    tmp = alloc_printf("%s/afl-compiler-rt.o", afl_path);
-
-    if (!access(tmp, R_OK)) {
-      obj_path = afl_path;
-      ck_free(tmp);
-      return;
-    }
-
-    ck_free(tmp);
-  }
-
-  slash = strrchr(argv0, '/');
-
-  if (slash) {
-    u8 *dir;
-
-    *slash = 0;
-    dir = ck_strdup(argv0);
-    *slash = '/';
-
-    tmp = alloc_printf("%s/afl-compiler-rt.o", dir);
-
-    if (!access(tmp, R_OK)) {
-      obj_path = dir;
-      ck_free(tmp);
-      return;
-    }
-
-    ck_free(tmp);
-    ck_free(dir);
-  }
-
-  FATAL("Unable to find 'afl-compiler-rt.o'. Please set AFL_PATH");
-}
 
 /* Copy argv to cc_params, making the necessary edits. */
 
@@ -369,11 +326,11 @@ static void edit_params(u32 argc, char **argv) {
 
     switch (bit_mode) {
     case 0:
-      cc_params[cc_par_cnt++] = alloc_printf("%s/afl-compiler-rt.o", obj_path);
+      cc_params[cc_par_cnt++] = AFL_DIR "/afl-compiler-rt.o";
       break;
 
     case 32:
-      cc_params[cc_par_cnt++] = alloc_printf("%s/afl-compiler-rt-32.o", obj_path);
+      cc_params[cc_par_cnt++] = AFL_DIR "/afl-compiler-rt-32.o";
 
       if (access(cc_params[cc_par_cnt - 1], R_OK)) {
         FATAL("-m32 is not supported by your compiler");
@@ -381,7 +338,7 @@ static void edit_params(u32 argc, char **argv) {
       break;
 
     case 64:
-      cc_params[cc_par_cnt++] = alloc_printf("%s/afl-compiler-rt-64.o", obj_path);
+      cc_params[cc_par_cnt++] = AFL_DIR "/afl-compiler-rt-64.o";
 
       if (access(cc_params[cc_par_cnt - 1], R_OK)) {
         FATAL("-m64 is not supported by your compiler");
@@ -425,8 +382,6 @@ int main(int argc, char **argv) {
 
     exit(1);
   }
-
-  find_obj(argv[0]);
 
   edit_params(argc, argv);
 

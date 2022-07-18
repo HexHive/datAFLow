@@ -12,7 +12,8 @@ get_filename_component(FUZZALLOC_MALLOC_DIR
                        ABSOLUTE)
 
 add_definitions(-DFUZZALLOC_LLVM_DIR="${FUZZALLOC_LLVM_DIR}"
-                -DFUZZALLOC_MALLOC_DIR="${FUZZALLOC_MALLOC_DIR}")
+                -DFUZZALLOC_MALLOC_DIR="${FUZZALLOC_MALLOC_DIR}"
+                -DAFL_DIR="${AFL_DIR}")
 
 add_executable(dataflow-cc dataflow-cc.c common.c)
 add_executable(dataflow-cc++ dataflow-cc.c common.c)
