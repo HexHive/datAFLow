@@ -92,6 +92,7 @@ cmake --build .
 cmake --build . --target install
 
 # Make sure the install path is available in $PATH
+export PATH=$(realpath ../install/bin):$PATH
 ```
 
 Note that after building LLVM with the custom ASan, you will have to rebuild
@@ -102,7 +103,7 @@ fuzzalloc with the new clang/clang++ (found under `install/bin`).
 ```bash
 mkdir build
 cd build
-cmake -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DAFL_PATH=/path/to./afl++/source $FUZZALLOC_SRC
+cmake -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DAFL_DIR=/path/to./afl++/source $FUZZALLOC_SRC
 make -j
 ```
 
