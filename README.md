@@ -24,6 +24,12 @@ International Fuzzing Workshop (FUZZING)
 
 ## Building
 
+First, ensure all submodules are initialized.
+
+```bash
+git submodule update --init --recursive
+```
+
 The `datAFLow` fuzzer requires a custom version of clang. Once this is built,
 the `fuzzalloc` toolchain can be built. `FUZZALLOC_SRC` variable refers to this
 directory.
@@ -103,7 +109,7 @@ fuzzalloc with the new clang/clang++ (found under `install/bin`).
 ```bash
 mkdir build
 cd build
-cmake -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DAFL_DIR=/path/to./afl++/source $FUZZALLOC_SRC
+cmake -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ $FUZZALLOC_SRC
 make -j
 ```
 

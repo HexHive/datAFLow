@@ -1,0 +1,6 @@
+[submodule "ext/svf"]
+	path = ext/svf
+	url = https://github.com/svf-tools/svf
+[submodule "ext/aflplusplus"]
+	path = ext/aflplusplus
+	url = https://github.com/aflplusplus/aflplusplus
