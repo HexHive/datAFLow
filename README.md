@@ -49,9 +49,11 @@ cd build
 # If debugging you can also add -DCMAKE_BUILD_TYPE=Debug -DCOMPILER_RT_DEBUG=On
 # Note that if you're going to use gclang, things seem to work better if you use
 # the gold linker (https://llvm.org/docs/GoldPlugin.html)
-cmake ../llvm -DLLVM_ENABLE_PROJECTS="clang;compiler-rt"        \
-    -DLLVM_BUILD_EXAMPLES=Off -DLLVM_INCLUDE_EXAMPLES=Off       \
-    -DLLVM_TARGETS_TO_BUILD="X86" -DCMAKE_INSTALL_PREFIX=$(realpath ../install)
+cmake ../llvm -DLLVM_ENABLE_PROJECTS="clang;compiler-rt"    \
+    -DLLVM_BUILD_EXAMPLES=Off -DLLVM_INCLUDE_EXAMPLES=Off   \
+    -DLLVM_TARGETS_TO_BUILD="X86"                           \
+    -DCMAKE_INSTALL_PREFIX=$(realpath ../install)           \
+    -GNina
 cmake --build .
 cmake --build . --target install
 
