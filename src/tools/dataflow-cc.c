@@ -126,16 +126,16 @@ static void edit_params(u32 argc, char **argv) {
   /* Expand global variables with static ConstantAggregate initializers */
 
   cc_params[cc_par_cnt++] = "-fplugin=" FUZZALLOC_LLVM_DIR
-                            "/Transforms/HeapifyObjects/"
+                            "/Transforms/Heapification/"
                             "libfuzzalloc-expand-gv-initializers.so";
 
   /* Heapify static arrays to dynamically allocated arrays */
 
   cc_params[cc_par_cnt++] = "-fplugin=" FUZZALLOC_LLVM_DIR
-                            "/Transforms/HeapifyObjects/"
+                            "/Transforms/Heapification/"
                             "libfuzzalloc-heapify-allocas.so";
   cc_params[cc_par_cnt++] = "-fplugin=" FUZZALLOC_LLVM_DIR
-                            "/Transforms/HeapifyObjects/"
+                            "/Transforms/Heapification/"
                             "libfuzzalloc-heapify-global-vars.so";
 
   if (getenv("FUZZALLOC_HEAPIFY_STRUCTS")) {

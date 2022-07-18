@@ -1,4 +1,4 @@
-//===-- CollectTagSites.cpp - Collects sites to tag in later passes -------===//
+//===-- TagSites.cpp - Analyze def sites to tag in later passes -----------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -8,7 +8,7 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// This pass collects values (functions, global variables/alias, and structs)
+/// This pass analyzes values (functions, global variables/alias, and structs)
 /// that will require tagging by the \c TagDynamicAllocs pass.
 ///
 //===----------------------------------------------------------------------===//
@@ -30,7 +30,7 @@
 #include "llvm/Support/VirtualFileSystem.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
 
-#include "Utils/FuzzallocUtils.h"
+#include "Support/FuzzallocUtils.h"
 #include "debug.h" // from afl
 
 using namespace llvm;
@@ -329,7 +329,7 @@ bool CollectTagSites::runOnModule(Module &M) {
 }
 
 static RegisterPass<CollectTagSites>
-    X("fuzzalloc-collect-tag-sites", "Collect values that will require tagging",
+    X("fuzzalloc-collect-tag-sites", "Analyze values that will require tagging",
       false, false);
 
 static void registerCollectTagSitesPass(const PassManagerBuilder &,

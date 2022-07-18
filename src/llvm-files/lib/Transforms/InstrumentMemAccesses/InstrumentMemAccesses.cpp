@@ -31,7 +31,7 @@
 #include "llvm/Transforms/Utils/ModuleUtils.h"
 #include "llvm/Transforms/Utils/PromoteMemToReg.h"
 
-#include "Utils/FuzzallocUtils.h"
+#include "Support/FuzzallocUtils.h"
 #include "debug.h"     // from afl
 #include "fuzzalloc.h" // from fuzzalloc
 

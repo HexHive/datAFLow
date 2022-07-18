@@ -24,7 +24,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Operator.h"
 
-#include "FuzzallocUtils.h"
+#include "Support/FuzzallocUtils.h"
 #include "debug.h"     // from afl
 #include "fuzzalloc.h" // from fuzzalloc
 

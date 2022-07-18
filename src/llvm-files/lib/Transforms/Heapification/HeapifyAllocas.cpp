@@ -27,7 +27,7 @@
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
 
 #include "HeapifyUtils.h"
-#include "Utils/FuzzallocUtils.h"
+#include "Support/FuzzallocUtils.h"
 
 using namespace llvm;
 

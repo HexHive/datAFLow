@@ -26,7 +26,7 @@
 #include "llvm/Transforms/Utils/ModuleUtils.h"
 
 #include "HeapifyUtils.h"
-#include "Utils/FuzzallocUtils.h"
+#include "Support/FuzzallocUtils.h"
 
 using namespace llvm;
 
