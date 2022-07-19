@@ -4,6 +4,8 @@
 #include "debug.h"
 #include "types.h"
 
+#include "Config.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,13 +31,14 @@ static void edit_params(u32 argc, char **argv) {
   cc_params[cc_par_cnt++] = "-analyze";
 
   cc_params[cc_par_cnt++] = "-load";
-  cc_params[cc_par_cnt++] = FUZZALLOC_LLVM_DIR "/Support/libfuzzalloc-utils.so";
+  cc_params[cc_par_cnt++] =
+      alloc_printf("%s/Support/libfuzzalloc-utils.so", kFuzzallocLibPath);
 
   /* Collect useful statistics */
 
   cc_params[cc_par_cnt++] = "-load";
   cc_params[cc_par_cnt++] =
-      FUZZALLOC_LLVM_DIR "/Analysis/CollectStats/fuzzalloc-collect-stats.so";
+      alloc_printf("%s/Analysis/fuzzalloc-collect-stats.so", kFuzzallocLibPath);
   cc_params[cc_par_cnt++] = "-fuzzalloc-collect-stats";
 
   if (getenv("FUZZALLOC_DEBUG")) {

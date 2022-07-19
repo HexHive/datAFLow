@@ -9,6 +9,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "Config.h"
 #include "common.h"
 
 static u8 **cc_params;     /* Parameters passed to the opt */
@@ -39,14 +40,14 @@ static void edit_params(u32 argc, char **argv) {
 
   maybe_assembler = check_if_assembler(argc, argv);
 
-  cc_params[cc_par_cnt++] =
-      "-fplugin=" FUZZALLOC_LLVM_DIR "/Support/libfuzzalloc-utils.so";
+  cc_params[cc_par_cnt++] = alloc_printf(
+      "-fplugin=%s/Support/libfuzzalloc-utils.so", kFuzzallocLibPath);
 
   /* Collect values to tag */
 
   cc_params[cc_par_cnt++] =
-      "-fplugin=" FUZZALLOC_LLVM_DIR
-      "/Analysis/libfuzzalloc-collect-tag-sites.so";
+      alloc_printf("-fplugin=%s/Analysis/libfuzzalloc-collect-tag-sites.so",
+                   kFuzzallocLibPath);
 
   char *fuzzalloc_tag_log = getenv("FUZZALLOC_TAG_LOG");
   if (fuzzalloc_tag_log && !maybe_assembler) {

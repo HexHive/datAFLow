@@ -1,0 +1,15 @@
+// This is an auto-generated header file
+// Do not modify
+
+#pragma once
+
+/// Custom ExtAPI.json
+const char *kExtAPIPath = "@CMAKE_CURRENT_SOURCE_DIR@/ExtAPI.json";
+
+const char *kFuzzallocLibPath =
+    "@CMAKE_CURRENT_BINARY_DIR@/../llvm-files/lib";
+
+const char *kFuzzallocMallocRuntimePath =
+    "@CMAKE_CURRENT_BINARY_DIR@/../runtime/malloc";
+
+const char *kAFLPath = "@AFL_DIR@";

@@ -34,6 +34,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "Config.h"
 #include "common.h"
 #include "fuzzalloc.h"
 
@@ -71,29 +72,30 @@ static void edit_params(u32 argc, char **argv) {
   cc_params[cc_par_cnt++] = "-Xclang";
   cc_params[cc_par_cnt++] = "-mdisable-const-array-pack";
 
-  cc_params[cc_par_cnt++] =
-      "-fplugin=" FUZZALLOC_LLVM_DIR "/Support/libfuzzalloc-utils.so";
+  cc_params[cc_par_cnt++] = alloc_printf(
+      "-fplugin=%s/Support/libfuzzalloc-utils.so", kFuzzallocLibPath);
 
   /* Rewrite calls to new with calls to malloc */
 
-  cc_params[cc_par_cnt++] = "-fplugin=" FUZZALLOC_LLVM_DIR
-                            "/Transforms/RewriteNews/"
-                            "libfuzzalloc-rewrite-news.so";
+  cc_params[cc_par_cnt++] = alloc_printf(
+      "-fplugin=%s/Transforms/RewriteNews/libfuzzalloc-rewrite-news.so",
+      kFuzzallocLibPath);
 
   /* Expand global variables with static ConstantAggregate initializers */
 
-  cc_params[cc_par_cnt++] = "-fplugin=" FUZZALLOC_LLVM_DIR
-                            "/Transforms/Heapification/"
-                            "libfuzzalloc-expand-gv-initializers.so";
+  cc_params[cc_par_cnt++] =
+      alloc_printf("-fplugin=%s/Transforms/Heapification/"
+                   "libfuzzalloc-expand-gv-initializers.so",
+                   kFuzzallocLibPath);
 
   /* Heapify static arrays to dynamically allocated arrays */
 
-  cc_params[cc_par_cnt++] = "-fplugin=" FUZZALLOC_LLVM_DIR
-                            "/Transforms/Heapification/"
-                            "libfuzzalloc-heapify-allocas.so";
-  cc_params[cc_par_cnt++] = "-fplugin=" FUZZALLOC_LLVM_DIR
-                            "/Transforms/Heapification/"
-                            "libfuzzalloc-heapify-global-vars.so";
+  cc_params[cc_par_cnt++] = alloc_printf(
+      "-fplugin=%s/Transforms/Heapification/libfuzzalloc-heapify-allocas.so",
+      kFuzzallocLibPath);
+  cc_params[cc_par_cnt++] = alloc_printf("-fplugin=%s/Transforms/Heapification/"
+                                         "libfuzzalloc-heapify-global-vars.so",
+                                         kFuzzallocLibPath);
 
   if (getenv("FUZZALLOC_HEAPIFY_STRUCTS")) {
     cc_params[cc_par_cnt++] = "-mllvm";
@@ -103,9 +105,9 @@ static void edit_params(u32 argc, char **argv) {
   /* Tag dynamically allocated arrays and redirect them to the fuzzalloc
    * allocator library */
 
-  cc_params[cc_par_cnt++] =
-      "-fplugin=" FUZZALLOC_LLVM_DIR
-      "/Transforms/TagDynamicAllocs/libfuzzalloc-tag-dyn-allocs.so";
+  cc_params[cc_par_cnt++] = alloc_printf(
+      "-fplugin=%s/Transforms/TagDynamicAllocs/libfuzzalloc-tag-dyn-allocas.so",
+      kFuzzallocLibPath);
 
   char *fuzzalloc_tag_log = getenv("FUZZALLOC_TAG_LOG");
   if (fuzzalloc_tag_log && !maybe_assembler) {
@@ -116,18 +118,20 @@ static void edit_params(u32 argc, char **argv) {
 
   /* Instrument memory accesses */
 
-  cc_params[cc_par_cnt++] =
-      "-fplugin=" FUZZALLOC_LLVM_DIR
-      "/Transforms/LowerAtomics/libfuzzalloc-lower-atomics.so";
+  cc_params[cc_par_cnt++] = alloc_printf(
+      "-fplugin=%s/Transforms/LowerAtomics/libfuzzalloc-lower-atomics.so",
+      kFuzzallocLibPath);
 
   cc_params[cc_par_cnt++] =
-      "-fplugin=" FUZZALLOC_LLVM_DIR
-      "/Transforms/LowerMemIntrinsics/libfuzzalloc-lower-mem-intrinsics.so";
+      alloc_printf("-fplugin=%s/Transforms/LowerMemIntrinsics/"
+                   "libfuzzalloc-lower-mem-intrinsics.so",
+                   kFuzzallocLibPath);
 
   if (!maybe_assembler) {
     cc_params[cc_par_cnt++] =
-        "-fplugin=" FUZZALLOC_LLVM_DIR
-        "/Transforms/InstrumentMemAccesses/libfuzzalloc-inst-mem-accesses.so";
+        alloc_printf("-fplugin=%s/Transforms/InstrumentMemAccesses/"
+                     "libfuzzalloc-inst-mem-accesses.so",
+                     kFuzzallocLibPath);
 
     char *fuzzalloc_fuzzer = getenv("FUZZALLOC_FUZZER");
     if (fuzzalloc_fuzzer) {
@@ -326,11 +330,12 @@ static void edit_params(u32 argc, char **argv) {
 
     switch (bit_mode) {
     case 0:
-      cc_params[cc_par_cnt++] = AFL_DIR "/afl-compiler-rt.o";
+      cc_params[cc_par_cnt++] = alloc_printf("%s/afl-compiler-rt.o", kAFLPath);
       break;
 
     case 32:
-      cc_params[cc_par_cnt++] = AFL_DIR "/afl-compiler-rt-32.o";
+      cc_params[cc_par_cnt++] =
+          alloc_printf("%s/afl-compiler-rt-32.o", kAFLPath);
 
       if (access(cc_params[cc_par_cnt - 1], R_OK)) {
         FATAL("-m32 is not supported by your compiler");
@@ -338,7 +343,8 @@ static void edit_params(u32 argc, char **argv) {
       break;
 
     case 64:
-      cc_params[cc_par_cnt++] = AFL_DIR "/afl-compiler-rt-64.o";
+      cc_params[cc_par_cnt++] =
+          alloc_printf("%s/afl-compiler-rt-64.o", kAFLPath);
 
       if (access(cc_params[cc_par_cnt - 1], R_OK)) {
         FATAL("-m64 is not supported by your compiler");
@@ -348,7 +354,7 @@ static void edit_params(u32 argc, char **argv) {
 
     /* Link with the fuzzalloc allocator library */
 
-    cc_params[cc_par_cnt++] = "-L" FUZZALLOC_MALLOC_DIR;
+    cc_params[cc_par_cnt++] = alloc_printf("-L%s", kFuzzallocMallocRuntimePath);
     cc_params[cc_par_cnt++] = "-lfuzzalloc";
   }
 

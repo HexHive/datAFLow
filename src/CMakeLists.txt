@@ -1,5 +1,7 @@
-include_directories("${AFL_DIR}/include")
-include_directories(include)
+include_directories(
+  "${AFL_DIR}/include"
+  include
+)
 
 add_subdirectory(llvm-files)
 add_subdirectory(runtime)

@@ -59,6 +59,7 @@ install(CODE
 option(USE_SVF "Use the SVF static analysis framework (requires Z3)" FALSE)
 if(USE_SVF)
   add_subdirectory(ext/svf)
+  set(SVF_DIR "${CMAKE_SOURCE_DIR}/ext/svf")
 endif(USE_SVF)
 
 #

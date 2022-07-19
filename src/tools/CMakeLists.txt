@@ -1,19 +1,16 @@
+configure_file(
+  ${CMAKE_CURRENT_SOURCE_DIR}/Config.h.in
+  ${CMAKE_CURRENT_BINARY_DIR}/Config.h
+  @ONLY
+)
+
+include_directories(
+  ${CMAKE_CURRENT_SOURCE_DIR}
+  ${CMAKE_CURRENT_BINARY_DIR}
+)
+
 # Need to remove -Werror when using AFL source code
 string(REPLACE " -Werror" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
-
-include_directories(${CMAKE_CURRENT_SOURCE_DIR})
-
-# Get some directory paths to pass to dataflow-cc
-get_filename_component(FUZZALLOC_LLVM_DIR
-                       "${CMAKE_CURRENT_BINARY_DIR}/../llvm-files/lib/"
-                       ABSOLUTE)
-get_filename_component(FUZZALLOC_MALLOC_DIR
-                       "${CMAKE_CURRENT_BINARY_DIR}/../runtime/malloc"
-                       ABSOLUTE)
-
-add_definitions(-DFUZZALLOC_LLVM_DIR="${FUZZALLOC_LLVM_DIR}"
-                -DFUZZALLOC_MALLOC_DIR="${FUZZALLOC_MALLOC_DIR}"
-                -DAFL_DIR="${AFL_DIR}")
 
 add_executable(dataflow-cc dataflow-cc.c common.c)
 add_executable(dataflow-cc++ dataflow-cc.c common.c)
@@ -26,3 +23,35 @@ install(TARGETS dataflow-cc++ RUNTIME DESTINATION bin)
 install(TARGETS dataflow-pp RUNTIME DESTINATION bin)
 install(TARGETS dataflow-pp++ RUNTIME DESTINATION bin)
 install(TARGETS dataflow-stats RUNTIME DESTINATION bin)
+
+#
+# SVF static analysis
+#
+
+if(USE_SVF)
+include_directories(
+  "${SVF_DIR}/include"
+)
+
+llvm_map_components_to_libnames(LLVM_LIBS
+  bitwriter
+  core
+  ipo
+  irreader
+  instcombine
+  instrumentation
+  target
+  linker
+  analysis
+  scalaropts
+  support
+  transformutils
+)
+
+add_executable(dataflow-sa dataflow-sa.cpp)
+target_link_libraries(dataflow-sa PRIVATE
+  Svf
+  ${LLVM_LIBS}
+)
+install(TARGETS dataflow-sa RUNTIME DESTINATION bin)
+endif(USE_SVF)
