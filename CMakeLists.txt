@@ -33,7 +33,6 @@ include(AddLLVM)
 add_definitions(${LLVM_DEFINITIONS})
 include_directories(${LLVM_INCLUDE_DIRS})
 
-
 #
 # AFL++
 #
@@ -52,6 +51,15 @@ set(AFL_INSTALL_CMD "make -C ${AFL_DIR} install PREFIX=${CMAKE_INSTALL_PREFIX}")
 install(CODE
     "execute_process(COMMAND ${AFL_INSTALL_CMD})"
 )
+
+#
+# SVF
+#
+
+option(USE_SVF "Use the SVF static analysis framework (requires Z3)" FALSE)
+if(USE_SVF)
+  add_subdirectory(ext/svf)
+endif(USE_SVF)
 
 #
 # datAFLow

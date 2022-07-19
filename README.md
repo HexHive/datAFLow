@@ -24,12 +24,6 @@ International Fuzzing Workshop (FUZZING)
 
 ## Building
 
-First, ensure all submodules are initialized.
-
-```bash
-git submodule update --init --recursive
-```
-
 The `datAFLow` fuzzer requires a custom version of clang. Once this is built,
 the `fuzzalloc` toolchain can be built. `FUZZALLOC_SRC` variable refers to this
 directory.
@@ -104,12 +98,38 @@ export PATH=$(realpath ../install/bin):$PATH
 Note that after building LLVM with the custom ASan, you will have to rebuild
 fuzzalloc with the new clang/clang++ (found under `install/bin`).
 
+### Building `z3`
+
+Z3 is required if using [SVF](https://github.com/svf-tools/svf) for static
+analysis.
+
+```bash
+git clone https://github.com/z3prover/z3
+mkdir -p z3/build
+cd z3/build
+cmake .. \
+    -DCMAKE_INSTALL_PREFIX=$(realpath ../install) -DZ3_BUILD_LIBZ3_SHARED=False
+make -j
+make install
+```
+
 ### Building `fuzzalloc`
+
+First, ensure all submodules are initialized.
+
+```bash
+cd $FUZZALLOC_SRC
+git submodule update --init --recursive
+```
+
+Then build.
 
 ```bash
 mkdir build
 cd build
-cmake -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ $FUZZALLOC_SRC
+cmake $FUZZALLOC_SRC \
+    -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+    -DUSE_SVF=True -DZ3_DIR=/path/to/z3/install
 make -j
 ```
 
