@@ -15,7 +15,7 @@
 #ifndef FUZZALLOC_HEAPIFY_UTILS_H
 #define FUZZALLOC_HEAPIFY_UTILS_H
 
-#include "llvm/IR/IRBuilder.h"
+#include <llvm/IR/IRBuilder.h>
 
 namespace llvm {
 class DataLayout;

@@ -15,20 +15,20 @@
 
 #include <map>
 
-#include "llvm/ADT/Statistic.h"
-#include "llvm/Analysis/TargetLibraryInfo.h"
-#include "llvm/IR/Instructions.h"
-#include "llvm/IR/LegacyPassManager.h"
-#include "llvm/IR/Module.h"
-#include "llvm/IR/Operator.h"
-#include "llvm/Pass.h"
-#include "llvm/Support/Debug.h"
-#include "llvm/Support/FileSystem.h"
-#include "llvm/Support/MemoryBuffer.h"
-#include "llvm/Support/Path.h"
-#include "llvm/Support/SpecialCaseList.h"
-#include "llvm/Support/VirtualFileSystem.h"
-#include "llvm/Transforms/IPO/PassManagerBuilder.h"
+#include <llvm/ADT/Statistic.h>
+#include <llvm/Analysis/TargetLibraryInfo.h>
+#include <llvm/IR/Instructions.h>
+#include <llvm/IR/LegacyPassManager.h>
+#include <llvm/IR/Module.h>
+#include <llvm/IR/Operator.h>
+#include <llvm/Pass.h>
+#include <llvm/Support/Debug.h>
+#include <llvm/Support/FileSystem.h>
+#include <llvm/Support/MemoryBuffer.h>
+#include <llvm/Support/Path.h>
+#include <llvm/Support/SpecialCaseList.h>
+#include <llvm/Support/VirtualFileSystem.h>
+#include <llvm/Transforms/IPO/PassManagerBuilder.h>
 
 #include "Support/FuzzallocUtils.h"
 #include "debug.h" // from afl

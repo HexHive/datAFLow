@@ -12,10 +12,10 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include "llvm/IR/LegacyPassManager.h"
-#include "llvm/Pass.h"
-#include "llvm/Transforms/IPO/PassManagerBuilder.h"
-#include "llvm/Transforms/Scalar/LowerAtomic.h"
+#include <llvm/IR/LegacyPassManager.h>
+#include <llvm/Pass.h>
+#include <llvm/Transforms/IPO/PassManagerBuilder.h>
+#include <llvm/Transforms/Scalar/LowerAtomic.h>
 
 using namespace llvm;
 

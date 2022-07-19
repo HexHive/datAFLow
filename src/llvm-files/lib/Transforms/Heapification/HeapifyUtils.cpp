@@ -14,7 +14,7 @@
 
 #include <cxxabi.h>
 
-#include "llvm/IR/Instructions.h"
+#include <llvm/IR/Instructions.h>
 
 #include "HeapifyUtils.h"
 

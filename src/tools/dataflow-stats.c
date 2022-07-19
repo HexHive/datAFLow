@@ -29,7 +29,7 @@ static void edit_params(u32 argc, char **argv) {
   cc_params[cc_par_cnt++] = "-analyze";
 
   cc_params[cc_par_cnt++] = "-load";
-  cc_params[cc_par_cnt++] = FUZZALLOC_LLVM_DIR "/Utils/libfuzzalloc-utils.so";
+  cc_params[cc_par_cnt++] = FUZZALLOC_LLVM_DIR "/Support/libfuzzalloc-utils.so";
 
   /* Collect useful statistics */
 

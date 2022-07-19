@@ -17,9 +17,9 @@
 
 #include <string>
 
-#include "llvm/ADT/Optional.h"
-#include "llvm/ADT/Statistic.h"
-#include "llvm/Support/CommandLine.h"
+#include <llvm/ADT/Optional.h>
+#include <llvm/ADT/Statistic.h>
+#include <llvm/Support/CommandLine.h>
 
 namespace llvm {
 class DataLayout;
