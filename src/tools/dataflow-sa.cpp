@@ -12,6 +12,8 @@
 ///
 //===----------------------------------------------------------------------===//
 
+#include <vector>
+
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/JSON.h>
@@ -54,6 +56,8 @@ static cl::OptionCategory Cat("Static def/use chain analysis");
 static cl::opt<std::string> BCFilename(cl::Positional, cl::desc("<BC file>"),
                                        cl::value_desc("path"), cl::Required,
                                        cl::cat(Cat));
+static cl::opt<std::string> OutJSON("json", cl::desc("Output JSON"),
+                                    cl::value_desc("path"), cl::cat(Cat));
 
 //
 // Helper functions
@@ -97,9 +101,12 @@ int main(int argc, char *argv[]) {
     return Builder.buildFullSVFG(Ander);
   }();
 
+  ValueMap<const Value *, Set<const Value *>> DefUseChains;
+
   // Get definitions
+  SmallVector<const VFGNode *, 0> Defs;
+
   status_stream() << "Collecting definitions...\n";
-  SmallVector<const VFGNode *, 24> Defs;
   for (const auto *CS : IR->getCallSiteSet()) {
     const auto *F = SVFUtil::getCallee(CS->getCallSite());
     if (!F) {
@@ -120,33 +127,69 @@ int main(int argc, char *argv[]) {
   }
   success_stream() << "Collected " << Defs.size() << " def sites\n";
 
+  // Collect uses
   FIFOWorkList<const VFGNode *> Worklist;
-  Set<const VFGNode *> Uses;
+  Set<const VFGNode *> Visited;
 
+  status_stream() << "Collecting uses...\n";
   for (const auto *Def : Defs) {
     Worklist.clear();
-    Uses.clear();
+    Visited.clear();
 
-    // Collect uses
     Worklist.push(Def);
     while (!Worklist.empty()) {
       const auto *Node = Worklist.pop();
       for (const auto *Edge : Node->getOutEdges()) {
         const auto *Succ = Edge->getDstNode();
-        if (Uses.insert(Succ).second) {
+        if (Visited.insert(Succ).second) {
           Worklist.push(Succ);
         }
       }
     }
 
-    for (const auto *Use : Uses) {
+    for (const auto *Use : Visited) {
       const auto *PAGNode = VFG->getLHSTopLevPtr(Use);
       if (PAGNode) {
         const auto *V = PAGNode->getValue();
-        // TODO do something with V
-        (void)V;
+        DefUseChains[Def->getValue()].insert(V);
       }
     }
+  }
+
+  // Save Output JSON
+  if (!OutJSON.empty()) {
+    std::string S;
+    raw_string_ostream SS{S};
+
+    std::vector<json::Value> J, JUses;
+    J.reserve(DefUseChains.size());
+
+    status_stream() << "Writing to " << OutJSON << "...\n";
+    for (const auto &[Def, Uses] : DefUseChains) {
+      JUses.clear();
+      JUses.reserve(Uses.size());
+
+      for (const auto *Use : Uses) {
+        Use->print(SS, /*IsForDebug=*/true);
+        JUses.push_back(SS.str());
+        S.clear();
+      }
+
+      Def->print(SS, /*IsForDebug=*/true);
+      J.push_back({SS.str(), JUses});
+      S.clear();
+    }
+
+    std::error_code EC;
+    raw_fd_ostream OS{OutJSON, EC, sys::fs::OF_Text};
+    if (EC) {
+      error_stream() << "Unable to open " << OutJSON << '\n';
+      ::exit(1);
+    }
+
+    OS << json::Value{J};
+    OS.flush();
+    OS.close();
   }
 
   // Cleanup
