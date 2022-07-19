@@ -106,7 +106,7 @@ static void edit_params(u32 argc, char **argv) {
    * allocator library */
 
   cc_params[cc_par_cnt++] = alloc_printf(
-      "-fplugin=%s/Transforms/TagDynamicAllocs/libfuzzalloc-tag-dyn-allocas.so",
+      "-fplugin=%s/Transforms/TagDynamicAllocs/libfuzzalloc-tag-dyn-allocs.so",
       kFuzzallocLibPath);
 
   char *fuzzalloc_tag_log = getenv("FUZZALLOC_TAG_LOG");
