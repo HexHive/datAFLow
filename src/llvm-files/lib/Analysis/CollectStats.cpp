@@ -18,6 +18,7 @@
 #include <llvm/Pass.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 
+#include "fuzzalloc/Metadata.h"
 #include "Support/FuzzallocUtils.h"
 
 using namespace llvm;
@@ -85,12 +86,12 @@ bool CollectStats::runOnModule(Module &M) {
           this->NumOfAllocas++;
         }
 
-        if (I.getMetadata(M.getMDKindID("fuzzalloc.tagged_alloc"))) {
+        if (I.getMetadata(M.getMDKindID(kFuzzallocTaggedAllocMD))) {
           this->NumOfTaggedAllocs++;
         } else if (I.getMetadata(
-                       M.getMDKindID("fuzzalloc.instrumented_deref"))) {
+                       M.getMDKindID(kFuzzallocInstrumentedDerefMD))) {
           this->NumOfInstrumentedDerefs++;
-        } else if (I.getMetadata(M.getMDKindID("fuzzalloc.heapified_alloca"))) {
+        } else if (I.getMetadata(M.getMDKindID(kFuzzallocHeapifiedAllocaMD))) {
           this->NumOfHeapifiedAllocas++;
         }
       }

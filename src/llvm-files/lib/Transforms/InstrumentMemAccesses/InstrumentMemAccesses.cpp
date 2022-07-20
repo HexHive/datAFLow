@@ -33,7 +33,8 @@
 
 #include "Support/FuzzallocUtils.h"
 #include "debug.h"     // from afl
-#include "fuzzalloc.h" // from fuzzalloc
+#include "fuzzalloc/fuzzalloc.h"
+#include "fuzzalloc/Metadata.h"
 
 using namespace llvm;
 
@@ -547,7 +548,7 @@ bool InstrumentMemAccesses::runOnModule(Module &M) {
 
         // Finally, check if the instruction has the "noinstrument" metadata
         // attached to it (from the array heapify pass)
-        if (!Inst.getMetadata(M.getMDKindID("fuzzalloc.noinstrument"))) {
+        if (!Inst.getMetadata(M.getMDKindID(kFuzzallocNoInstrumentMD))) {
           ToInstrument.push_back(&Inst);
         }
       }
@@ -603,7 +604,7 @@ void InstrumentMemAccesses::doDebugInstrument(Instruction *I,
   LLVMContext &C = IRB.getContext();
 
   // This metadata can be used by the static pointer analysis
-  I->setMetadata(M->getMDKindID("fuzzalloc.instrumented_deref"),
+  I->setMetadata(M->getMDKindID(kFuzzallocInstrumentedDerefMD),
                  MDNode::get(C, None));
 
   // Get the def site
@@ -642,7 +643,7 @@ void InstrumentMemAccesses::doAFLInstrument(Instruction *I, Value *Ptr) const {
   LLVMContext &C = IRB.getContext();
 
   // This metadata can be used by the static pointer analysis
-  I->setMetadata(M->getMDKindID("fuzzalloc.instrumented_deref"),
+  I->setMetadata(M->getMDKindID(kFuzzallocInstrumentedDerefMD),
                  MDNode::get(C, None));
 
   // Get the def site

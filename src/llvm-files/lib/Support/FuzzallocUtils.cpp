@@ -26,7 +26,7 @@
 
 #include "Support/FuzzallocUtils.h"
 #include "debug.h"     // from afl
-#include "fuzzalloc.h" // from fuzzalloc
+#include "fuzzalloc/fuzzalloc.h"
 
 using namespace llvm;
 

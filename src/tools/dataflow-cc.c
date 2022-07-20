@@ -36,7 +36,7 @@
 
 #include "Config.h"
 #include "common.h"
-#include "fuzzalloc.h"
+#include "fuzzalloc/fuzzalloc.h"
 
 static u8 **cc_params;     /* Parameters passed to the real CC  */
 static u32 cc_par_cnt = 1; /* Param count, including argv0      */

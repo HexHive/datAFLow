@@ -19,8 +19,8 @@
 #include <pthread.h>
 #endif
 
-#include "fuzzalloc.h"    // for tag_t
-#include "malloc-2.8.3.h" // for mspaces
+#include "fuzzalloc/fuzzalloc.h" // for tag_t
+#include "malloc-2.8.3.h"        // for mspaces
 
 typedef uint8_t bool_t;
 

@@ -40,7 +40,8 @@
 
 #include "Support/FuzzallocUtils.h"
 #include "debug.h"     // from afl
-#include "fuzzalloc.h" // from fuzzalloc
+#include "fuzzalloc/fuzzalloc.h"
+#include "fuzzalloc/Metadata.h"
 
 using namespace llvm;
 
@@ -522,7 +523,7 @@ Instruction *TagDynamicAllocs::tagCall(CallBase *CB, Value *NewCallee) const {
         IRB.CreateInvoke(TaggedCallTy, CastNewCallee, Invoke->getNormalDest(),
                          Invoke->getUnwindDest(), TaggedCallArgs);
   }
-  TaggedCall->setMetadata(this->Mod->getMDKindID("fuzzalloc.tagged_alloc"),
+  TaggedCall->setMetadata(this->Mod->getMDKindID(kFuzzallocTaggedAllocMD),
                           MDNode::get(IRB.getContext(), None));
 
   if (CB->isIndirectCall()) {

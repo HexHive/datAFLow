@@ -28,6 +28,7 @@
 
 #include "HeapifyUtils.h"
 #include "Support/FuzzallocUtils.h"
+#include "fuzzalloc/Metadata.h"
 
 using namespace llvm;
 
@@ -150,7 +151,7 @@ Instruction *HeapifyAllocas::insertMalloc(const AllocaInst *OrigAlloca,
 
   assert(MallocCall && "malloc call should have been created");
   auto *MallocStore = IRB.CreateStore(MallocCall, NewAlloca);
-  MallocStore->setMetadata(M->getMDKindID("fuzzalloc.noinstrument"),
+  MallocStore->setMetadata(M->getMDKindID(kFuzzallocNoInstrumentMD),
                            MDNode::get(C, None));
 
   return MallocCall;
@@ -214,7 +215,7 @@ AllocaInst *HeapifyAllocas::heapifyAlloca(
   assert(NewAllocaTy && "New alloca must have a type");
   auto *NewAlloca = new AllocaInst(NewAllocaTy, this->DL->getAllocaAddrSpace(),
                                    Alloca->getName(), Alloca);
-  NewAlloca->setMetadata(M->getMDKindID("fuzzalloc.heapified_alloca"),
+  NewAlloca->setMetadata(M->getMDKindID(kFuzzallocHeapifiedAllocaMD),
                          MDNode::get(C, None));
   NewAlloca->takeName(Alloca);
   copyDebugInfo(Alloca, NewAlloca);

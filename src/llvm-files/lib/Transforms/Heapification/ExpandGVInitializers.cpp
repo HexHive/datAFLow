@@ -24,6 +24,7 @@
 
 #include "HeapifyUtils.h"
 #include "Support/FuzzallocUtils.h"
+#include "fuzzalloc/Metadata.h"
 
 using namespace llvm;
 
@@ -144,7 +145,7 @@ static void expandConstantAggregate(IRBuilder<> &IRB, GlobalVariable *GV,
       IdxValues.push_back(UnsignedToInt32(I));
 
       auto *Store = IRB.CreateStore(Op, IRB.CreateInBoundsGEP(GV, IdxValues));
-      Store->setMetadata(M->getMDKindID("fuzzalloc.noinstrument"),
+      Store->setMetadata(M->getMDKindID(kFuzzallocNoInstrumentMD),
                          MDNode::get(C, None));
       setNoSanitizeMetadata(Store);
     }
@@ -174,19 +175,19 @@ Function *ExpandGVInitializers::expandInitializer(GlobalVariable *GV) {
       } else {
         auto *Store = IRB.CreateStore(
             Op, IRB.CreateConstInBoundsGEP2_32(/* Ty */ nullptr, GV, 0, I));
-        Store->setMetadata(M->getMDKindID("fuzzalloc.noinstrument"),
+        Store->setMetadata(M->getMDKindID(kFuzzallocNoInstrumentMD),
                            MDNode::get(C, None));
         setNoSanitizeMetadata(Store);
       }
     }
   } else if (auto *ConstExpr = dyn_cast<ConstantExpr>(Initializer)) {
     auto *Store = IRB.CreateStore(ConstExpr, GV);
-    Store->setMetadata(M->getMDKindID("fuzzalloc.noinstrument"),
+    Store->setMetadata(M->getMDKindID(kFuzzallocNoInstrumentMD),
                        MDNode::get(C, None));
     setNoSanitizeMetadata(Store);
   } else if (auto *GlobalVal = dyn_cast<GlobalValue>(Initializer)) {
     auto *Store = IRB.CreateStore(GlobalVal, GV);
-    Store->setMetadata(M->getMDKindID("fuzzalloc.noinstrument"),
+    Store->setMetadata(M->getMDKindID(kFuzzallocNoInstrumentMD),
                        MDNode::get(C, None));
     setNoSanitizeMetadata(Store);
   } else {
