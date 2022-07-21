@@ -1,11 +1,4 @@
 //===-- LowerAtomics.cpp - Lower atomic instructions ----------------------===//
-//
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
-//
-//===----------------------------------------------------------------------===//
 ///
 /// \file
 /// Wrapper around LLVM's LowerAtomic pass.

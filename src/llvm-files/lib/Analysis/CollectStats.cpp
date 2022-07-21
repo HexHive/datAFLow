@@ -1,11 +1,4 @@
 //===-- CollectStats.cpp - Collects useful statsistics --------------------===//
-//
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
-//
-//===----------------------------------------------------------------------===//
 ///
 /// \file
 /// This pass simply collects a number of useful statistics.

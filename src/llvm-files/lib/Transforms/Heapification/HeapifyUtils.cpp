@@ -1,11 +1,4 @@
 //===-- HeapifyUtils.cpp - Heapify static arrays --------------------------===//
-//
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
-//
-//===----------------------------------------------------------------------===//
 ///
 /// \file
 /// Common functionality for static array/struct heapification.

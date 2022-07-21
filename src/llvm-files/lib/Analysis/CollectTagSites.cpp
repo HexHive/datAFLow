@@ -1,11 +1,4 @@
 //===-- TagSites.cpp - Analyze def sites to tag in later passes -----------===//
-//
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
-//
-//===----------------------------------------------------------------------===//
 ///
 /// \file
 /// This pass analyzes values (functions, global variables/alias, and structs)
