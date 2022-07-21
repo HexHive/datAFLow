@@ -19,6 +19,7 @@
 #include <llvm/Pass.h>
 #include <llvm/Support/Debug.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
+#include <llvm/Transforms/Utils/Local.h>
 
 #include "Support/FuzzallocUtils.h"
 
@@ -94,39 +95,33 @@ static Instruction *rewriteNew(CallBase *CB) {
 
   auto *MallocCall = CallInst::CreateMalloc(
       CB, AllocSize->getType(), CB->getType()->getPointerElementType(),
-      AllocSize, nullptr, nullptr, "rewrite_new");
+      AllocSize, nullptr, nullptr);
+  MallocCall->takeName(CB);
+  if (isa<CallBase>(MallocCall)) {
+    cast<CallBase>(MallocCall)->setCallingConv(CB->getCallingConv());
+    cast<CallBase>(MallocCall)->setAttributes(CB->getAttributes());
+  }
+  MallocCall->setDebugLoc(CB->getDebugLoc());
+  MallocCall->copyMetadata(*CB);
 
-  // If new was invoke-d, rather than call-ed, we must branch to the invoke's
-  // normal destination.
+  CB->replaceAllUsesWith(MallocCall);
+
+  // If new was invoke-d, rather than call-ed, we need to rewrite the invoke as
+  // a call.
   //
   // TODO Emulate exception handling (i.e., the invoke's unwind destination)
   if (auto *Invoke = dyn_cast<InvokeInst>(CB)) {
-    auto *NormalDest = Invoke->getNormalDest();
-    assert(NormalDest && "Invoke has no normal destination");
+    // Follow the call by a branch to the normal destination
+    BasicBlock *NormalDestBB = Invoke->getNormalDest();
+    BranchInst::Create(NormalDestBB, Invoke);
 
-    BranchInst::Create(NormalDest, CB);
-
-    // Remove the basic block containing the rewritten new in any PHI nodes,
-    // otherwise the verifier will fail
-    //
-    // Copy the PHI nodes into a vectorr so that we don't corrupt the iterator
-    // if the PHI node is deleted
-    SmallVector<PHINode *, 8> PHIs;
-    for (PHINode &PHI : Invoke->getUnwindDest()->phis()) {
-      PHIs.push_back(&PHI);
-    }
-
-    for (PHINode *PHI : PHIs) {
-      int BBIdx = PHI->getBasicBlockIndex(CB->getParent());
-      if (BBIdx >= 0) {
-        PHI->removeIncomingValue(BBIdx);
-      }
-    }
+    // Update PHI nodes in the unwind destination
+    BasicBlock *BB = Invoke->getParent();
+    BasicBlock *UnwindDestBB = Invoke->getUnwindDest();
+    UnwindDestBB->removePredecessor(BB);
   }
 
-  CB->replaceAllUsesWith(MallocCall);
   CB->eraseFromParent();
-
   NumOfNewRewrites++;
 
   return MallocCall;
@@ -151,6 +146,7 @@ void RewriteNews::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 bool RewriteNews::runOnFunction(Function &F) {
+  bool Changed = false;
   Module *M = F.getParent();
   const DataLayout &DL = M->getDataLayout();
   const TargetLibraryInfo *TLI =
@@ -189,11 +185,14 @@ bool RewriteNews::runOnFunction(Function &F) {
         MemI->setDestAlignment(1);
       }
     }
+
+    Changed = true;
   }
 
   // Rewrite delete calls
   for (auto &DeleteCall : DeleteCalls) {
     rewriteDelete(DeleteCall);
+    Changed = true;
   }
 
   // Finished!
@@ -201,7 +200,7 @@ bool RewriteNews::runOnFunction(Function &F) {
   printStatistic(*M, NumOfNewRewrites);
   printStatistic(*M, NumOfDeleteRewrites);
 
-  return NewCalls.size() > 0 || DeleteCalls.size() > 0;
+  return Changed;
 }
 
 static RegisterPass<RewriteNews>
