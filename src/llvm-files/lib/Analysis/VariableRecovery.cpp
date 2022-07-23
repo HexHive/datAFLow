@@ -12,7 +12,7 @@
 #include <llvm/Passes/PassBuilder.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 
-#include "Analysis/VariableRecovery.h"
+#include "fuzzalloc/Analysis/VariableRecovery.h"
 
 #define DEBUG_TYPE "variable-recovery"
 
