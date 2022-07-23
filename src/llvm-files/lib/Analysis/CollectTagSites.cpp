@@ -323,7 +323,7 @@ bool CollectTagSites::runOnModule(Module &M) {
 
 static RegisterPass<CollectTagSites>
     X("fuzzalloc-collect-tag-sites", "Analyze values that will require tagging",
-      false, false);
+      true, true);
 
 static void registerCollectTagSitesPass(const PassManagerBuilder &,
                                         legacy::PassManagerBase &PM) {

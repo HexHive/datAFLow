@@ -103,8 +103,8 @@ bool CollectStats::runOnModule(Module &M) {
 }
 
 static RegisterPass<CollectStats> X("fuzzalloc-collect-stats",
-                                    "Collect some useful statistics", false,
-                                    false);
+                                    "Collect some useful statistics", true,
+                                    true);
 
 static void registerCollectStatsPass(const PassManagerBuilder &,
                                      legacy::PassManagerBase &PM) {
