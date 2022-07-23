@@ -162,15 +162,15 @@ bool RewriteNews::runOnFunction(Function &F) {
   SmallVector<MemIntrinsic *, 4> MemIntrinsics;
 
   // Collect all the things!
-  for (auto I = inst_begin(F); I != inst_end(F); ++I) {
-    if (auto *CB = dyn_cast<CallBase>(&*I)) {
+  for (auto &I : instructions(F)) {
+    if (auto *CB = dyn_cast<CallBase>(&I)) {
       Value *Callee = CB->getCalledOperand();
 
       if (isNewFn(Callee, TLI)) {
         NewCalls.push_back(CB);
       } else if (isDeleteFn(Callee, TLI)) {
         DeleteCalls.push_back(CB);
-      } else if (auto *MemI = dyn_cast<MemIntrinsic>(&*I)) {
+      } else if (auto *MemI = dyn_cast<MemIntrinsic>(&I)) {
         MemIntrinsics.push_back(MemI);
       }
     }

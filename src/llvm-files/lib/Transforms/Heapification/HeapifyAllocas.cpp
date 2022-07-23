@@ -53,7 +53,7 @@ private:
   Instruction *insertMalloc(const AllocaInst *, AllocaInst *,
                             Instruction *) const;
 
-  void copyDebugInfo(const AllocaInst *, AllocaInst *) const;
+  void copyDebugInfo(AllocaInst *, AllocaInst *) const;
 
   AllocaInst *heapifyAlloca(AllocaInst *,
                             const ArrayRef<IntrinsicInst *> &) const;
@@ -150,19 +150,32 @@ Instruction *HeapifyAllocas::insertMalloc(const AllocaInst *OrigAlloca,
   return MallocCall;
 }
 
-void HeapifyAllocas::copyDebugInfo(const AllocaInst *OrigAlloca,
+/// Copy debug information from the original alloca to the heapified alloca
+void HeapifyAllocas::copyDebugInfo(AllocaInst *OrigAlloca,
                                    AllocaInst *NewAlloca) const {
+  SmallVector<DbgVariableIntrinsic *, 8> ToDelete;
   auto *F = OrigAlloca->getFunction();
 
-  for (auto I = inst_begin(F); I != inst_end(F); ++I) {
-    if (auto *DbgDeclare = dyn_cast<DbgDeclareInst>(&*I)) {
+  for (auto &I : instructions(F)) {
+    if (auto *DbgDeclare = dyn_cast<DbgDeclareInst>(&I)) {
       if (DbgDeclare->getAddress() == OrigAlloca) {
         this->DBuilder->insertDeclare(NewAlloca, DbgDeclare->getVariable(),
                                       DbgDeclare->getExpression(),
-                                      DbgDeclare->getDebugLoc(),
-                                      const_cast<DbgDeclareInst *>(DbgDeclare));
+                                      DbgDeclare->getDebugLoc(), DbgDeclare);
+        ToDelete.push_back(DbgDeclare);
+      }
+    } else if (auto *DbgVal = dyn_cast<DbgValueInst>(&I)) {
+      if (DbgVal->getValue() == OrigAlloca) {
+        this->DBuilder->insertDbgValueIntrinsic(
+            NewAlloca, DbgVal->getVariable(), DbgVal->getExpression(),
+            DbgVal->getDebugLoc(), DbgVal);
+        ToDelete.push_back(DbgVal);
       }
     }
+  }
+
+  for (auto *I : ToDelete) {
+    I->eraseFromParent();
   }
 }
 
@@ -211,6 +224,7 @@ AllocaInst *HeapifyAllocas::heapifyAlloca(
   NewAlloca->setMetadata(M->getMDKindID(kFuzzallocHeapifiedAllocaMD),
                          MDNode::get(C, None));
   NewAlloca->takeName(Alloca);
+  NewAlloca->copyMetadata(*Alloca);
   copyDebugInfo(Alloca, NewAlloca);
 
   // Decide where to insert the call to malloc.
@@ -313,21 +327,21 @@ bool HeapifyAllocas::runOnModule(Module &M) {
     Returns.clear();
 
     // Collect all the things!
-    for (auto I = inst_begin(F); I != inst_end(F); ++I) {
+    for (auto &I : instructions(F)) {
       // Collect heapifaible allocas
-      if (auto *Alloca = dyn_cast<AllocaInst>(&*I)) {
+      if (auto *Alloca = dyn_cast<AllocaInst>(&I)) {
         if (isHeapifiableAlloca(Alloca)) {
           AllocasToHeapify.push_back(Alloca);
         }
         // Lifetime start/end intrinsics are required for placing mallocs/frees
-      } else if (auto *Intrinsic = dyn_cast<IntrinsicInst>(&*I)) {
+      } else if (auto *Intrinsic = dyn_cast<IntrinsicInst>(&I)) {
         if (Intrinsic->getIntrinsicID() == Intrinsic::lifetime_start) {
           LifetimeStarts.push_back(Intrinsic);
         } else if (Intrinsic->getIntrinsicID() == Intrinsic::lifetime_end) {
           LifetimeEnds.push_back(Intrinsic);
         }
         // Return instructions are required for placing frees
-      } else if (auto *Return = dyn_cast<ReturnInst>(&*I)) {
+      } else if (auto *Return = dyn_cast<ReturnInst>(&I)) {
         Returns.push_back(Return);
       }
     }
