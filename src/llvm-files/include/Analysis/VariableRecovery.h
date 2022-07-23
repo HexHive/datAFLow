@@ -8,7 +8,7 @@
 #ifndef VARIABLE_RECOVERY_H
 #define VARIABLE_RECOVERY_H
 
-#include <llvm/ADT/ValueMap.h>
+#include <llvm/IR/ValueMap.h>
 #include <llvm/Pass.h>
 
 class VariableRecovery : public llvm::ModulePass {
