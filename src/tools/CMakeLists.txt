@@ -50,6 +50,7 @@ llvm_map_components_to_libnames(LLVM_LIBS
 
 add_executable(dataflow-sa dataflow-sa.cpp)
 target_link_libraries(dataflow-sa PRIVATE
+  fuzzalloc-variable-recovery
   Svf
   ${LLVM_LIBS}
 )

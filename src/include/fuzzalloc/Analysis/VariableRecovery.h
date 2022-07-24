@@ -18,7 +18,6 @@ public:
 
   static char ID;
   VariableRecovery() : llvm::ModulePass(ID) {}
-  virtual void releaseMemory() override { Vars.clear(); }
   virtual bool runOnModule(llvm::Module &) override;
 
   const SrcVariables &getVariables() const { return Vars; }
