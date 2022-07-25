@@ -32,9 +32,23 @@
 #include "Config.h"
 #include "fuzzalloc/Analysis/VariableRecovery.h"
 #include "fuzzalloc/Metadata.h"
+#include "fuzzalloc/fuzzalloc.h"
 
 using namespace llvm;
 using namespace SVF;
+
+namespace {
+std::string getNameOrAsOperand(const Value *V) {
+  if (!V->getName().empty()) {
+    return std::string{V->getName()};
+  }
+
+  std::string Name;
+  raw_string_ostream OS{Name};
+  V->printAsOperand(OS, false);
+  return OS.str();
+}
+} // anonymous namespace
 
 namespace dataflow {
 //
@@ -43,11 +57,12 @@ namespace dataflow {
 
 /// A variable definition
 struct Def {
-  Def(const VFGNode *Node, const DIVariable *Var)
-      : Node(Node), Val(Node->getValue()), Var(Var) {}
+  Def(tag_t Tag, const VFGNode *Node, const DIVariable *Var)
+      : Tag(Tag), Node(Node), Val(Node->getValue()), Var(Var) {}
 
   bool operator==(const Def &Other) const { return Node == Other.Node; }
 
+  const tag_t Tag;
   const VFGNode *Node;
   const Value *Val;
   const DIVariable *Var;
@@ -68,16 +83,17 @@ struct Use {
 };
 
 static json::Value toJSON(const dataflow::Def &Def) {
-  const auto &Name = [&]() -> std::string {
+  std::string IR;
+  raw_string_ostream SS{IR};
+
+  Def.Val->print(SS, /*IsForDebug=*/true);
+  SS.flush();
+
+  const auto &VarName = [&]() -> std::string {
     if (const auto *Var = Def.Var) {
       return Var->getName().str();
     }
-    std::string VarName;
-    raw_string_ostream SS{VarName};
-
-    Def.Val->print(SS, /*IsForDebug=*/true);
-    SS.flush();
-    return VarName;
+    return getNameOrAsOperand(Def.Val);
   }();
 
   const auto &Filename = [&]() -> Optional<StringRef> {
@@ -91,7 +107,7 @@ static json::Value toJSON(const dataflow::Def &Def) {
     if (const auto *Local = dyn_cast_or_null<DILocalVariable>(Def.Var)) {
       return getDISubprogram(Local->getScope())->getName();
     } else if (const auto *Inst = dyn_cast<Instruction>(Def.Val)) {
-      return Inst->getParent()->getName();
+      return Inst->getFunction()->getName();
     }
     return None;
   }();
@@ -103,20 +119,21 @@ static json::Value toJSON(const dataflow::Def &Def) {
     return None;
   }();
 
-  return {Name, {Filename, Func, Line}};
+  return {IR, Def.Tag, {VarName, Filename, Func, Line}};
 }
 
 static json::Value toJSON(const dataflow::Use &Use) {
-  const auto &Name = [&]() -> std::string {
+  std::string IR;
+  raw_string_ostream SS{IR};
+
+  Use.Val->print(SS, /*IsForDebug=*/true);
+  SS.flush();
+
+  const auto &VarName = [&]() -> std::string {
     if (const auto *Var = Use.Var) {
       return Var->getName().str();
     }
-    std::string VarName;
-    raw_string_ostream SS{VarName};
-
-    Use.Val->print(SS, /*IsForDebug=*/true);
-    SS.flush();
-    return VarName;
+    return getNameOrAsOperand(Use.Val);
   }();
 
   const auto &Filename = [&]() -> Optional<StringRef> {
@@ -130,7 +147,7 @@ static json::Value toJSON(const dataflow::Use &Use) {
     if (const auto *Loc = Use.Loc) {
       return getDISubprogram(Loc->getScope())->getName();
     } else if (const auto *Inst = dyn_cast<Instruction>(Use.Val)) {
-      return Inst->getParent()->getName();
+      return Inst->getFunction()->getName();
     }
     return None;
   }();
@@ -142,7 +159,7 @@ static json::Value toJSON(const dataflow::Use &Use) {
     return None;
   }();
 
-  return {Name, {nullptr, Func, Line}};
+  return {IR, {VarName, Filename, Func, Line}};
 }
 } // namespace dataflow
 
@@ -276,9 +293,15 @@ int main(int argc, char *argv[]) {
       assert(isTaggedAlloc(CS) && "Tagged alloc must have fuzzalloc metadata");
       assert((Externals->is_alloc(F) || Externals->is_realloc(F)) &&
              "Tagged function must (re)allocate");
+
+      // Extract the tag from the tagged allocation call. This is always the
+      // first actual argument
+      const auto *TagV = cast<CallBase>(CS)->getArgOperand(0);
+      const auto &Tag = cast<ConstantInt>(TagV)->getZExtValue();
+
       const auto *PAGNode = IR->getGNode(IR->getValueNode(CS));
       const auto *VNode = VFG->getDefSVFGNode(PAGNode);
-      Defs.emplace_back(VNode, SrcVars.lookup(VNode->getValue()));
+      Defs.emplace_back(Tag, VNode, SrcVars.lookup(VNode->getValue()));
     }
   }
   if (Defs.empty()) {
@@ -334,7 +357,8 @@ int main(int argc, char *argv[]) {
 
   // Save Output JSON
   if (!OutJSON.empty()) {
-    std::vector<json::Value> J, JUses;
+    json::Array J;
+    std::vector<json::Value> JUses;
     J.reserve(DefUseChains.size());
 
     status_stream() << "Serializing def/use chains to JSON...\n";
@@ -357,7 +381,7 @@ int main(int argc, char *argv[]) {
     }
 
     status_stream() << "Writing to " << OutJSON << "...\n";
-    OS << json::Value{J};
+    OS << std::move(J);
     OS.flush();
     OS.close();
   }
