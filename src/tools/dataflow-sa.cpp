@@ -133,7 +133,12 @@ static json::Value toJSON(const dataflow::Use &Use) {
     if (const auto *Var = Use.Var) {
       return Var->getName().str();
     }
-    return getNameOrAsOperand(Use.Val);
+    if (const auto *Load = dyn_cast<LoadInst>(Use.Val)) {
+      return getNameOrAsOperand(Load->getPointerOperand());
+    } else if (const auto *Store = dyn_cast<StoreInst>(Use.Val)) {
+      return getNameOrAsOperand(Store->getPointerOperand());
+    }
+    llvm_unreachable("ust must be a load or store");
   }();
 
   const auto &Filename = [&]() -> Optional<StringRef> {
