@@ -32,9 +32,9 @@
 #include <llvm/Transforms/Utils/Cloning.h>
 
 #include "Support/FuzzallocUtils.h"
-#include "debug.h"     // from afl
-#include "fuzzalloc/fuzzalloc.h"
+#include "debug.h" // from afl
 #include "fuzzalloc/Metadata.h"
+#include "fuzzalloc/fuzzalloc.h"
 
 using namespace llvm;
 
@@ -499,6 +499,7 @@ Instruction *TagDynamicAllocs::tagCall(CallBase *CB, Value *NewCallee) const {
 
     // The callee is a cast version of the tagged function
     CastNewCallee = IRB.CreateBitCast(NewCallee, NewBitCastTy->getPointerTo());
+    CastNewCallee->takeName(BitCast);
   } else {
     // The function call result was not cast, so there is no need to do
     // anything to the callee
@@ -516,6 +517,7 @@ Instruction *TagDynamicAllocs::tagCall(CallBase *CB, Value *NewCallee) const {
         IRB.CreateInvoke(TaggedCallTy, CastNewCallee, Invoke->getNormalDest(),
                          Invoke->getUnwindDest(), TaggedCallArgs);
   }
+  TaggedCall->takeName(CB);
   TaggedCall->setMetadata(this->Mod->getMDKindID(kFuzzallocTaggedAllocMD),
                           MDNode::get(IRB.getContext(), None));
 
@@ -712,6 +714,7 @@ GlobalVariable *TagDynamicAllocs::tagGlobalVariable(GlobalVariable *OrigGV) {
                        Load->hasName() ? "__tagged_" + Load->getName() : "",
                        Load->isVolatile(), Align(Load->getAlignment()),
                        Load->getOrdering(), Load->getSyncScopeID(), Load);
+      NewLoad->takeName(Load);
 
       for (auto *LU : LoadUsers) {
         if (auto *CB = dyn_cast<CallBase>(LU)) {
@@ -734,6 +737,7 @@ GlobalVariable *TagDynamicAllocs::tagGlobalVariable(GlobalVariable *OrigGV) {
             auto *NewPHI = PHINode::Create(
                 TaggedGVTy, PHI->getNumIncomingValues(),
                 PHI->hasName() ? "__tagged_" + PHI->getName() : "", PHI);
+            NewPHI->takeName(PHI);
             for (unsigned I = 0; I < PHI->getNumIncomingValues(); ++I) {
               NewPHI->addIncoming(PHI->getIncomingValue(I),
                                   PHI->getIncomingBlock(I));
@@ -782,6 +786,7 @@ GlobalVariable *TagDynamicAllocs::tagGlobalVariable(GlobalVariable *OrigGV) {
             new StoreInst(translateTaggedFunction(F), TaggedGV,
                           Store->isVolatile(), Align(Store->getAlignment()),
                           Store->getOrdering(), Store->getSyncScopeID(), Store);
+        NewStore->takeName(Store);
         Store->replaceAllUsesWith(NewStore);
         Store->eraseFromParent();
       } else {

@@ -133,6 +133,7 @@ static Instruction *rewriteDelete(CallBase *CB) {
   Value *Ptr = CB->getArgOperand(CB->getNumArgOperands() - 1);
 
   auto *FreeCall = CallInst::CreateFree(Ptr, CB);
+  FreeCall->takeName(CB);
   CB->replaceAllUsesWith(FreeCall);
   CB->eraseFromParent();
 

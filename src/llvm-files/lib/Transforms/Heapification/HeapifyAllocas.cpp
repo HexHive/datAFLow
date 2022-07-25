@@ -210,15 +210,14 @@ AllocaInst *HeapifyAllocas::heapifyAlloca(
   //    `NumElements * sizeof(Ty)`)
 
   const Type *AllocatedTy = Alloca->getAllocatedType();
-  PointerType *NewAllocaTy = nullptr;
+  PointerType *NewAllocaTy = [&]() {
+    if (AllocatedTy->isArrayTy()) {
+      return AllocatedTy->getArrayElementType()->getPointerTo();
+    } else {
+      return AllocatedTy->getPointerTo();
+    }
+  }();
 
-  if (AllocatedTy->isArrayTy()) {
-    NewAllocaTy = AllocatedTy->getArrayElementType()->getPointerTo();
-  } else {
-    NewAllocaTy = AllocatedTy->getPointerTo();
-  }
-
-  assert(NewAllocaTy && "New alloca must have a type");
   auto *NewAlloca = new AllocaInst(NewAllocaTy, this->DL->getAllocaAddrSpace(),
                                    Alloca->getName(), Alloca);
   NewAlloca->setMetadata(M->getMDKindID(kFuzzallocHeapifiedAllocaMD),
