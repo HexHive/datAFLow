@@ -11,36 +11,13 @@
 #include <llvm/Pass.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 
-#include "fuzzalloc/Metadata.h"
 #include "Support/FuzzallocUtils.h"
+#include "fuzzalloc/Analysis/CollectStats.h"
+#include "fuzzalloc/Metadata.h"
 
 using namespace llvm;
 
 #define DEBUG_TYPE "fuzzalloc-collect-stats"
-
-namespace {
-
-/// Collect useful statistics
-class CollectStats : public ModulePass {
-private:
-  unsigned long NumOfBasicBlocks;
-  unsigned long NumOfAllocas;
-  unsigned long NumOfGlobalVars;
-  unsigned long NumOfTaggedAllocs;
-  unsigned long NumOfInstrumentedDerefs;
-  unsigned long NumOfHeapifiedAllocas;
-
-public:
-  static char ID;
-  CollectStats() : ModulePass(ID) {}
-
-  void getAnalysisUsage(AnalysisUsage &) const override;
-  void print(llvm::raw_ostream &, const Module *) const override;
-  bool doInitialization(Module &M) override;
-  bool runOnModule(Module &) override;
-};
-
-} // anonymous namespace
 
 char CollectStats::ID = 0;
 
@@ -48,23 +25,23 @@ void CollectStats::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.setPreservesAll();
 }
 
-void CollectStats::print(raw_ostream &O, const Module *M) const {
-  O << "  num. basic blocks: " << this->NumOfBasicBlocks << "\n";
-  O << "  num. allocas: " << this->NumOfAllocas << "\n";
-  O << "  num. global variables: " << this->NumOfGlobalVars << "\n";
-  O << "  num. tagged allocs: " << this->NumOfTaggedAllocs << "\n";
-  O << "  num. of dereferenced pointers: " << this->NumOfInstrumentedDerefs
+void CollectStats::print(raw_ostream &O, const Module *) const {
+  O << "  num. basic blocks: " << this->NumBasicBlocks << "\n";
+  O << "  num. allocas: " << this->NumAllocas << "\n";
+  O << "  num. global variables: " << this->NumGlobalVars << "\n";
+  O << "  num. tagged allocs: " << this->NumTaggedAllocs << "\n";
+  O << "  num. of dereferenced pointers: " << this->NumInstrumentedDerefs
     << "\n";
-  O << "  num. of heapified allocas: " << this->NumOfHeapifiedAllocas << "\n";
+  O << "  num. of heapified allocas: " << this->NumHeapifiedAllocas << "\n";
 }
 
 bool CollectStats::doInitialization(Module &M) {
-  this->NumOfBasicBlocks = 0;
-  this->NumOfAllocas = 0;
-  this->NumOfGlobalVars = 0;
-  this->NumOfTaggedAllocs = 0;
-  this->NumOfInstrumentedDerefs = 0;
-  this->NumOfHeapifiedAllocas = 0;
+  this->NumBasicBlocks = 0;
+  this->NumAllocas = 0;
+  this->NumGlobalVars = 0;
+  this->NumTaggedAllocs = 0;
+  this->NumInstrumentedDerefs = 0;
+  this->NumHeapifiedAllocas = 0;
 
   return false;
 }
@@ -72,20 +49,20 @@ bool CollectStats::doInitialization(Module &M) {
 bool CollectStats::runOnModule(Module &M) {
   for (const auto &F : M.functions()) {
     for (auto &BB : F) {
-      this->NumOfBasicBlocks++;
+      this->NumBasicBlocks++;
 
       for (auto &I : BB) {
         if (isa<AllocaInst>(I)) {
-          this->NumOfAllocas++;
+          this->NumAllocas++;
         }
 
         if (I.getMetadata(M.getMDKindID(kFuzzallocTaggedAllocMD))) {
-          this->NumOfTaggedAllocs++;
+          this->NumTaggedAllocs++;
         } else if (I.getMetadata(
                        M.getMDKindID(kFuzzallocInstrumentedDerefMD))) {
-          this->NumOfInstrumentedDerefs++;
+          this->NumInstrumentedDerefs++;
         } else if (I.getMetadata(M.getMDKindID(kFuzzallocHeapifiedAllocaMD))) {
-          this->NumOfHeapifiedAllocas++;
+          this->NumHeapifiedAllocas++;
         }
       }
     }
@@ -94,7 +71,7 @@ bool CollectStats::runOnModule(Module &M) {
   for (const auto &G : M.globals()) {
     if (auto *GV = dyn_cast<GlobalVariable>(&G)) {
       if (!GV->isDeclaration()) {
-        this->NumOfGlobalVars++;
+        this->NumGlobalVars++;
       }
     }
   }
@@ -102,9 +79,8 @@ bool CollectStats::runOnModule(Module &M) {
   return false;
 }
 
-static RegisterPass<CollectStats> X("fuzzalloc-collect-stats",
-                                    "Collect some useful statistics", true,
-                                    true);
+static RegisterPass<CollectStats>
+    X("fuzzalloc-collect-stats", "Collect some useful statistics", true, true);
 
 static void registerCollectStatsPass(const PassManagerBuilder &,
                                      legacy::PassManagerBase &PM) {
