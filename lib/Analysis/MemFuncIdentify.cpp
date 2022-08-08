@@ -124,7 +124,6 @@ bool MemFuncIdentify::runOnModule(Module &M) {
         assert(Store->getValueOperand() == F);
         MemFuncUsers[F].insert(Store->getPointerOperand()->stripPointerCasts());
       } else {
-        outs() << F->getName() << " user -> " << *U->stripPointerCasts() << '\n';
         MemFuncUsers[F].insert(U->stripPointerCasts());
       }
     }

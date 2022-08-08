@@ -43,12 +43,14 @@ bool VariableRecovery::runOnModule(Module &M) {
 
       if (auto *DbgVal = dyn_cast<DbgValueInst>(&I)) {
         auto *V = DbgVal->getValue();
-        if (V && Vars.insert({V, Var}).second) {
+        VarInfo VI(Var, V->getType());
+        if (V && Vars.insert({V, VI}).second) {
           NumLocalVars++;
         }
       } else if (auto *DbgDecl = dyn_cast<DbgDeclareInst>(&I)) {
         auto *Addr = DbgDecl->getAddress();
-        if (Addr && Vars.insert({Addr, Var}).second) {
+        VarInfo VI(Var, Addr->getType()->getPointerElementType());
+        if (Addr && Vars.insert({Addr, VI}).second) {
           NumLocalVars++;
         }
       } else if (auto *DbgAddr = dyn_cast<DbgAddrIntrinsic>(&I)) {
@@ -66,7 +68,8 @@ bool VariableRecovery::runOnModule(Module &M) {
       if (auto *Var = GVExpr->getVariable()) {
         LLVM_DEBUG(dbgs() << "Handling global variable `" << Var->getName()
                           << "`\n");
-        if (Vars.insert({&GV, Var}).second) {
+        VarInfo VI(Var, GV.getValueType());
+        if (Vars.insert({&GV, VI}).second) {
           NumGlobalVars++;
         }
       }

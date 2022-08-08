@@ -18,7 +18,7 @@ class Value;
 /// Identify def sites
 class DefSiteIdentify : public llvm::ModulePass {
 public:
-  using DefSites = llvm::SmallPtrSet<const llvm::Value *, 16>;
+  using DefSites = llvm::SmallPtrSet<llvm::Value *, 32>;
 
   /// Trackable def sites
   enum DefSiteTypes {
@@ -32,6 +32,7 @@ public:
 
   virtual void getAnalysisUsage(llvm::AnalysisUsage &) const override;
   virtual bool runOnModule(llvm::Module &) override;
+  virtual void print(llvm::raw_ostream &, const llvm::Module *) const override;
 
   const DefSites &getDefSites() const { return ToTrack; }
 

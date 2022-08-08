@@ -54,16 +54,8 @@ bool DefSiteIdentify::runOnModule(Module &M) {
   const auto &MemFuncs = getAnalysis<MemFuncIdentify>().getFuncs();
   const auto &Vars = getAnalysis<VariableRecovery>().getVariables();
 
-  for (const auto &[V, _] : Vars) {
-    // Get the variable's type
-    const auto *Ty = [V = V]() -> Type * {
-      if (const auto *GV = dyn_cast<GlobalVariable>(V)) {
-        // Globals are always pointer types. So get the actual value type
-        return GV->getValueType();
-      } else {
-        return V->getType();
-      }
-    }();
+  for (const auto &[V, VI] : Vars) {
+    const auto *Ty = VI.getType();
 
     // Save the variable's definition if it's one we want to track
     if (trackArrays() && isa<ArrayType>(Ty)) {
@@ -82,6 +74,13 @@ bool DefSiteIdentify::runOnModule(Module &M) {
   NumDefSites = ToTrack.size();
 
   return false;
+}
+
+void DefSiteIdentify::print(raw_ostream &OS, const Module *M) const {
+  const auto &Vars = getAnalysis<VariableRecovery>().getVariables();
+  for (const auto *Def : ToTrack) {
+    OS << Vars.lookup(const_cast<Value *>(Def)) << " def: `" << *Def << "`\n";
+  }
 }
 
 bool DefSiteIdentify::trackArrays() {
