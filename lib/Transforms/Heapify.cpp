@@ -12,10 +12,12 @@
 #include <llvm/IR/IntrinsicInst.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/Module.h>
+#include <llvm/IR/ReplaceConstant.h>
 #include <llvm/Pass.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/Utils/EscapeEnumerator.h>
 #include <llvm/Transforms/Utils/Local.h>
+#include <llvm/Transforms/Utils/ModuleUtils.h>
 
 #include "fuzzalloc/Analysis/DefSiteIdentify.h"
 #include "fuzzalloc/Metadata.h"
@@ -35,12 +37,6 @@ static Instruction *phiSafeInsertPt(Use &U) {
   }
   return InsertPt;
 }
-
-static Instruction *insertFree(AllocaInst *Alloca, Instruction *InsertPt) {
-  // Load the pointer to the dynamically allocated memory and free it
-  auto *Load = new LoadInst(Alloca->getAllocatedType(), Alloca, "", InsertPt);
-  return CallInst::CreateFree(Load, InsertPt);
-}
 } // anonymous namespace
 
 class Heapify : public ModulePass {
@@ -52,12 +48,16 @@ public:
   virtual bool runOnModule(Module &M) override;
 
 private:
-  Instruction *insertMalloc(const AllocaInst *, AllocaInst *,
-                            Instruction *InsertPt);
-  AllocaInst *heapifyAlloca(AllocaInst *);
+  Instruction *insertMalloc(Type *, Value *, Instruction *);
+  Instruction *insertFree(Type *, Value *, Instruction *);
+
+  void createHeapifyCtor(GlobalVariable *, IRBuilder<> &);
+  void createHeapifyDtor(GlobalVariable *, IRBuilder<> &);
   GlobalVariable *heapifyGlobal(GlobalVariable *);
 
-  const Module *Mod;                     ///< Module being instrumented
+  AllocaInst *heapifyAlloca(AllocaInst *);
+
+  Module *Mod;                           ///< Module being instrumented
   LLVMContext *Ctx;                      ///< Context
   const DataLayout *DL;                  ///< Data layout
   std::unique_ptr<DIBuilder> DbgBuilder; ///< Debug builder
@@ -65,41 +65,264 @@ private:
 
 char Heapify::ID = 0;
 
-Instruction *Heapify::insertMalloc(const AllocaInst *OrigAlloca,
-                                   AllocaInst *NewAlloca,
+Instruction *Heapify::insertMalloc(Type *Ty, Value *Ptr,
                                    Instruction *InsertPt) {
-  Type *AllocaTy = OrigAlloca->getAllocatedType();
   auto *IntPtrTy = DL->getIntPtrType(*Ctx);
-
   auto *MallocCall = [&]() -> Instruction * {
-    if (auto *ArrayTy = dyn_cast<ArrayType>(AllocaTy)) {
+    if (auto *ArrayTy = dyn_cast<ArrayType>(Ty)) {
       // Insert array malloc call
       auto *ElemTy = ArrayTy->getArrayElementType();
       auto TySize = DL->getTypeAllocSize(ElemTy);
       auto NumElems = ArrayTy->getNumElements();
-      return CallInst::CreateMalloc(
-          InsertPt, IntPtrTy, ElemTy, ConstantInt::get(IntPtrTy, TySize),
-          ConstantInt::get(IntPtrTy, NumElems), nullptr,
-          NewAlloca->getName() + "_malloccall");
+      return CallInst::CreateMalloc(InsertPt, IntPtrTy, ElemTy,
+                                    ConstantInt::get(IntPtrTy, TySize),
+                                    ConstantInt::get(IntPtrTy, NumElems),
+                                    nullptr, Ptr->getName() + "_malloccall");
     } else {
       // Insert non-array malloc call
-      return CallInst::CreateMalloc(
-          InsertPt, IntPtrTy, AllocaTy, ConstantExpr::getSizeOf(AllocaTy),
-          nullptr, nullptr, NewAlloca->getName() + "_malloccall");
+      return CallInst::CreateMalloc(InsertPt, IntPtrTy, Ty,
+                                    ConstantExpr::getSizeOf(Ty), nullptr,
+                                    nullptr, Ptr->getName() + "_malloccall");
     }
   }();
-  auto *MallocStore = new StoreInst(MallocCall, NewAlloca, InsertPt);
+
+  auto *MallocStore = new StoreInst(MallocCall, Ptr, InsertPt);
   MallocStore->setMetadata(Mod->getMDKindID(kFuzzallocNoInstrumentMD),
+                           MDNode::get(*Ctx, None));
+  MallocStore->setMetadata(Mod->getMDKindID(kNoSanitizeMD),
                            MDNode::get(*Ctx, None));
 
   return MallocCall;
 }
 
-AllocaInst *Heapify::heapifyAlloca(AllocaInst *Alloca) {
+Instruction *Heapify::insertFree(Type *Ty, Value *Ptr, Instruction *InsertPt) {
+  // Load the pointer to the dynamically allocated memory and free it
+  auto *Load = new LoadInst(Ty, Ptr, "", InsertPt);
+  Load->setMetadata(Mod->getMDKindID(kFuzzallocNoInstrumentMD),
+                    MDNode::get(*Ctx, None));
+  Load->setMetadata(Mod->getMDKindID(kNoSanitizeMD), MDNode::get(*Ctx, None));
+
+  return CallInst::CreateFree(Load, InsertPt);
+}
+
+/// Create constructor for heapified global variable
+///
+/// The IRBuilder's insertion point is set to where a `malloc` should be
+/// inserted.
+void Heapify::createHeapifyCtor(GlobalVariable *GV, IRBuilder<> &IRB) {
+  auto *GlobalCtorTy =
+      FunctionType::get(Type::getVoidTy(*Ctx), /*isVarArg=*/false);
+  auto *GlobalCtorF =
+      Function::Create(GlobalCtorTy, GlobalValue::InternalLinkage,
+                       "fuzzalloc.ctor." + GV->getName(), *Mod);
+  appendToGlobalCtors(*Mod, GlobalCtorF, /*Priority=*/0);
+
+  auto *EntryBB = BasicBlock::Create(*Ctx, "entry", GlobalCtorF);
+  IRB.SetInsertPoint(EntryBB);
+
+  if (GV->getLinkage() == GlobalValue::LinkOnceAnyLinkage ||
+      GV->getLinkage() == GlobalValue::LinkOnceODRLinkage) {
+    // Weak linkage means the same constructor may be inserted in multiple
+    // modules, causing the global to be allocated multiple times. To prevent
+    // this, we generate code to check if the global has already been allocated.
+    // If it has, just return.
+
+    // Create the basic block when the global has already been allocated:
+    // nothing to do in this case
+    auto *TrueBB = BasicBlock::Create(*Ctx, "true", GlobalCtorF);
+    ReturnInst::Create(*Ctx, TrueBB);
+
+    // Create the basic block when the global has not been allocated: load and
+    // allocate the variable
+    auto *FalseBB = BasicBlock::Create(*Ctx, "false", GlobalCtorF);
+    ReturnInst::Create(*Ctx, FalseBB);
+
+    // Load the global
+    auto *GVLoad = IRB.CreateLoad(GV);
+    GVLoad->setMetadata(Mod->getMDKindID(kFuzzallocNoInstrumentMD),
+                        MDNode::get(*Ctx, None));
+    GVLoad->setMetadata(Mod->getMDKindID(kNoSanitizeMD),
+                        MDNode::get(*Ctx, None));
+
+    // Check if the global has already been allocated
+    auto *Check =
+        IRB.CreateICmpNE(GVLoad, Constant::getNullValue(GVLoad->getType()));
+    IRB.CreateCondBr(Check, TrueBB, FalseBB);
+
+    // Only allocate the global if it has not already been allocated
+    IRB.SetInsertPoint(FalseBB->getTerminator());
+  } else {
+    // No branching - just return from the block
+    auto *RetVoid = IRB.CreateRetVoid();
+    IRB.SetInsertPoint(RetVoid);
+  }
+}
+
+/// Create destructor for heapified global variable
+///
+/// The IRBuilder's insertion point is set to where a `free` should be inserted.
+void Heapify::createHeapifyDtor(GlobalVariable *GV, IRBuilder<> &IRB) {
+  auto *GlobalDtorTy =
+      FunctionType::get(Type::getVoidTy(*Ctx), /*isVarArg=*/false);
+  auto *GlobalDtorF =
+      Function::Create(GlobalDtorTy, GlobalValue::InternalLinkage,
+                       "fuzzalloc.dtor." + GV->getName(), *Mod);
+  appendToGlobalDtors(*Mod, GlobalDtorF, /*Priority=*/0);
+
+  auto *EntryBB = BasicBlock::Create(*Ctx, "entry", GlobalDtorF);
+  IRB.SetInsertPoint(EntryBB);
+
+  if (GV->getLinkage() == GlobalValue::LinkOnceAnyLinkage ||
+      GV->getLinkage() == GlobalValue::LinkOnceODRLinkage) {
+    // Weak linkage means the same destructor may be inserted in multiple
+    // modules, causing the global to be freed multiple times. To prevent this,
+    // we generate code to check if the global has already been freed. If it
+    // has, just return.
+
+    // Create the basic block when the global has already been freed: nothing
+    // to do in this case
+    auto *TrueBB = BasicBlock::Create(*Ctx, "true", GlobalDtorF);
+    ReturnInst::Create(*Ctx, TrueBB);
+
+    // Create the basic block when the global has not been freed: load and free
+    // the variable
+    auto *FalseBB = BasicBlock::Create(*Ctx, "false", GlobalDtorF);
+    ReturnInst::Create(*Ctx, FalseBB);
+
+    // Load the global
+    auto *GVLoad = IRB.CreateLoad(GV);
+    GVLoad->setMetadata(Mod->getMDKindID(kFuzzallocNoInstrumentMD),
+                        MDNode::get(*Ctx, None));
+    GVLoad->setMetadata(Mod->getMDKindID(kNoSanitizeMD),
+                        MDNode::get(*Ctx, None));
+
+    // Check if the global has already been free
+    auto *Check =
+        IRB.CreateICmpEQ(GVLoad, Constant::getNullValue(GVLoad->getType()));
+    IRB.CreateCondBr(Check, TrueBB, FalseBB);
+
+    // Set the global to NULL
+    IRB.SetInsertPoint(FalseBB->getTerminator());
+    auto *NullStore =
+        IRB.CreateStore(Constant::getNullValue(GVLoad->getType()), GV);
+    NullStore->setMetadata(Mod->getMDKindID(kFuzzallocNoInstrumentMD),
+                           MDNode::get(*Ctx, None));
+    NullStore->setMetadata(Mod->getMDKindID(kNoSanitizeMD),
+                           MDNode::get(*Ctx, None));
+
+    // Free the global variable before setting it to NULL
+    IRB.SetInsertPoint(NullStore);
+  } else {
+    // No branching - just return from the block
+    auto *RetVoid = IRB.CreateRetVoid();
+    IRB.SetInsertPoint(RetVoid);
+  }
+}
+
+GlobalVariable *Heapify::heapifyGlobal(GlobalVariable *OrigGV) {
+  LLVM_DEBUG(dbgs() << "heapifying global " << *OrigGV << '\n');
+
+  IRBuilder<> IRB(*Ctx);
+  auto *ValueTy = [&]() -> Type * {
+    if (isa<ArrayType>(OrigGV->getValueType())) {
+      return OrigGV->getValueType()->getArrayElementType()->getPointerTo();
+    }
+    return OrigGV->getValueType();
+  }();
+
+  // Create new global
+  auto *NewGV = new GlobalVariable(
+      *Mod, ValueTy, /*isConstant=*/false, OrigGV->getLinkage(),
+      /* If the original global had an initializer, replace it with the null
+         pointer initializer (it will be initialized later) */
+      !OrigGV->isDeclaration() ? Constant::getNullValue(ValueTy) : nullptr,
+      OrigGV->getName(), OrigGV, OrigGV->getThreadLocalMode(),
+      OrigGV->getType()->getAddressSpace(), OrigGV->isExternallyInitialized());
+  NewGV->takeName(OrigGV);
+  NewGV->copyAttributesFrom(OrigGV);
+  NewGV->setAlignment(MaybeAlign(0));
+
+  // Copy debug info
+  SmallVector<DIGlobalVariableExpression *, 2> GVEs;
+  OrigGV->getDebugInfo(GVEs);
+  for (auto *GVE : GVEs) {
+    NewGV->addDebugInfo(GVE);
+  }
+
+  // Allocate and initialize the global
+  if (!OrigGV->isDeclaration()) {
+    createHeapifyCtor(NewGV, IRB);
+
+    auto *ValueTy = OrigGV->getValueType();
+    auto *MallocCall = insertMalloc(ValueTy, NewGV, &*IRB.GetInsertPoint());
+
+    if (OrigGV->hasInitializer()) {
+      auto *Initializer = OrigGV->getInitializer();
+      auto *InitializerTy = Initializer->getType();
+      auto *InitializerGV =
+          new GlobalVariable(*Mod, InitializerTy, /*isConstant=*/true,
+                             GlobalValue::PrivateLinkage, Initializer);
+      InitializerGV->setUnnamedAddr(GlobalValue::UnnamedAddr::Global);
+      InitializerGV->setAlignment(MaybeAlign(OrigGV->getAlignment()));
+
+      IRB.CreateMemCpy(MallocCall, MaybeAlign(NewGV->getAlignment()),
+                       InitializerGV, MaybeAlign(InitializerGV->getAlignment()),
+                       DL->getTypeAllocSize(InitializerTy));
+    }
+
+    auto *MallocStore = IRB.CreateStore(MallocCall, NewGV);
+    MallocStore->setMetadata(Mod->getMDKindID(kFuzzallocNoInstrumentMD),
+                             MDNode::get(*Ctx, None));
+    MallocStore->setMetadata(Mod->getMDKindID(kNoSanitizeMD),
+                             MDNode::get(*Ctx, None));
+  }
+
+  // Deallocate the global
+  if (!NewGV->isDeclaration()) {
+    createHeapifyDtor(NewGV, IRB);
+    insertFree(NewGV->getValueType(), NewGV, &*IRB.GetInsertPoint());
+  }
+
+  // Replace constant expression users
+  SmallVector<ConstantExpr *, 16> CEWorklist;
+  for (auto *U : OrigGV->users()) {
+    if (auto *CE = dyn_cast<ConstantExpr>(U)) {
+      CEWorklist.push_back(CE);
+    }
+  }
+  
+  while (!CEWorklist.empty()) {
+    auto *CE = CEWorklist.pop_back_val();
+  }
+
+  // Update users
+  for (auto &U : OrigGV->uses()) {
+    auto *User = U.getUser();
+
+    if (auto *I = dyn_cast<Instruction>(User)) {
+      // Load the new global from the heap before we can do anything with it
+      auto *InsertPt = phiSafeInsertPt(U);
+      auto *LoadNewGV =
+          new LoadInst(NewGV->getValueType(), NewGV, "", InsertPt);
+      auto *BitCastNewGV = CastInst::CreatePointerCast(
+          LoadNewGV, OrigGV->getType(), "", InsertPt);
+      User->replaceUsesOfWith(OrigGV, BitCastNewGV);
+    } else {
+      assert(false && "Unsupported global variable user");
+    }
+  }
+
+  OrigGV->eraseFromParent();
+  return NewGV;
+}
+
+AllocaInst *Heapify::heapifyAlloca(AllocaInst *OrigAlloca) {
+  LLVM_DEBUG(dbgs() << "heapifying alloca " << *OrigAlloca << '\n');
+
   unsigned NumMallocs = 0;
   unsigned NumFrees = 0;
 
-  const auto *AllocaTy = Alloca->getAllocatedType();
+  auto *AllocaTy = OrigAlloca->getAllocatedType();
   auto *NewAllocaTy = [&]() -> PointerType * {
     if (AllocaTy->isArrayTy()) {
       return AllocaTy->getArrayElementType()->getPointerTo();
@@ -110,12 +333,12 @@ AllocaInst *Heapify::heapifyAlloca(AllocaInst *Alloca) {
 
   // Create the new alloca
   auto *NewAlloca =
-      new AllocaInst(NewAllocaTy, Alloca->getType()->getAddressSpace(),
-                     Alloca->getName(), Alloca);
+      new AllocaInst(NewAllocaTy, OrigAlloca->getType()->getAddressSpace(),
+                     OrigAlloca->getName(), OrigAlloca);
   NewAlloca->setMetadata(Mod->getMDKindID(kFuzzallocHeapifiedAllocaMD),
                          MDNode::get(*Ctx, None));
-  NewAlloca->takeName(Alloca);
-  NewAlloca->copyMetadata(*Alloca);
+  NewAlloca->takeName(OrigAlloca);
+  NewAlloca->copyMetadata(*OrigAlloca);
 
   // Helpers for finding lifetime intrinsics
   const auto &LifetimePred = [](Intrinsic::ID ID) {
@@ -130,20 +353,21 @@ AllocaInst *Heapify::heapifyAlloca(AllocaInst *Alloca) {
   const auto &IsLifetimeEnd = LifetimePred(Intrinsic::lifetime_end);
 
   // Update users
-  for (auto &U : Alloca->uses()) {
+  for (auto &U : OrigAlloca->uses()) {
     auto *User = U.getUser();
 
     if (IsLifetimeStart(User)) {
       // A lifetime.start intrinsic indicates the variable is now "live". So
       // allocate it
-      insertMalloc(Alloca, NewAlloca, cast<Instruction>(User));
-      User->replaceUsesOfWith(Alloca, NewAlloca);
+      insertMalloc(AllocaTy, NewAlloca, cast<Instruction>(User));
+      User->replaceUsesOfWith(OrigAlloca, NewAlloca);
       NumMallocs++;
     } else if (IsLifetimeEnd(User)) {
       // A lifetime.end intrinsic indicates the variable is now "dead". So
       // deallocate it
-      insertFree(NewAlloca, cast<Instruction>(User));
-      User->replaceUsesOfWith(Alloca, NewAlloca);
+      insertFree(NewAlloca->getAllocatedType(), NewAlloca,
+                 cast<Instruction>(User));
+      User->replaceUsesOfWith(OrigAlloca, NewAlloca);
       NumFrees++;
     } else if (auto *I = dyn_cast<Instruction>(User)) {
       // Load the new alloca from the heap before we can do anything with it
@@ -151,38 +375,37 @@ AllocaInst *Heapify::heapifyAlloca(AllocaInst *Alloca) {
       auto *LoadNewAlloca =
           new LoadInst(NewAlloca->getAllocatedType(), NewAlloca, "", InsertPt);
       auto *BitCastNewAlloca = CastInst::CreatePointerCast(
-          LoadNewAlloca, Alloca->getType(), "", InsertPt);
-      User->replaceUsesOfWith(Alloca, BitCastNewAlloca);
+          LoadNewAlloca, OrigAlloca->getType(), "", InsertPt);
+      User->replaceUsesOfWith(OrigAlloca, BitCastNewAlloca);
+    } else {
+      assert(false && "Unsupported alloca user");
     }
   }
 
   // Place the malloc call after the new alloca if we did not encounter any
   // lifetime.start intrinsics
   if (NumMallocs == 0) {
-    insertMalloc(Alloca, NewAlloca, Alloca);
+    insertMalloc(AllocaTy, NewAlloca, OrigAlloca);
     NumMallocs++;
   }
 
   // Insert free calls at function exit if we did not encounter any
   // lifetime.end intrinsics
   if (NumFrees == 0) {
-    EscapeEnumerator EE(*Alloca->getFunction());
+    EscapeEnumerator EE(*OrigAlloca->getFunction());
     while (auto *AtExit = EE.Next()) {
-      insertFree(NewAlloca, &*AtExit->GetInsertPoint());
+      insertFree(NewAlloca->getAllocatedType(), NewAlloca,
+                 &*AtExit->GetInsertPoint());
     }
   }
 
   // Update debug users
-  replaceDbgDeclare(Alloca, NewAlloca, *DbgBuilder, DIExpression::ApplyOffset,
-                    0);
-  replaceDbgValueForAlloca(Alloca, NewAlloca, *DbgBuilder);
+  replaceDbgDeclare(OrigAlloca, NewAlloca, *DbgBuilder,
+                    DIExpression::ApplyOffset, 0);
+  replaceDbgValueForAlloca(OrigAlloca, NewAlloca, *DbgBuilder);
 
-  Alloca->eraseFromParent();
-
+  OrigAlloca->eraseFromParent();
   return NewAlloca;
-}
-
-GlobalVariable *Heapify::heapifyGlobal(GlobalVariable *GV) {
 }
 
 void Heapify::getAnalysisUsage(AnalysisUsage &AU) const {
@@ -204,6 +427,7 @@ bool Heapify::runOnModule(Module &M) {
       heapifyGlobal(GV);
       NumHeapifiedGlobals++;
     } else {
+      assert(false && "Unsupported def site");
     }
   }
 

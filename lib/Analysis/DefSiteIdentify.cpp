@@ -40,6 +40,9 @@ static cl::bits<DefSiteIdentify::DefSiteTypes> ClDefSitesToTrack(
                clEnumValN(DefSiteIdentify::DefSiteTypes::DynAlloc,
                           "fuzzalloc-def-dyn-alloc",
                           "Track dynamic memory allocations (defs)")));
+static cl::opt<bool>
+    ClIgnoreGlobalConstants("fuzzalloc-ignore-constant-globals",
+                            cl::desc("Ignore constant globals"));
 } // anonymous namespace
 
 char DefSiteIdentify::ID = 0;
@@ -56,6 +59,11 @@ bool DefSiteIdentify::runOnModule(Module &M) {
 
   for (const auto &[V, VI] : Vars) {
     const auto *Ty = VI.getType();
+    if (const auto *GV = dyn_cast<GlobalVariable>(V)) {
+      if (ClIgnoreGlobalConstants && GV->isConstant()) {
+        continue;
+      }
+    }
 
     // Save the variable's definition if it's one we want to track
     if (trackArrays() && isa<ArrayType>(Ty)) {
