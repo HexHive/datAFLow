@@ -30,6 +30,7 @@ endif(NOT LLVM_ENABLE_RTTI)
 include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
 include_directories(BEFORE include)
 link_directories(${LLVM_LIBRARY_DIRS})
+add_definitions(${LLVM_DEFINITIONS})
 
 #
 # datAFLow

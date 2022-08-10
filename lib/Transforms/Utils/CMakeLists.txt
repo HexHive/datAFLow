@@ -3,6 +3,11 @@ add_library(LowerAtomics SHARED
 )
 install(TARGETS LowerAtomics LIBRARY DESTINATION lib)
 
+add_library(LowerConstantExprs SHARED
+  LowerConstantExprs.cpp
+)
+install(TARGETS LowerConstantExprs LIBRARY DESTINATION lib)
+
 add_library(LowerDbgDeclare SHARED
   LowerDbgDeclare.cpp
 )
