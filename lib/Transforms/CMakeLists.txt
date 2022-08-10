@@ -6,4 +6,5 @@ target_link_libraries(Heapify PUBLIC
 )
 install(TARGETS Heapify LIBRARY DESTINATION lib)
 
+add_subdirectory(Instrumentation)
 add_subdirectory(Utils)

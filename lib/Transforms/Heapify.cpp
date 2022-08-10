@@ -12,7 +12,6 @@
 #include <llvm/IR/IntrinsicInst.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/Module.h>
-#include <llvm/IR/ReplaceConstant.h>
 #include <llvm/Pass.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/Utils/EscapeEnumerator.h>
@@ -52,10 +51,10 @@ private:
 
   AllocaInst *heapifyAlloca(AllocaInst *);
 
-  Module *Mod;                           ///< Module being instrumented
-  LLVMContext *Ctx;                      ///< Context
-  const DataLayout *DL;                  ///< Data layout
-  std::unique_ptr<DIBuilder> DbgBuilder; ///< Debug builder
+  Module *Mod;
+  LLVMContext *Ctx;
+  const DataLayout *DL;
+  std::unique_ptr<DIBuilder> DbgBuilder;
 };
 
 char Heapify::ID = 0;

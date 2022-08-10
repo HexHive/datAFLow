@@ -127,7 +127,7 @@ bool UseSiteIdentify::ignoreAccess(const Value *Ptr) {
 
 // Adapted from AddressSanitizer
 void UseSiteIdentify::getInterestingMemoryOperands(
-    Instruction *Inst, UseSites &InterestingOperands) {
+    Instruction *Inst, UseSiteOperands &InterestingOperands) {
   if (Inst->hasMetadata(kFuzzallocNoInstrumentMD)) {
     return;
   }
@@ -205,7 +205,7 @@ bool UseSiteIdentify::runOnFunction(Function &F) {
     return false;
   }
 
-  UseSites InterestingOperands;
+  UseSiteOperands InterestingOperands;
   SmallPtrSet<Value *, 16> TempsToTrack;
 
   for (auto &BB : F) {
