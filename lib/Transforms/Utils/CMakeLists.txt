@@ -17,3 +17,8 @@ add_Library(LowerMemIntrinsics SHARED
   LowerMemIntrinsics.cpp
 )
 install(TARGETS LowerMemIntrinsics LIBRARY DESTINATION lib)
+
+add_library(Mem2Reg SHARED
+  Mem2Reg.cpp
+)
+install(TARGETS Mem2Reg LIBRARY DESTINATION lib)
