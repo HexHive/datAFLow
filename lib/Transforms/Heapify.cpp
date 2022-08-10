@@ -21,6 +21,7 @@
 
 #include "fuzzalloc/Analysis/DefSiteIdentify.h"
 #include "fuzzalloc/Metadata.h"
+#include "fuzzalloc/Transforms/Utils.h"
 
 using namespace llvm;
 
@@ -30,13 +31,7 @@ STATISTIC(NumHeapifiedAllocas, "Number of heapified allocas");
 STATISTIC(NumHeapifiedGlobals, "Number of heapified globals");
 
 namespace {
-static Instruction *phiSafeInsertPt(Use &U) {
-  auto *InsertPt = cast<Instruction>(U.getUser());
-  if (auto *PN = dyn_cast<PHINode>(InsertPt)) {
-    InsertPt = PN->getIncomingBlock(U)->getTerminator();
-  }
-  return InsertPt;
-}
+static Use *ptrUse(Use &U) { return &U; }
 } // anonymous namespace
 
 class Heapify : public ModulePass {
@@ -277,29 +272,12 @@ GlobalVariable *Heapify::heapifyGlobal(GlobalVariable *OrigGV) {
                              MDNode::get(*Ctx, None));
   }
 
-  // Deallocate the global
-  if (!NewGV->isDeclaration()) {
-    createHeapifyDtor(NewGV, IRB);
-    insertFree(NewGV->getValueType(), NewGV, &*IRB.GetInsertPoint());
-  }
+  // Cache uses and update
+  SmallVector<Use *, 16> Uses(map_range(OrigGV->uses(), ptrUse));
+  for (auto *U : Uses) {
+    auto *User = U->getUser();
 
-  // Replace constant expression users
-  SmallVector<ConstantExpr *, 16> CEWorklist;
-  for (auto *U : OrigGV->users()) {
-    if (auto *CE = dyn_cast<ConstantExpr>(U)) {
-      CEWorklist.push_back(CE);
-    }
-  }
-  
-  while (!CEWorklist.empty()) {
-    auto *CE = CEWorklist.pop_back_val();
-  }
-
-  // Update users
-  for (auto &U : OrigGV->uses()) {
-    auto *User = U.getUser();
-
-    if (auto *I = dyn_cast<Instruction>(User)) {
+    if (isa<Instruction>(User)) {
       // Load the new global from the heap before we can do anything with it
       auto *InsertPt = phiSafeInsertPt(U);
       auto *LoadNewGV =
@@ -308,8 +286,15 @@ GlobalVariable *Heapify::heapifyGlobal(GlobalVariable *OrigGV) {
           LoadNewGV, OrigGV->getType(), "", InsertPt);
       User->replaceUsesOfWith(OrigGV, BitCastNewGV);
     } else {
+      // Constant expressions should have been lowered
       assert(false && "Unsupported global variable user");
     }
+  }
+
+  // Deallocate the global
+  if (!NewGV->isDeclaration()) {
+    createHeapifyDtor(NewGV, IRB);
+    insertFree(NewGV->getValueType(), NewGV, &*IRB.GetInsertPoint());
   }
 
   OrigGV->eraseFromParent();
@@ -352,9 +337,10 @@ AllocaInst *Heapify::heapifyAlloca(AllocaInst *OrigAlloca) {
   const auto &IsLifetimeStart = LifetimePred(Intrinsic::lifetime_start);
   const auto &IsLifetimeEnd = LifetimePred(Intrinsic::lifetime_end);
 
-  // Update users
-  for (auto &U : OrigAlloca->uses()) {
-    auto *User = U.getUser();
+  // Cache uses and update
+  SmallVector<Use *, 16> Uses(map_range(OrigAlloca->uses(), ptrUse));
+  for (auto *U : Uses) {
+    auto *User = U->getUser();
 
     if (IsLifetimeStart(User)) {
       // A lifetime.start intrinsic indicates the variable is now "live". So
@@ -369,7 +355,7 @@ AllocaInst *Heapify::heapifyAlloca(AllocaInst *OrigAlloca) {
                  cast<Instruction>(User));
       User->replaceUsesOfWith(OrigAlloca, NewAlloca);
       NumFrees++;
-    } else if (auto *I = dyn_cast<Instruction>(User)) {
+    } else if (isa<Instruction>(User)) {
       // Load the new alloca from the heap before we can do anything with it
       auto *InsertPt = phiSafeInsertPt(U);
       auto *LoadNewAlloca =
