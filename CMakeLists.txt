@@ -39,4 +39,4 @@ add_definitions(${LLVM_DEFINITIONS})
 include_directories(include)
 
 add_subdirectory(lib)
-#add_subdirectory(tools)
+add_subdirectory(tools)
