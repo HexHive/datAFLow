@@ -38,6 +38,10 @@ static bool expandInstruction(Instruction *Inst) {
       auto *U = &Inst->getOperandUse(Op);
       phiSafeReplaceUses(U, expandCExpr(CE, phiSafeInsertPt(U)));
 
+      if (!CE->isConstantUsed()) {
+        CE->destroyConstant();
+      }
+
       NumLoweredCExprs++;
       Changed = true;
     }
@@ -48,22 +52,20 @@ static bool expandInstruction(Instruction *Inst) {
 } // anonymous namespace
 
 /// Lower constant expressions to instructions
-class LowerCExprs : public ModulePass {
+class LowerCExprs : public FunctionPass {
 public:
   static char ID;
-  LowerCExprs() : ModulePass(ID) {}
-  virtual bool runOnModule(Module &) override;
+  LowerCExprs() : FunctionPass(ID) {}
+  virtual bool runOnFunction(Function &) override;
 };
 
 char LowerCExprs::ID = 0;
 
-bool LowerCExprs::runOnModule(Module &M) {
+bool LowerCExprs::runOnFunction(Function &F) {
   bool Changed = false;
 
-  for (auto &F : M) {
-    for (auto &I : instructions(F)) {
-      Changed = expandInstruction(&I);
-    }
+  for (auto &I : instructions(F)) {
+    Changed = expandInstruction(&I);
   }
 
   return Changed;
