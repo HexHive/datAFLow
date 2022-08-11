@@ -1,0 +1,62 @@
+#!/usr/bin/env python3
+
+from argparse import ArgumentParser
+from pathlib import Path
+from subprocess import run
+import sys
+
+
+THIS_DIR = Path(__file__).parent.resolve()
+LIB_DIR = Path(THIS_DIR.parent) / 'lib'
+
+
+def parse_args():
+    """Parse command-line options."""
+    parser = ArgumentParser(description='datAFLow C++ compiler')
+    parser.add_argument('--custom-mem-funcs', type=Path, metavar='TXT',
+                        help='Special case list of custom memory allocation '
+                             'functions')
+    parser.add_argument('--def-sensitivity', default=[], action='append',
+                        choices=('array', 'struct', 'dyn-alloc'),
+                        help='Def site sensitivity')
+    parser.add_argument('--use-sensitivity', default=[], action='append',
+                        choices=('read', 'write'), help='Use site sensitivity')
+    return parser.parse_known_args()
+
+
+def main():
+    """The main function."""
+    args, clang_args = parse_args()
+
+    cmd = [
+        '@CLANGXX_BINARY@',
+        '-g',
+        '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libMem2Reg.so',
+        '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libLowerDbgDeclare.so',
+        '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libLowerAtomics.so',
+        '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libLowerMemIntrinsics.so',
+        '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libLowerConstantExprs.so',
+        '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libVariableRecovery.so',
+        '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libMemFuncIdentify.so',
+        '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libDefSiteIdentify.so',
+        '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libUseSiteIdentify.so',
+        '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libHeapify.so',
+        '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libMemFuncInstrument.so',
+    ]
+
+    if args.custom_mem_funcs:
+        cmd.extend(['-mllvm',
+                    f'-fuzzalloc-custom-mem-funcs={args.custom_mem_funcs}'])
+    for def_sensitivity in args.def_sensitivity:
+        cmd.extend(['-mllvm', f'-fuzzalloc-def-{def_sensitivity}'])
+    for use_sensitivity in args.use_sensitivity:
+        cmd.extend(['-mllvm', f'-fuzzalloc-use-{use_sensitivity}'])
+    cmd.extend(clang_args)
+    cmd.append('-Qunused-arguments')
+
+    proc = run(cmd)
+    return proc.returncode
+
+
+if __name__ == '__main__':
+    sys.exit(main())
