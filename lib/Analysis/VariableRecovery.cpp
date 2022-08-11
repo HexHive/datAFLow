@@ -43,14 +43,20 @@ bool VariableRecovery::runOnModule(Module &M) {
 
       if (auto *DbgVal = dyn_cast<DbgValueInst>(&I)) {
         auto *V = DbgVal->getValue();
+        if (!V) {
+          continue;
+        }
         VarInfo VI(Var, V->getType());
-        if (V && Vars.insert({V, VI}).second) {
+        if (Vars.insert({V, VI}).second) {
           NumLocalVars++;
         }
       } else if (auto *DbgDecl = dyn_cast<DbgDeclareInst>(&I)) {
         auto *Addr = DbgDecl->getAddress();
+        if (!Addr) {
+          continue;
+        }
         VarInfo VI(Var, Addr->getType()->getPointerElementType());
-        if (Addr && Vars.insert({Addr, VI}).second) {
+        if (Vars.insert({Addr, VI}).second) {
           NumLocalVars++;
         }
       } else if (auto *DbgAddr = dyn_cast<DbgAddrIntrinsic>(&I)) {
