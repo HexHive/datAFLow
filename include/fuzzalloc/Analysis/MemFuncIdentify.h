@@ -21,9 +21,7 @@ class Value;
 /// Identify dynamic memory allocation function calls
 class MemFuncIdentify : public llvm::ModulePass {
 public:
-  using DynMemoryFunctionUsers =
-      llvm::ValueMap</* Memory allocation function */ const llvm::Function *,
-                     /* Users */ llvm::SmallPtrSet<const llvm::Value *, 16>>;
+  using DynamicMemoryFunctions = llvm::SmallPtrSet<llvm::Function *, 16>;
 
   static char ID;
   MemFuncIdentify() : llvm::ModulePass(ID) {}
@@ -31,13 +29,12 @@ public:
   virtual void getAnalysisUsage(llvm::AnalysisUsage &) const override;
   virtual bool runOnModule(llvm::Module &) override;
 
-  const DynMemoryFunctionUsers &getFuncs() { return MemFuncUsers; }
+  DynamicMemoryFunctions &getFuncs() { return MemFuncs; }
 
 private:
   void getMemoryBuiltins(const llvm::Function &);
 
-  llvm::SmallPtrSet<const llvm::Function *, 8> MemFuncs;
-  DynMemoryFunctionUsers MemFuncUsers;
+  DynamicMemoryFunctions MemFuncs;
 };
 
 #endif // MEM_FUNC_IDENTIFY_H

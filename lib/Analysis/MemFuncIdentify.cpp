@@ -87,7 +87,7 @@ void MemFuncIdentify::getMemoryBuiltins(const Function &F) {
     }
 
     // Check if the call is to a builtin memory allocation function
-    const auto *Callee = CB->getCalledFunction();
+    auto *Callee = CB->getCalledFunction();
     if (isAllocationFn(CB, TLI)) {
       MemFuncs.insert(Callee);
     }
@@ -102,7 +102,7 @@ void MemFuncIdentify::getAnalysisUsage(AnalysisUsage &AU) const {
 bool MemFuncIdentify::runOnModule(Module &M) {
   const auto &CustomMemFuncs = getMemFuncList();
 
-  for (const auto &F : M) {
+  for (auto &F : M) {
     // Check for calls to builtin dynamic memory allocation functions. Doing it
     // via calls (rather than the functions themselves) allows us to reuse
     // LLVM's MemoryBuiltins functionality
@@ -111,21 +111,6 @@ bool MemFuncIdentify::runOnModule(Module &M) {
     // Check for custom memory allocation functions
     if (CustomMemFuncs.isIn(F)) {
       MemFuncs.insert(&F);
-    }
-  }
-
-  // Check the users of dynamic memory allocation functins - it's not just call
-  // instructions!
-  for (const auto *F : MemFuncs) {
-    for (const auto *U : F->users()) {
-      // If the function is stored somewhere, save this storage location for
-      // later. Otherwise, just save the user
-      if (const auto *Store = dyn_cast<StoreInst>(U)) {
-        assert(Store->getValueOperand() == F);
-        MemFuncUsers[F].insert(Store->getPointerOperand()->stripPointerCasts());
-      } else {
-        MemFuncUsers[F].insert(U->stripPointerCasts());
-      }
     }
   }
 

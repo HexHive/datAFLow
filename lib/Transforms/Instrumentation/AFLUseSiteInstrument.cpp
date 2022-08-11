@@ -6,7 +6,9 @@
 //===----------------------------------------------------------------------===//
 
 #include <llvm/ADT/Statistic.h>
+#include <llvm/Analysis/MemoryBuiltins.h>
 #include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/InlineAsm.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/Pass.h>
@@ -16,6 +18,7 @@
 
 #include "fuzzalloc/Analysis/UseSiteIdentify.h"
 #include "fuzzalloc/Metadata.h"
+#include "fuzzalloc/fuzzalloc.h"
 
 using namespace llvm;
 
@@ -41,65 +44,69 @@ public:
 
 private:
   Value *getDefSite(Value *, IRBuilder<> &) const;
-  void doInstrument(InterestingMemoryOperand *);
+  void doInstrument(InterestingMemoryOperand *, ObjectSizeOffsetEvaluator *);
 
   Module *Mod;
   LLVMContext *Ctx;
   const DataLayout *DL;
+
+  FunctionCallee ReadPCAsm;
+  GlobalVariable *AFLMapPtr;
+
+  IntegerType *TagTy;
+  ConstantInt *HashMul;
+  ConstantInt *DefaultTag;
 };
 
 char AFLUseSiteInstrument::ID = 0;
 
 Value *AFLUseSiteInstrument::getDefSite(Value *Ptr, IRBuilder<> &IRB) const {
+  assert(false && "not yet implemented");
   return nullptr;
 }
 
-void AFLUseSiteInstrument::doInstrument(InterestingMemoryOperand *Op) {
-  auto *Inst = Op->getInsn();
-  auto *Ptr = Op->getPtr();
-  IRBuilder<> IRB(Inst);
-
+void AFLUseSiteInstrument::doInstrument(
+    InterestingMemoryOperand *Op, ObjectSizeOffsetEvaluator *ObjSizeEval) {
   if (Op->IsWrite) {
     NumInstrumentedWrites++;
   } else {
     NumInstrumentedReads++;
   }
 
-  LLVM_DEBUG(dbgs() << "Instrumenting " << Inst << " (ptr=" << *Ptr << ")\n");
+  auto *Inst = Op->getInsn();
+  auto *Ptr = Op->getPtr();
+
+  LLVM_DEBUG(dbgs() << "Instrumenting " << *Inst << " (ptr=" << *Ptr << ")\n");
 
   // This metadata can be used by the static pointer analysis
   Inst->setMetadata(Mod->getMDKindID(kFuzzallocInstrumentedDerefMD),
                     MDNode::get(*Ctx, None));
 
   // Get the def site
+  IRBuilder<> IRB(Inst);
   auto *DefSite = getDefSite(Ptr, IRB);
 
-  // Get the use site offset. Default to zero if we can't determine the offset
-  auto *UseSiteOffset = Constant::getNullValue(IRB.getInt64Ty());
-  if (ClUseOffset) {
-    auto *UseSiteGEP = getUseSiteGEP(Ptr, DL);
-    if (UseSiteGEP) {
-      UseSiteOffset = EmitGEPOffset(&IRB, DL, UseSiteGEP);
+  // Compute the use site offset (the same size as the tag). If this cannot be
+  // determined statically, build code that can determine it dynamically
+  auto *UseOffset = [&]() -> Value * {
+    if (ObjSizeEval) {
+      auto SizeOffset = ObjSizeEval->compute(Ptr);
+      return IRB.CreateIntCast(SizeOffset.second, TagTy, /*isSigned=*/true);
     }
-  }
-  UseSiteOffset->setName(Ptr->getName() + ".offset");
-  auto *UseSiteOffsetInt64 =
-      IRB.CreateSExtOrTrunc(UseSiteOffset, IRB.getInt64Ty());
+    return Constant::getNullValue(TagTy);
+  }();
+  UseOffset->setName(Ptr->getName() + ".offset");
 
   // Use the PC as the use site identifier
   auto *UseSite =
-      IRB.CreateIntCast(IRB.CreateCall(this->ReadPCAsm), this->TagTy,
+      IRB.CreateIntCast(IRB.CreateCall(ReadPCAsm), TagTy,
                         /*isSigned=*/false, Ptr->getName() + ".use_site");
 
   // Incorporate the memory access offset into the use site
-  if (ClUseOffset) {
-    UseSite = IRB.CreateAdd(UseSite,
-                            IRB.CreateIntCast(UseSiteOffsetInt64, this->TagTy,
-                                              /*isSigned=*/true));
-  }
+  UseSite = IRB.CreateAdd(UseSite, UseOffset);
 
   // Load the AFL bitmap
-  auto *AFLMap = IRB.CreateLoad(this->AFLMapPtr);
+  auto *AFLMap = IRB.CreateLoad(AFLMapPtr);
 
   // Hash the allocation site and use site to index into the bitmap
   //
@@ -107,8 +114,7 @@ void AFLUseSiteInstrument::doInstrument(InterestingMemoryOperand *Op) {
   //
   // Hash algorithm: ((31 * (def_site - DEFAULT_TAG)) ^ use_site) - use_site
   auto *Hash = IRB.CreateSub(
-      IRB.CreateXor(IRB.CreateMul(this->HashMul,
-                                  IRB.CreateSub(DefSite, this->DefaultTag)),
+      IRB.CreateXor(IRB.CreateMul(HashMul, IRB.CreateSub(DefSite, DefaultTag)),
                     UseSite),
       UseSite, Ptr->getName() + ".def_use_hash");
   auto *AFLMapIdx = IRB.CreateGEP(
@@ -116,7 +122,7 @@ void AFLUseSiteInstrument::doInstrument(InterestingMemoryOperand *Op) {
 
   // Update the bitmap only if the def site is not the default tag
   auto *CounterLoad = IRB.CreateLoad(AFLMapIdx);
-  auto *Incr = IRB.CreateAdd(CounterLoad, this->AFLInc);
+  auto *Incr = IRB.CreateAdd(CounterLoad, IRB.getInt8(1));
   auto *CounterStore = IRB.CreateStore(Incr, AFLMapIdx);
 
   AFLMap->setMetadata(Mod->getMDKindID(kNoSanitizeMD), MDNode::get(*Ctx, None));
@@ -127,21 +133,52 @@ void AFLUseSiteInstrument::doInstrument(InterestingMemoryOperand *Op) {
 }
 
 void AFLUseSiteInstrument::getAnalysisUsage(AnalysisUsage &AU) const {
+  AU.addRequired<TargetLibraryInfoWrapperPass>();
   AU.addRequired<UseSiteIdentify>();
 }
 
 bool AFLUseSiteInstrument::runOnFunction(Function &F) {
+  // Initialize stuff
   this->Mod = F.getParent();
   this->Ctx = &Mod->getContext();
   this->DL = &Mod->getDataLayout();
 
+  auto *ReadPCAsmTy =
+      FunctionType::get(Type::getInt64Ty(*Ctx), /*isVarArg=*/false);
+  this->ReadPCAsm =
+      FunctionCallee(ReadPCAsmTy, InlineAsm::get(ReadPCAsmTy, "leaq (%tip), $0",
+                                                 /*Constraints=*/"=r",
+                                                 /*hasSideEffects=*/false));
+  this->AFLMapPtr = new GlobalVariable(
+      *Mod, PointerType::getUnqual(Type::getInt8Ty(*Ctx)), /*isConstant=*/false,
+      GlobalValue::ExternalLinkage, /*Initializer=*/nullptr, "__afl_area_ptr");
+
+  this->TagTy = Type::getIntNTy(*Ctx, kNumTagBits);
+  this->HashMul = ConstantInt::get(TagTy, 31);
+  this->DefaultTag = ConstantInt::get(TagTy, kFuzzallocDefaultTag);
+
+  const auto *TLI = &getAnalysis<TargetLibraryInfoWrapperPass>().getTLI(F);
   auto &UseSiteOps = getAnalysis<UseSiteIdentify>().getUseSites();
+
   if (UseSiteOps.empty()) {
     return false;
   }
 
+  auto ObjSizeEval = [&]() -> ObjectSizeOffsetEvaluator * {
+    if (ClUseOffset) {
+      ObjectSizeOpts EvalOpts;
+      EvalOpts.RoundToAlign = true;
+      return new ObjectSizeOffsetEvaluator(*DL, TLI, *Ctx, EvalOpts);
+    }
+    return nullptr;
+  }();
+
   for (auto &Op : UseSiteOps) {
-    doInstrument(&Op);
+    doInstrument(&Op, ObjSizeEval);
+  }
+
+  if (ObjSizeEval) {
+    delete ObjSizeEval;
   }
 
   return true;
