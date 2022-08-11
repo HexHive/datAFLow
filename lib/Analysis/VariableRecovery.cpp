@@ -54,7 +54,7 @@ bool VariableRecovery::runOnModule(Module &M) {
           NumLocalVars++;
         }
       } else if (auto *DbgAddr = dyn_cast<DbgAddrIntrinsic>(&I)) {
-        assert(false && "llvm.dbg.addr not yet supported");
+        llvm_unreachable("llvm.dbg.addr not supported");
       }
     }
   }

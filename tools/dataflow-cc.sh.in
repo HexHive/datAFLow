@@ -26,5 +26,6 @@ exec $COMPILER                                                  \
     -Xclang -load -Xclang "${LIB_DIR}/libDefSiteIdentify.so"    \
     -Xclang -load -Xclang "${LIB_DIR}/libUseSiteIdentify.so"    \
     -Xclang -load -Xclang "${LIB_DIR}/libHeapify.so"            \
+    -Xclang -load -Xclang "${LIB_DIR}/libMemFuncInstrument.so"  \
     "$@"                                                        \
     -Qunused-arguments

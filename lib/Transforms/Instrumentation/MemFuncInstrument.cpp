@@ -5,6 +5,8 @@
 ///
 //===----------------------------------------------------------------------===//
 
+#include <stdlib.h>
+
 #include <llvm/ADT/Statistic.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/LegacyPassManager.h>
@@ -16,9 +18,13 @@
 #include <llvm/Transforms/Utils/Cloning.h>
 
 #include "fuzzalloc/Analysis/MemFuncIdentify.h"
+#include "fuzzalloc/Metadata.h"
 #include "fuzzalloc/fuzzalloc.h"
 
 using namespace llvm;
+
+// Adapted from http://c-faq.com/lib/randrange.html
+#define RAND(x, y) ((tag_t)((x) + random() / (RAND_MAX / ((y) - (x) + 1) + 1)))
 
 #define DEBUG_TYPE "fuzzalloc-def-site-inst"
 
@@ -31,19 +37,27 @@ public:
   virtual bool runOnModule(Module &) override;
 
 private:
+  ConstantInt *generateTag() const;
   FunctionType *getTaggedFunctionType(const Function *) const;
   Function *getTaggedFunction(const Function *) const;
   Function *tagFunction(const Function *) const;
-  Instruction *tagCall(CallBase *, Function *) const;
+  Instruction *tagCall(CallBase *, FunctionCallee) const;
   void tagUse(Use *, Function *) const;
 
   Module *Mod;
   LLVMContext *Ctx;
-  Type *TagTy;
-  ValueMap<Function *, Function *> TaggedFuncs;
+  IntegerType *TagTy;
+
+  SmallPtrSet<Function *, 8> TaggedFuncs;
+  ValueMap</* Original function */ Function *, /* Tagged function */ Function *>
+      TaggedFuncMap;
 };
 
 char MemFuncInstrument::ID = 0;
+
+ConstantInt *MemFuncInstrument::generateTag() const {
+  return ConstantInt::get(TagTy, RAND(kFuzzallocTagMin, kFuzzallocTagMax));
+}
 
 FunctionType *
 MemFuncInstrument::getTaggedFunctionType(const Function *F) const {
@@ -111,26 +125,66 @@ Function *MemFuncInstrument::tagFunction(const Function *OrigF) const {
   return TaggedF;
 }
 
-Instruction *MemFuncInstrument::tagCall(CallBase *CB, Function *TaggedF) const {
+Instruction *MemFuncInstrument::tagCall(CallBase *CB,
+                                        FunctionCallee TaggedF) const {
   LLVM_DEBUG(dbgs() << "tagging call " << *CB << " (in function "
                     << CB->getFunction()->getName() << ") with call to "
-                    << TaggedF->getName() << '\n');
+                    << TaggedF.getCallee()->getName() << '\n');
 
-  auto *ParentF = CB->getFunction();
+  // The tag values depends on where the function call _is_. If the (tagged)
+  // function is being called from within another tagged function, then just
+  // pass the first argument (which is always the tag) straight through.
+  // Otherwise, generate a new tag
+  auto *Tag = [&]() -> Value * {
+    auto *ParentF = CB->getFunction();
+    if (TaggedFuncs.count(ParentF) > 0) {
+      return ParentF->arg_begin();
+    }
+    return generateTag();
+  }();
+
+  // Make the tag the first argument and copy the original call's arguments
+  // after
+  SmallVector<Value *, 4> TaggedCallArgs = {Tag};
+  TaggedCallArgs.append(CB->arg_begin(), CB->arg_end());
+
+  // Create the tagged call
+  auto *TaggedCall = [&]() -> CallBase * {
+    const auto &Name = CB->getName() + ".tagged";
+    if (isa<CallInst>(CB)) {
+      return CallInst::Create(TaggedF, TaggedCallArgs, Name, CB);
+    } else if (auto *Invoke = dyn_cast<InvokeInst>(CB)) {
+      return InvokeInst::Create(TaggedF, Invoke->getNormalDest(),
+                                Invoke->getUnwindDest(), TaggedCallArgs, Name,
+                                CB);
+    }
+    llvm_unreachable("Unsupported call isntruction");
+  }();
+  TaggedCall->takeName(CB);
+  TaggedCall->setCallingConv(CB->getCallingConv());
+  TaggedCall->setAttributes(CB->getAttributes());
+  TaggedCall->setMetadata(Mod->getMDKindID(kFuzzallocTaggedAllocMD),
+                          MDNode::get(*Ctx, None));
+
+  // Replace the original call
+  CB->replaceAllUsesWith(TaggedCall);
+  CB->eraseFromParent();
+
+  return TaggedCall;
 }
 
+/// Replace the use of a memory allocation function with the tagged version
 void MemFuncInstrument::tagUse(Use *U, Function *F) const {
   LLVM_DEBUG(dbgs() << "replacing user " << *U->getUser()
                     << " of tagged function " << F->getName() << '\n');
 
   auto *User = U->getUser();
-  auto *TaggedF = TaggedFuncs.lookup(F);
+  auto *TaggedF = TaggedFuncMap.lookup(F);
 
   if (auto *CB = dyn_cast<CallBase>(User)) {
-
-  } else if (auto *Store = dyn_cast<StoreInst>(User)) {
-
+    tagCall(CB, FunctionCallee(TaggedF));
   } else {
+    llvm_unreachable("User not supported");
   }
 }
 
@@ -154,10 +208,12 @@ bool MemFuncInstrument::runOnModule(Module &M) {
   // the first argument is a tag identifying the allocation site
   for (auto *F : MemFuncs) {
     auto *TaggedF = tagFunction(F);
-    TaggedFuncs.insert({F, TaggedF});
+
+    TaggedFuncs.insert(TaggedF);
+    TaggedFuncMap.insert({F, TaggedF});
   }
 
-  for (auto [F, _] : TaggedFuncs) {
+  for (auto [F, _] : TaggedFuncMap) {
     SmallVector<Use *, 16> Uses(
         map_range(F->uses(), [](Use &U) { return &U; }));
     for (auto *U : Uses) {

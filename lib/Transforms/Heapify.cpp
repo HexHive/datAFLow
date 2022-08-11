@@ -286,7 +286,7 @@ GlobalVariable *Heapify::heapifyGlobal(GlobalVariable *OrigGV) {
       User->replaceUsesOfWith(OrigGV, BitCastNewGV);
     } else {
       // Constant expressions should have been lowered
-      assert(false && "Unsupported global variable user");
+      llvm_unreachable("Unsupported global variable user");
     }
   }
 
@@ -363,7 +363,7 @@ AllocaInst *Heapify::heapifyAlloca(AllocaInst *OrigAlloca) {
           LoadNewAlloca, OrigAlloca->getType(), "", InsertPt);
       User->replaceUsesOfWith(OrigAlloca, BitCastNewAlloca);
     } else {
-      assert(false && "Unsupported alloca user");
+      llvm_unreachable("Unsupported alloca user");
     }
   }
 
@@ -412,7 +412,7 @@ bool Heapify::runOnModule(Module &M) {
       heapifyGlobal(GV);
       NumHeapifiedGlobals++;
     } else {
-      assert(false && "Unsupported def site");
+      llvm_unreachable("Unsupported def site");
     }
   }
 
