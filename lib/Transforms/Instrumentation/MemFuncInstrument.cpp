@@ -70,7 +70,7 @@ MemFuncInstrument::getTaggedFunctionType(const FunctionType *Ty) const {
 }
 
 Function *MemFuncInstrument::getTaggedFunction(const Function *OrigF) const {
-  const auto &Name = "__tagged_" + OrigF->getName().str();
+  const auto &Name = "__bb_" + OrigF->getName().str();
   auto *TaggedFTy = getTaggedFunctionType(OrigF->getFunctionType());
   auto TaggedCallee = Mod->getOrInsertFunction(Name, TaggedFTy);
   assert(TaggedCallee && "Tagged function not inserted");
@@ -249,13 +249,33 @@ bool MemFuncInstrument::runOnModule(Module &M) {
     }
   }
 
-  outs().flush();
+  // Erase the now-unused memory functions
   assert(
       all_of(MemFuncs, [](const Function *F) { return F->getNumUses() == 0; }));
   for (auto *F : MemFuncs) {
     F->eraseFromParent();
   }
   MemFuncs.clear();
+
+  // Finally, replace calls to `free` with `__bb_free`
+  {
+    auto *FreeFTy =
+        FunctionType::get(Type::getVoidTy(*Ctx), {Type::getInt8PtrTy(*Ctx)},
+                          /*isVarArg=*/false);
+    auto FreeCallee = Mod->getOrInsertFunction("free", FreeFTy);
+    if (FreeCallee) {
+      auto BBFreeF = Mod->getOrInsertFunction("__bb_free", FreeFTy);
+      assert(BBFreeF && "Unable to insert __bb_free function");
+      assert(isa<Function>(FreeCallee.getCallee()));
+      auto *FreeF = cast<Function>(FreeCallee.getCallee());
+
+      SmallVector<User *, 16> FreeUsers(FreeF->users());
+      for (auto *U : FreeUsers) {
+        U->replaceUsesOfWith(FreeF, BBFreeF.getCallee());
+      }
+      FreeF->eraseFromParent();
+    }
+  }
 
   return true;
 }
