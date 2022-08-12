@@ -163,6 +163,8 @@ Instruction *MemFuncInstrument::tagCall(CallBase *CB,
   TaggedCall->takeName(CB);
   TaggedCall->setCallingConv(CB->getCallingConv());
   TaggedCall->setAttributes(CB->getAttributes());
+  TaggedCall->setDebugLoc(CB->getDebugLoc());
+  TaggedCall->copyMetadata(*CB);
   TaggedCall->setMetadata(Mod->getMDKindID(kFuzzallocTaggedAllocMD),
                           MDNode::get(*Ctx, None));
 
@@ -196,6 +198,8 @@ void MemFuncInstrument::tagUser(User *U, Function *F) const {
     auto *NewBC =
         new BitCastInst(TaggedF, DstBitCastTy->getPointerTo(), "", BC);
     NewBC->takeName(BC);
+    NewBC->setDebugLoc(BC->getDebugLoc());
+    NewBC->copyMetadata(*BC);
 
     // All the bitcast users should be calls. So tag the calls
     SmallVector<User *, 16> BCUsers(BC->users());
