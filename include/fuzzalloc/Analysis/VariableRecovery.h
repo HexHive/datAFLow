@@ -30,9 +30,10 @@ public:
     }
 
     if (llvm::isa<llvm::DILocalVariable>(DbgVar)) {
-      OS << "local var. `" << DbgVar->getName() << "` (type=" << *Ty << ')';
+      OS << "local variable `" << DbgVar->getName() << "` (type=" << *Ty << ')';
     } else if (llvm::isa<llvm::DIGlobalVariable>(DbgVar)) {
-      OS << "global var. `" << DbgVar->getName() << "` (type=" << *Ty << ')';
+      OS << "global variable `" << DbgVar->getName() << "` (type=" << *Ty
+         << ')';
     }
   }
 

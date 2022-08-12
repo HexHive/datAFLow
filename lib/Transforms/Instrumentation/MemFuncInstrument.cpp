@@ -19,6 +19,8 @@
 
 #include "fuzzalloc/Analysis/MemFuncIdentify.h"
 #include "fuzzalloc/Metadata.h"
+#include "fuzzalloc/Streams.h"
+#include "fuzzalloc/Transforms/Utils.h"
 #include "fuzzalloc/fuzzalloc.h"
 
 using namespace llvm;
@@ -38,11 +40,11 @@ public:
 
 private:
   ConstantInt *generateTag() const;
-  FunctionType *getTaggedFunctionType(const Function *) const;
+  FunctionType *getTaggedFunctionType(const FunctionType *) const;
   Function *getTaggedFunction(const Function *) const;
   Function *tagFunction(const Function *) const;
   Instruction *tagCall(CallBase *, FunctionCallee) const;
-  void tagUse(Use *, Function *) const;
+  void tagUser(User *, Function *) const;
 
   Module *Mod;
   LLVMContext *Ctx;
@@ -60,17 +62,16 @@ ConstantInt *MemFuncInstrument::generateTag() const {
 }
 
 FunctionType *
-MemFuncInstrument::getTaggedFunctionType(const Function *F) const {
-  auto *FTy = F->getFunctionType();
+MemFuncInstrument::getTaggedFunctionType(const FunctionType *Ty) const {
   SmallVector<Type *, 4> TaggedFuncParams = {TagTy};
-  TaggedFuncParams.append(FTy->param_begin(), FTy->param_end());
-  return FunctionType::get(FTy->getReturnType(), TaggedFuncParams,
-                           FTy->isVarArg());
+  TaggedFuncParams.append(Ty->param_begin(), Ty->param_end());
+  return FunctionType::get(Ty->getReturnType(), TaggedFuncParams,
+                           Ty->isVarArg());
 }
 
 Function *MemFuncInstrument::getTaggedFunction(const Function *OrigF) const {
   const auto &Name = "__tagged_" + OrigF->getName().str();
-  auto *TaggedFTy = getTaggedFunctionType(OrigF);
+  auto *TaggedFTy = getTaggedFunctionType(OrigF->getFunctionType());
   auto TaggedCallee = Mod->getOrInsertFunction(Name, TaggedFTy);
   assert(TaggedCallee && "Tagged function not inserted");
   auto *TaggedF = cast<Function>(TaggedCallee.getCallee()->stripPointerCasts());
@@ -128,8 +129,7 @@ Function *MemFuncInstrument::tagFunction(const Function *OrigF) const {
 Instruction *MemFuncInstrument::tagCall(CallBase *CB,
                                         FunctionCallee TaggedF) const {
   LLVM_DEBUG(dbgs() << "tagging call " << *CB << " (in function "
-                    << CB->getFunction()->getName() << ") with call to "
-                    << TaggedF.getCallee()->getName() << '\n');
+                    << CB->getFunction()->getName() << ")\n");
 
   // The tag values depends on where the function call _is_. If the (tagged)
   // function is being called from within another tagged function, then just
@@ -158,7 +158,7 @@ Instruction *MemFuncInstrument::tagCall(CallBase *CB,
                                 Invoke->getUnwindDest(), TaggedCallArgs, Name,
                                 CB);
     }
-    llvm_unreachable("Unsupported call isntruction");
+    llvm_unreachable("Unsupported call instruction");
   }();
   TaggedCall->takeName(CB);
   TaggedCall->setCallingConv(CB->getCallingConv());
@@ -166,7 +166,7 @@ Instruction *MemFuncInstrument::tagCall(CallBase *CB,
   TaggedCall->setMetadata(Mod->getMDKindID(kFuzzallocTaggedAllocMD),
                           MDNode::get(*Ctx, None));
 
-  // Replace the original call
+  // Replace the callee
   CB->replaceAllUsesWith(TaggedCall);
   CB->eraseFromParent();
 
@@ -174,15 +174,39 @@ Instruction *MemFuncInstrument::tagCall(CallBase *CB,
 }
 
 /// Replace the use of a memory allocation function with the tagged version
-void MemFuncInstrument::tagUse(Use *U, Function *F) const {
-  LLVM_DEBUG(dbgs() << "replacing user " << *U->getUser()
-                    << " of tagged function " << F->getName() << '\n');
+void MemFuncInstrument::tagUser(User *U, Function *F) const {
+  LLVM_DEBUG(dbgs() << "replacing user " << *U << " of function "
+                    << F->getName() << '\n');
 
-  auto *User = U->getUser();
   auto *TaggedF = TaggedFuncMap.lookup(F);
 
-  if (auto *CB = dyn_cast<CallBase>(User)) {
+  if (auto *CB = dyn_cast<CallBase>(U)) {
     tagCall(CB, FunctionCallee(TaggedF));
+  } else if (auto *BC = dyn_cast<BitCastInst>(U)) {
+    // The underlying type (i.e., behind the bitcast) must be a `FunctionType`
+    // (because the use is a function)
+    auto *SrcBitCastTy = BC->getDestTy()->getPointerElementType();
+    assert(isa<FunctionType>(SrcBitCastTy) && "Requires a function bitcast");
+
+    // (a) Add the tag (i.e., the call site identifier) as the first argument
+    // to the cast function type and (b) cast the tagged function so that the
+    // type includes the tag argument
+    auto *DstBitCastTy =
+        getTaggedFunctionType(cast<FunctionType>(SrcBitCastTy));
+    auto *NewBC =
+        new BitCastInst(TaggedF, DstBitCastTy->getPointerTo(), "", BC);
+    NewBC->takeName(BC);
+
+    // All the bitcast users should be calls. So tag the calls
+    SmallVector<User *, 16> BCUsers(BC->users());
+    for (auto *BCU : BCUsers) {
+      if (auto *CB = dyn_cast<CallBase>(BCU)) {
+        tagCall(CB, FunctionCallee(DstBitCastTy, NewBC));
+      } else {
+        llvm_unreachable("All bitcast users must be calls");
+      }
+    }
+    BC->eraseFromParent();
   } else {
     llvm_unreachable("User not supported");
   }
@@ -213,13 +237,21 @@ bool MemFuncInstrument::runOnModule(Module &M) {
     TaggedFuncMap.insert({F, TaggedF});
   }
 
+  // Tag the users of these functions
   for (auto [F, _] : TaggedFuncMap) {
-    SmallVector<Use *, 16> Uses(
-        map_range(F->uses(), [](Use &U) { return &U; }));
-    for (auto *U : Uses) {
-      tagUse(U, F);
+    SmallVector<User *, 16> Users(F->users());
+    for (auto *U : Users) {
+      tagUser(U, F);
     }
   }
+
+  outs().flush();
+  assert(
+      all_of(MemFuncs, [](const Function *F) { return F->getNumUses() == 0; }));
+  for (auto *F : MemFuncs) {
+    F->eraseFromParent();
+  }
+  MemFuncs.clear();
 
   return true;
 }

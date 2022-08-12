@@ -16,7 +16,6 @@
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 
 #include "fuzzalloc/Analysis/DefSiteIdentify.h"
-#include "fuzzalloc/Analysis/MemFuncIdentify.h"
 #include "fuzzalloc/Analysis/VariableRecovery.h"
 
 using namespace llvm;
@@ -36,25 +35,21 @@ static cl::bits<DefSiteIdentify::DefSiteTypes> ClDefSitesToTrack(
     cl::values(clEnumValN(DefSiteIdentify::DefSiteTypes::Array,
                           "fuzzalloc-def-array", "Track arrays (defs)"),
                clEnumValN(DefSiteIdentify::DefSiteTypes::Struct,
-                          "fuzzalloc-def-struct", "Track structs (defs)"),
-               clEnumValN(DefSiteIdentify::DefSiteTypes::DynAlloc,
-                          "fuzzalloc-def-dyn-alloc",
-                          "Track dynamic memory allocations (defs)")));
+                          "fuzzalloc-def-struct", "Track structs (defs)")));
 static cl::opt<bool>
     ClIgnoreGlobalConstants("fuzzalloc-ignore-constant-globals",
-                            cl::desc("Ignore constant globals"));
+                            cl::desc("Ignore constant globals"), cl::Hidden,
+                            cl::init(false));
 } // anonymous namespace
 
 char DefSiteIdentify::ID = 0;
 
 void DefSiteIdentify::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.setPreservesAll();
-  AU.addRequired<MemFuncIdentify>();
   AU.addRequired<VariableRecovery>();
 }
 
 bool DefSiteIdentify::runOnModule(Module &M) {
-  const auto &MemFuncs = getAnalysis<MemFuncIdentify>().getFuncs();
   const auto &Vars = getAnalysis<VariableRecovery>().getVariables();
 
   for (const auto &[V, VI] : Vars) {
@@ -70,12 +65,6 @@ bool DefSiteIdentify::runOnModule(Module &M) {
       ToTrack.insert(V);
     } else if (trackStructs() && isa<StructType>(Ty)) {
       ToTrack.insert(V);
-    } else if (trackDynAllocs() && isa<PointerType>(Ty) &&
-               isa<CallBase>(V->stripPointerCasts())) {
-      auto *CB = cast<CallBase>(V->stripPointerCasts());
-      if (MemFuncs.count(CB->getCalledFunction()) > 0) {
-        ToTrack.insert(CB);
-      }
     }
   }
 
@@ -97,10 +86,6 @@ bool DefSiteIdentify::trackArrays() {
 
 bool DefSiteIdentify::trackStructs() {
   return ClDefSitesToTrack.isSet(DefSiteTypes::Struct);
-}
-
-bool DefSiteIdentify::trackDynAllocs() {
-  return ClDefSitesToTrack.isSet(DefSiteTypes::DynAlloc);
 }
 
 //

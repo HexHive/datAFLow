@@ -17,7 +17,7 @@ def parse_args():
                         help='Special case list of custom memory allocation '
                              'functions')
     parser.add_argument('--def-sensitivity', default=[], action='append',
-                        choices=('array', 'struct', 'dyn-alloc'),
+                        choices=('array', 'struct'),
                         help='Def site sensitivity')
     parser.add_argument('--use-sensitivity', default=[], action='append',
                         choices=('read', 'write'), help='Use site sensitivity')

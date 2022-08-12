@@ -24,7 +24,6 @@ public:
   enum DefSiteTypes {
     Array,
     Struct,
-    DynAlloc,
   };
 
   static char ID;

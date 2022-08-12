@@ -19,7 +19,9 @@
 #include <llvm/Transforms/Utils/ModuleUtils.h>
 
 #include "fuzzalloc/Analysis/DefSiteIdentify.h"
+#include "fuzzalloc/Analysis/VariableRecovery.h"
 #include "fuzzalloc/Metadata.h"
+#include "fuzzalloc/Streams.h"
 #include "fuzzalloc/Transforms/Utils.h"
 
 using namespace llvm;
@@ -214,7 +216,6 @@ void Heapify::createHeapifyDtor(GlobalVariable *GV, IRBuilder<> &IRB) {
 }
 
 GlobalVariable *Heapify::heapifyGlobal(GlobalVariable *OrigGV) {
-  LLVM_DEBUG(dbgs() << "heapifying global " << *OrigGV << '\n');
 
   IRBuilder<> IRB(*Ctx);
   auto *ValueTy = [&]() -> Type * {
@@ -301,8 +302,6 @@ GlobalVariable *Heapify::heapifyGlobal(GlobalVariable *OrigGV) {
 }
 
 AllocaInst *Heapify::heapifyAlloca(AllocaInst *OrigAlloca) {
-  LLVM_DEBUG(dbgs() << "heapifying alloca " << *OrigAlloca << '\n');
-
   unsigned NumMallocs = 0;
   unsigned NumFrees = 0;
 
@@ -394,6 +393,7 @@ AllocaInst *Heapify::heapifyAlloca(AllocaInst *OrigAlloca) {
 }
 
 void Heapify::getAnalysisUsage(AnalysisUsage &AU) const {
+  AU.addRequired<VariableRecovery>();
   AU.addRequired<DefSiteIdentify>();
 }
 
@@ -403,12 +403,16 @@ bool Heapify::runOnModule(Module &M) {
   this->DL = &M.getDataLayout();
   this->DbgBuilder = std::make_unique<DIBuilder>(M);
 
+  const auto &Vars = getAnalysis<VariableRecovery>().getVariables();
   const auto &DefSites = getAnalysis<DefSiteIdentify>().getDefSites();
+
   for (auto *Def : DefSites) {
     if (auto *Alloca = dyn_cast<AllocaInst>(Def)) {
+      status_stream() << "heapifying " << Vars.lookup(Alloca) << '\n';
       heapifyAlloca(Alloca);
       NumHeapifiedAllocas++;
     } else if (auto *GV = dyn_cast<GlobalVariable>(Def)) {
+      status_stream() << "heapifying " << Vars.lookup(GV) << '\n';
       heapifyGlobal(GV);
       NumHeapifiedGlobals++;
     } else {
