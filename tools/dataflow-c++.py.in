@@ -36,6 +36,7 @@ def main():
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libLowerAtomic.so',
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libLowerMemIntrinsic.so',
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libLowerConstantExpr.so',
+        '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libLowerNewDelete.so',
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libVariableRecovery.so',
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libMemFuncIdentify.so',
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libDefSiteIdentify.so',

@@ -13,6 +13,14 @@ add_library(LowerDbgDeclare SHARED
 )
 install(TARGETS LowerDbgDeclare LIBRARY DESTINATION lib)
 
+add_library(LowerNewDelete SHARED
+  LowerNewDelete.cpp
+)
+target_link_libraries(LowerNewDelete PUBLIC
+  MemFuncIdentify
+)
+install(TARGETS LowerNewDelete LIBRARY DESTINATION lib)
+
 add_library(LowerMemIntrinsic SHARED
   LowerMemIntrinsic.cpp
 )
