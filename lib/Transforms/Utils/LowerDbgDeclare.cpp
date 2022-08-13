@@ -15,16 +15,16 @@ using namespace llvm;
 
 #define DEBUG_TYPE "fuzzalloc-lower-dbg-declare"
 
-class LowerDbgDeclareIntrinsics : public FunctionPass {
+class LowerDbgDeclareIntrinsic : public FunctionPass {
 public:
   static char ID;
-  LowerDbgDeclareIntrinsics() : FunctionPass(ID) {}
+  LowerDbgDeclareIntrinsic() : FunctionPass(ID) {}
   virtual bool runOnFunction(Function &) override;
 };
 
-char LowerDbgDeclareIntrinsics::ID = 0;
+char LowerDbgDeclareIntrinsic::ID = 0;
 
-bool LowerDbgDeclareIntrinsics::runOnFunction(Function &F) {
+bool LowerDbgDeclareIntrinsic::runOnFunction(Function &F) {
   return LowerDbgDeclare(F);
 }
 
@@ -32,12 +32,12 @@ bool LowerDbgDeclareIntrinsics::runOnFunction(Function &F) {
 // Pass registration
 //
 
-static RegisterPass<LowerDbgDeclareIntrinsics>
+static RegisterPass<LowerDbgDeclareIntrinsic>
     X(DEBUG_TYPE, "Lower llvm.dbg.declare intrinsics", false, false);
 
 static void registerLowerDbgDeclareIntrinsicsPass(const PassManagerBuilder &,
                                                   legacy::PassManagerBase &PM) {
-  PM.add(new LowerDbgDeclareIntrinsics());
+  PM.add(new LowerDbgDeclareIntrinsic());
 }
 
 static RegisterStandardPasses RegisterLowerDbgDeclareIntrinsicsPass(

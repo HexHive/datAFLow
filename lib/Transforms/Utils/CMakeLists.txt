@@ -1,22 +1,22 @@
-add_library(LowerAtomics SHARED
-  LowerAtomics.cpp
+add_library(LowerAtomic SHARED
+  LowerAtomic.cpp
 )
-install(TARGETS LowerAtomics LIBRARY DESTINATION lib)
+install(TARGETS LowerAtomic LIBRARY DESTINATION lib)
 
-add_library(LowerConstantExprs SHARED
-  LowerConstantExprs.cpp
+add_library(LowerConstantExpr SHARED
+  LowerConstantExpr.cpp
 )
-install(TARGETS LowerConstantExprs LIBRARY DESTINATION lib)
+install(TARGETS LowerConstantExpr LIBRARY DESTINATION lib)
 
 add_library(LowerDbgDeclare SHARED
   LowerDbgDeclare.cpp
 )
 install(TARGETS LowerDbgDeclare LIBRARY DESTINATION lib)
 
-add_Library(LowerMemIntrinsics SHARED
-  LowerMemIntrinsics.cpp
+add_library(LowerMemIntrinsic SHARED
+  LowerMemIntrinsic.cpp
 )
-install(TARGETS LowerMemIntrinsics LIBRARY DESTINATION lib)
+install(TARGETS LowerMemIntrinsic LIBRARY DESTINATION lib)
 
 add_library(Mem2Reg SHARED
   Mem2Reg.cpp

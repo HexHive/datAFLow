@@ -1,4 +1,4 @@
-//===-- LowerMemIntrinics.cpp - Lower llvm.mem* intrinsics ----------------===//
+//===-- LowerMemIntrinic.cpp - Lower llvm.mem* intrinsics -----------------===//
 ///
 /// \file
 /// Wrapper around LLVM's LowerMemIntrinics functionality.
@@ -17,7 +17,7 @@
 
 using namespace llvm;
 
-#define DEBUG_TYPE "fuzzalloc-lower-mem-intrinsics"
+#define DEBUG_TYPE "fuzzalloc-lower-mem-intrinsic"
 
 STATISTIC(NumMemCpyExpanded, "Number of memcpy expansions");
 STATISTIC(NumMemMoveExpanded, "Number of memmove expansions");
@@ -475,10 +475,10 @@ static void expandMemSetAsLoop(MemSetInst *Memset) {
 }
 } // anonymous namespace
 
-class LowerMemIntrinsics : public ModulePass {
+class LowerMemIntrinsic : public ModulePass {
 public:
   static char ID;
-  LowerMemIntrinsics() : ModulePass(ID) {}
+  LowerMemIntrinsic() : ModulePass(ID) {}
   virtual bool runOnModule(Module &) override;
   virtual void getAnalysisUsage(AnalysisUsage &) const override;
 
@@ -486,13 +486,13 @@ private:
   bool expandMemIntrinsicUses(Function &);
 };
 
-char LowerMemIntrinsics::ID = 0;
+char LowerMemIntrinsic::ID = 0;
 
-void LowerMemIntrinsics::getAnalysisUsage(AnalysisUsage &AU) const {
+void LowerMemIntrinsic::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<TargetTransformInfoWrapperPass>();
 }
 
-bool LowerMemIntrinsics::expandMemIntrinsicUses(Function &F) {
+bool LowerMemIntrinsic::expandMemIntrinsicUses(Function &F) {
   Intrinsic::ID ID = F.getIntrinsicID();
   bool Changed = false;
 
@@ -539,7 +539,7 @@ bool LowerMemIntrinsics::expandMemIntrinsicUses(Function &F) {
   return Changed;
 }
 
-bool LowerMemIntrinsics::runOnModule(Module &M) {
+bool LowerMemIntrinsic::runOnModule(Module &M) {
   bool Changed = false;
 
   for (auto &F : M) {
@@ -565,12 +565,12 @@ bool LowerMemIntrinsics::runOnModule(Module &M) {
 // Pass registration
 //
 
-static RegisterPass<LowerMemIntrinsics> X(DEBUG_TYPE, "Lower memory intrinsics",
-                                          false, false);
+static RegisterPass<LowerMemIntrinsic> X(DEBUG_TYPE, "Lower memory intrinsics",
+                                         false, false);
 
 static void registerLowerMemIntrinsicsPass(const PassManagerBuilder &,
                                            legacy::PassManagerBase &PM) {
-  PM.add(new LowerMemIntrinsics());
+  PM.add(new LowerMemIntrinsic());
 }
 
 static RegisterStandardPasses

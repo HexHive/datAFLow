@@ -1,4 +1,4 @@
-//===-- LowerAtomics.cpp - Lower atomic instructions ----------------------===//
+//===-- LowerAtomic.cpp - Lower atomic instructions -----------------------===//
 ///
 /// \file
 /// Wrapper around LLVM's LowerAtomic pass.
@@ -12,22 +12,22 @@
 
 using namespace llvm;
 
-#define DEBUG_TYPE "fuzzalloc-lower-atomics"
+#define DEBUG_TYPE "fuzzalloc-lower-atomic"
 
-class LowerAtomics : public FunctionPass {
+class LowerAtomic : public FunctionPass {
 public:
   static char ID;
-  LowerAtomics() : FunctionPass(ID) {}
+  LowerAtomic() : FunctionPass(ID) {}
   virtual bool runOnFunction(Function &) override;
 
 private:
   LowerAtomicPass Impl;
 };
 
-char LowerAtomics::ID = 0;
+char LowerAtomic::ID = 0;
 
 // Adapted from `LowerAtomicLegacyPass`
-bool LowerAtomics::runOnFunction(Function &F) {
+bool LowerAtomic::runOnFunction(Function &F) {
   FunctionAnalysisManager DummyFAM;
   auto PA = Impl.run(F, DummyFAM);
   return !PA.areAllPreserved();
@@ -37,11 +37,11 @@ bool LowerAtomics::runOnFunction(Function &F) {
 // Pass registration
 //
 
-static RegisterPass<LowerAtomics> X(DEBUG_TYPE, "Lower atomics", false, false);
+static RegisterPass<LowerAtomic> X(DEBUG_TYPE, "Lower atomics", false, false);
 
 static void registerLowerAtomicsPass(const PassManagerBuilder &,
                                      legacy::PassManagerBase &PM) {
-  PM.add(new LowerAtomics());
+  PM.add(new LowerAtomic());
 }
 
 static RegisterStandardPasses

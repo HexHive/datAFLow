@@ -1,4 +1,4 @@
-//===-- LowerConstantExprs.cpp - Lower atomic constant expressions --------===//
+//===-- LowerConstantExpr.cpp - Lower atomic constant expressions ---------===//
 ///
 /// \file
 /// Lower constant expressions
@@ -17,7 +17,7 @@
 
 using namespace llvm;
 
-#define DEBUG_TYPE "fuzzalloc-lower-cexprs"
+#define DEBUG_TYPE "fuzzalloc-lower-cexpr"
 
 STATISTIC(NumLoweredCExprs, "Number of lowered constant expressions");
 
@@ -53,16 +53,16 @@ static bool expandInstruction(Instruction *Inst) {
 } // anonymous namespace
 
 /// Lower constant expressions to instructions
-class LowerCExprs : public FunctionPass {
+class LowerCExpr : public FunctionPass {
 public:
   static char ID;
-  LowerCExprs() : FunctionPass(ID) {}
+  LowerCExpr() : FunctionPass(ID) {}
   virtual bool runOnFunction(Function &) override;
 };
 
-char LowerCExprs::ID = 0;
+char LowerCExpr::ID = 0;
 
-bool LowerCExprs::runOnFunction(Function &F) {
+bool LowerCExpr::runOnFunction(Function &F) {
   bool Changed = false;
 
   for (auto &I : instructions(F)) {
@@ -76,12 +76,12 @@ bool LowerCExprs::runOnFunction(Function &F) {
 // Pass registration
 //
 
-static RegisterPass<LowerCExprs> X(DEBUG_TYPE, "Lower constant expressions",
-                                   false, false);
+static RegisterPass<LowerCExpr> X(DEBUG_TYPE, "Lower constant expressions",
+                                  false, false);
 
 static void registerLowerCExprsPass(const PassManagerBuilder &,
                                     legacy::PassManagerBase &PM) {
-  PM.add(new LowerCExprs());
+  PM.add(new LowerCExpr());
 }
 
 static RegisterStandardPasses
