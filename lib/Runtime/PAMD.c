@@ -16,16 +16,16 @@
 #include <string.h>
 #include <sys/mman.h>
 
+#include "fuzzalloc/baggy_bounds.h"
 #include "fuzzalloc/fuzzalloc.h"
 
 #define likely(x) __builtin_expect((x), 1)
 #define unlikely(x) __builtin_expect((x), 0)
 
 static const size_t kTableSize = 1UL << 43;    ///< Baggy bounds table size
-static const size_t kSlotSize = 16;            ///< Slot size (in bytes)
 static const size_t kMetaSize = sizeof(tag_t); ///< Size of metadata
 
-static uint8_t *__BaggyBoundsTablePtr;
+uint8_t *__baggy_bounds_table;
 
 /// Efficiently calculate the next power-of-2 of `X`
 static uint64_t nextPow2(uint64_t X) {
@@ -46,10 +46,10 @@ static void initBaggyBounds() {
     Initialized = true;
   }
 
-  __BaggyBoundsTablePtr =
+  __baggy_bounds_table =
       (uint8_t *)mmap(0, kTableSize, PROT_READ | PROT_WRITE,
                       MAP_PRIVATE | MAP_ANON | MAP_NORESERVE, -1, 0);
-  if (__BaggyBoundsTablePtr == MAP_FAILED) {
+  if (__baggy_bounds_table == MAP_FAILED) {
     fprintf(stderr, "mmap failed: %s\n", strerror(errno));
     abort();
   }
@@ -75,12 +75,12 @@ static void registerMemoryObject(tag_t Tag, void *Obj, size_t AllocSize) {
   }
 
   const uintptr_t P = (uintptr_t)Obj;
-  const uint64_t SlotSize = log2(kSlotSize);
+  const uint64_t SlotSize = kSlotSizeLog2;
   const uintptr_t Index = P >> SlotSize;
   const uint64_t E = log2(AllocSize);
   assert(E >= SlotSize);
   const uint64_t Range = 1 << (E - SlotSize);
-  memset(__BaggyBoundsTablePtr + Index, E, Range);
+  memset(__baggy_bounds_table + Index, E, Range);
 
   tag_t *TagAddr = (tag_t *)(P + AllocSize - kMetaSize);
   *TagAddr = Tag;
@@ -90,12 +90,12 @@ static void unregisterMemoryObject(void *Obj) {
   initBaggyBounds();
 
   const uintptr_t P = (uintptr_t)Obj;
-  const uint64_t SlotSize = log2(kSlotSize);
+  const uint64_t SlotSize = kSlotSizeLog2;
   const uintptr_t Index = P >> SlotSize;
-  const unsigned AllocSize = __BaggyBoundsTablePtr[Index];
+  const unsigned AllocSize = __baggy_bounds_table[Index];
   if (AllocSize != 0) {
     const uint64_t Range = 1 << (AllocSize - SlotSize);
-    memset(__BaggyBoundsTablePtr + Index, 0, Range);
+    memset(__baggy_bounds_table + Index, 0, Range);
   }
 }
 
@@ -141,8 +141,8 @@ void *__bb_realloc(tag_t Tag, void *Ptr, size_t Size) {
 
 tag_t __bb_lookup(void *Ptr) {
   const uintptr_t P = (uintptr_t)Ptr;
-  const uintptr_t Index = P >> log2(kSlotSize);
-  const unsigned E = __BaggyBoundsTablePtr[Index];
+  const uintptr_t Index = P >> kSlotSizeLog2;
+  const unsigned E = __baggy_bounds_table[Index];
   if (!E) {
     return kFuzzallocDefaultTag;
   }

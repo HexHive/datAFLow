@@ -18,6 +18,7 @@
 
 #include "fuzzalloc/Analysis/UseSiteIdentify.h"
 #include "fuzzalloc/Metadata.h"
+#include "fuzzalloc/baggy_bounds.h"
 #include "fuzzalloc/fuzzalloc.h"
 
 using namespace llvm;
@@ -57,6 +58,7 @@ private:
   FunctionCallee ReadPCAsm;
   FunctionCallee BBLookup;
   GlobalVariable *AFLMapPtr;
+  GlobalVariable *BaggyBoundsPtr;
 
   IntegerType *TagTy;
   ConstantInt *HashMul;
@@ -70,6 +72,12 @@ Value *AFLUseSite::getDefSite(Value *Ptr, IRBuilder<> &IRB) {
     auto *Cast = IRB.CreatePointerCast(Ptr, IRB.getInt8PtrTy());
     return IRB.CreateCall(BBLookup, {Cast}, "def_lookup");
   } else {
+    auto IntPtrTy = IRB.getIntPtrTy(*DL);
+    auto *P = IRB.CreatePtrToInt(Ptr, IntPtrTy);
+    auto *Index = IRB.CreateLShr(P, static_cast<uint64_t>(kSlotSizeLog2));
+
+    auto *BaggyBoundsTable = IRB.CreateLoad(BaggyBoundsPtr);
+
     assert(false && "Not yet implemented");
   }
 }
@@ -162,7 +170,7 @@ bool AFLUseSite::runOnModule(Module &M) {
     auto *ReadPCAsmTy =
         FunctionType::get(Type::getInt64Ty(*Ctx), /*isVarArg=*/false);
     this->ReadPCAsm = FunctionCallee(
-        ReadPCAsmTy, InlineAsm::get(ReadPCAsmTy, "leaq (%tip), $0",
+        ReadPCAsmTy, InlineAsm::get(ReadPCAsmTy, "leaq (%rip), $0",
                                     /*Constraints=*/"=r",
                                     /*hasSideEffects=*/false));
   }
@@ -174,6 +182,9 @@ bool AFLUseSite::runOnModule(Module &M) {
   this->AFLMapPtr = new GlobalVariable(
       *Mod, Int8PtrTy, /*isConstant=*/false, GlobalValue::ExternalLinkage,
       /*Initializer=*/nullptr, "__afl_area_ptr");
+  this->BaggyBoundsPtr = new GlobalVariable(
+      *Mod, Int8PtrTy, /*isConstant=*/false, GlobalValue::ExternalLinkage,
+      /*Initializer=*/nullptr, "__baggy_bounds_table");
 
   this->BBLookup =
       ClUseBBLookupFunc
