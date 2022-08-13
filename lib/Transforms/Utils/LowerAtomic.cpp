@@ -39,15 +39,15 @@ bool LowerAtomic::runOnFunction(Function &F) {
 
 static RegisterPass<LowerAtomic> X(DEBUG_TYPE, "Lower atomics", false, false);
 
-static void registerLowerAtomicsPass(const PassManagerBuilder &,
-                                     legacy::PassManagerBase &PM) {
+static void registerLowerAtomicPass(const PassManagerBuilder &,
+                                    legacy::PassManagerBase &PM) {
   PM.add(new LowerAtomic());
 }
 
 static RegisterStandardPasses
-    RegisterLowerAtomicsPass(PassManagerBuilder::EP_OptimizerLast,
-                             registerLowerAtomicsPass);
+    RegisterLowerAtomicPass(PassManagerBuilder::EP_OptimizerLast,
+                            registerLowerAtomicPass);
 
 static RegisterStandardPasses
-    RegisterLowerAtomicsPass0(PassManagerBuilder::EP_EnabledOnOptLevel0,
-                              registerLowerAtomicsPass);
+    RegisterLowerAtomicPass0(PassManagerBuilder::EP_EnabledOnOptLevel0,
+                             registerLowerAtomicPass);

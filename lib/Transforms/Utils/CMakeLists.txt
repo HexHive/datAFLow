@@ -8,10 +8,10 @@ add_library(LowerConstantExpr SHARED
 )
 install(TARGETS LowerConstantExpr LIBRARY DESTINATION lib)
 
-add_library(LowerDbgDeclare SHARED
-  LowerDbgDeclare.cpp
+add_library(LowerDebugDeclare SHARED
+  LowerDebugDeclare.cpp
 )
-install(TARGETS LowerDbgDeclare LIBRARY DESTINATION lib)
+install(TARGETS LowerDebugDeclare LIBRARY DESTINATION lib)
 
 add_library(LowerNewDelete SHARED
   LowerNewDelete.cpp

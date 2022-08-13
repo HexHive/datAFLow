@@ -1,4 +1,4 @@
-//===-- MemFuncInstrument.cpp - Instrument dynamic memory funcs -*- C++ -*-===//
+//===-- MemFuncTag.cpp - Instrument dynamic memory funcs --------*- C++ -*-===//
 ///
 /// \file
 /// Instrument dynamic memory allocation functions
@@ -28,12 +28,12 @@ using namespace llvm;
 // Adapted from http://c-faq.com/lib/randrange.html
 #define RAND(x, y) ((tag_t)((x) + random() / (RAND_MAX / ((y) - (x) + 1) + 1)))
 
-#define DEBUG_TYPE "fuzzalloc-def-site-inst"
+#define DEBUG_TYPE "fuzzalloc-def-site-tag"
 
-class MemFuncInstrument : public ModulePass {
+class MemFuncTag : public ModulePass {
 public:
   static char ID;
-  MemFuncInstrument() : ModulePass(ID) {}
+  MemFuncTag() : ModulePass(ID) {}
 
   virtual void getAnalysisUsage(AnalysisUsage &) const override;
   virtual bool runOnModule(Module &) override;
@@ -55,21 +55,20 @@ private:
       TaggedFuncMap;
 };
 
-char MemFuncInstrument::ID = 0;
+char MemFuncTag::ID = 0;
 
-ConstantInt *MemFuncInstrument::generateTag() const {
+ConstantInt *MemFuncTag::generateTag() const {
   return ConstantInt::get(TagTy, RAND(kFuzzallocTagMin, kFuzzallocTagMax));
 }
 
-FunctionType *
-MemFuncInstrument::getTaggedFunctionType(const FunctionType *Ty) const {
+FunctionType *MemFuncTag::getTaggedFunctionType(const FunctionType *Ty) const {
   SmallVector<Type *, 4> TaggedFuncParams = {TagTy};
   TaggedFuncParams.append(Ty->param_begin(), Ty->param_end());
   return FunctionType::get(Ty->getReturnType(), TaggedFuncParams,
                            Ty->isVarArg());
 }
 
-Function *MemFuncInstrument::getTaggedFunction(const Function *OrigF) const {
+Function *MemFuncTag::getTaggedFunction(const Function *OrigF) const {
   const auto &Name = "__bb_" + OrigF->getName().str();
   auto *TaggedFTy = getTaggedFunctionType(OrigF->getFunctionType());
   auto TaggedCallee = Mod->getOrInsertFunction(Name, TaggedFTy);
@@ -84,7 +83,7 @@ Function *MemFuncInstrument::getTaggedFunction(const Function *OrigF) const {
   return TaggedF;
 }
 
-Function *MemFuncInstrument::tagFunction(const Function *OrigF) const {
+Function *MemFuncTag::tagFunction(const Function *OrigF) const {
   LLVM_DEBUG(dbgs() << "tagging function " << OrigF->getName() << '\n');
 
   // Insert (or get, if it already exists) the tagged function declaration
@@ -126,8 +125,7 @@ Function *MemFuncInstrument::tagFunction(const Function *OrigF) const {
   return TaggedF;
 }
 
-Instruction *MemFuncInstrument::tagCall(CallBase *CB,
-                                        FunctionCallee TaggedF) const {
+Instruction *MemFuncTag::tagCall(CallBase *CB, FunctionCallee TaggedF) const {
   LLVM_DEBUG(dbgs() << "tagging call " << *CB << " (in function "
                     << CB->getFunction()->getName() << ")\n");
 
@@ -176,7 +174,7 @@ Instruction *MemFuncInstrument::tagCall(CallBase *CB,
 }
 
 /// Replace the use of a memory allocation function with the tagged version
-void MemFuncInstrument::tagUser(User *U, Function *F) const {
+void MemFuncTag::tagUser(User *U, Function *F) const {
   LLVM_DEBUG(dbgs() << "replacing user " << *U << " of function "
                     << F->getName() << '\n');
 
@@ -216,11 +214,11 @@ void MemFuncInstrument::tagUser(User *U, Function *F) const {
   }
 }
 
-void MemFuncInstrument::getAnalysisUsage(AnalysisUsage &AU) const {
+void MemFuncTag::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<MemFuncIdentify>();
 }
 
-bool MemFuncInstrument::runOnModule(Module &M) {
+bool MemFuncTag::runOnModule(Module &M) {
   auto &MemFuncs = getAnalysis<MemFuncIdentify>().getFuncs();
 
   if (MemFuncs.empty()) {
@@ -284,18 +282,18 @@ bool MemFuncInstrument::runOnModule(Module &M) {
 // Pass registration
 //
 
-static RegisterPass<MemFuncInstrument> X(DEBUG_TYPE, "Instrument def sites",
-                                         false, false);
+static RegisterPass<MemFuncTag> X(DEBUG_TYPE, "Instrument def sites", false,
+                                  false);
 
-static void registerUseSiteInstrumentPass(const PassManagerBuilder &,
-                                          legacy::PassManagerBase &PM) {
-  PM.add(new MemFuncInstrument());
+static void registerMemFuncTagPass(const PassManagerBuilder &,
+                                   legacy::PassManagerBase &PM) {
+  PM.add(new MemFuncTag());
 }
 
 static RegisterStandardPasses
-    RegisterUseSiteInstrumentPass(PassManagerBuilder::EP_OptimizerLast,
-                                  registerUseSiteInstrumentPass);
+    RegisterMemFuncTagPass(PassManagerBuilder::EP_OptimizerLast,
+                           registerMemFuncTagPass);
 
 static RegisterStandardPasses
-    RegisterUseSiteInstrumentPass0(PassManagerBuilder::EP_EnabledOnOptLevel0,
-                                   registerUseSiteInstrumentPass);
+    RegisterMemFuncTagPass0(PassManagerBuilder::EP_EnabledOnOptLevel0,
+                            registerMemFuncTagPass);

@@ -229,15 +229,15 @@ bool LowerNewDelete::runOnModule(Module &M) {
 static RegisterPass<LowerNewDelete>
     X(DEBUG_TYPE, "Lower new/delete functions to malloc/free", false, false);
 
-static void registerLowerNewDeletesPass(const PassManagerBuilder &,
-                                        legacy::PassManagerBase &PM) {
+static void registerLowerNewDeletePass(const PassManagerBuilder &,
+                                       legacy::PassManagerBase &PM) {
   PM.add(new LowerNewDelete());
 }
 
 static RegisterStandardPasses
-    RegisterLowerNewDeletesPass(PassManagerBuilder::EP_OptimizerLast,
-                                registerLowerNewDeletesPass);
+    RegisterLowerNewDeletePass(PassManagerBuilder::EP_OptimizerLast,
+                               registerLowerNewDeletePass);
 
 static RegisterStandardPasses
-    RegisterLowerNewDeletesPass0(PassManagerBuilder::EP_EnabledOnOptLevel0,
-                                 registerLowerNewDeletesPass);
+    RegisterLowerNewDeletePass0(PassManagerBuilder::EP_EnabledOnOptLevel0,
+                                registerLowerNewDeletePass);

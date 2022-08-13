@@ -1,15 +1,15 @@
-add_library(AFLUseSiteInstrument SHARED
-  AFLUseSiteInstrument.cpp
+add_library(AFLUseSite SHARED
+  AFLUseSite.cpp
 )
-target_link_libraries(AFLUseSiteInstrument PUBLIC
+target_link_libraries(AFLUseSite PUBLIC
   UseSiteIdentify
 )
-install(TARGETS AFLUseSiteInstrument LIBRARY DESTINATION lib)
+install(TARGETS AFLUseSite LIBRARY DESTINATION lib)
 
-add_library(MemFuncInstrument SHARED
-  MemFuncInstrument.cpp
+add_library(MemFuncTag SHARED
+  MemFuncTag.cpp
 )
-target_link_libraries(MemFuncInstrument PUBLIC
+target_link_libraries(MemFuncTag PUBLIC
   MemFuncIdentify
 )
-install(TARGETS MemFuncInstrument LIBRARY DESTINATION lib)
+install(TARGETS MemFuncTag LIBRARY DESTINATION lib)

@@ -84,7 +84,7 @@ static void registerMemoryObject(tag_t Tag, void *Obj, size_t AllocSize) {
   const auto Range = 1 << (E - SlotSize);
   memset(__BaggyBoundsTablePtr + Index, E, Range);
 
-  auto *TagAddr = (tag_t*)(P + AllocSize - kMetaSize);
+  auto *TagAddr = (tag_t *)(P + AllocSize - kMetaSize);
   *TagAddr = Tag;
 }
 
@@ -152,7 +152,7 @@ extern "C" tag_t __bb_lookup(void *Ptr) {
   const auto AllocSize = 1 << E;
   const auto Base = P & ~(AllocSize - 1);
 
-  auto *TagAddr = (tag_t*)(Base + AllocSize - kMetaSize);
+  auto *TagAddr = (tag_t *)(Base + AllocSize - kMetaSize);
   return *TagAddr;
 }
 

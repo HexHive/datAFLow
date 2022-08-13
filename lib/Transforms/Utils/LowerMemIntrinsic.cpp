@@ -568,15 +568,15 @@ bool LowerMemIntrinsic::runOnModule(Module &M) {
 static RegisterPass<LowerMemIntrinsic> X(DEBUG_TYPE, "Lower memory intrinsics",
                                          false, false);
 
-static void registerLowerMemIntrinsicsPass(const PassManagerBuilder &,
-                                           legacy::PassManagerBase &PM) {
+static void registerLowerMemIntrinsicPass(const PassManagerBuilder &,
+                                          legacy::PassManagerBase &PM) {
   PM.add(new LowerMemIntrinsic());
 }
 
 static RegisterStandardPasses
-    RegisterLowerMemIntrinsicsPass(PassManagerBuilder::EP_OptimizerLast,
-                                   registerLowerMemIntrinsicsPass);
+    RegisterLowerMemIntrinsicPass(PassManagerBuilder::EP_OptimizerLast,
+                                  registerLowerMemIntrinsicPass);
 
 static RegisterStandardPasses
-    RegisterLowerMemIntrinsicsPass0(PassManagerBuilder::EP_EnabledOnOptLevel0,
-                                    registerLowerMemIntrinsicsPass);
+    RegisterLowerMemIntrinsicPass0(PassManagerBuilder::EP_EnabledOnOptLevel0,
+                                   registerLowerMemIntrinsicPass);

@@ -1,4 +1,4 @@
-//===-- AFLUseSiteInstrument.cpp - Instrument use sites ---------*- C++ -*-===//
+//===-- AFLUseSite.cpp - Instrument use sites -------------------*- C++ -*-===//
 ///
 /// \file
 /// Instrument use sites using an AFL-style bitmap
@@ -22,7 +22,7 @@
 
 using namespace llvm;
 
-#define DEBUG_TYPE "fuzzalloc-afl-use-site-inst"
+#define DEBUG_TYPE "fuzzalloc-afl-use-site"
 
 STATISTIC(NumInstrumentedWrites, "Number of instrumented writes");
 STATISTIC(NumInstrumentedReads, "Number of instrumented reads");
@@ -31,19 +31,23 @@ namespace {
 static cl::opt<bool> ClUseOffset("fuzzalloc-use-offset",
                                  cl::desc("Capture offsets in the use site"),
                                  cl::Hidden, cl::init(true));
+static cl::opt<bool> ClUseBBLookupFunc(
+    "fuzzalloc-use-lookup-func",
+    cl::desc("Use __bb_lookup function, rather than explicitly generating IR"),
+    cl::Hidden, cl::init(false));
 } // anonymous namespace
 
 /// Instrument use sites
-class AFLUseSiteInstrument : public FunctionPass {
+class AFLUseSite : public FunctionPass {
 public:
   static char ID;
-  AFLUseSiteInstrument() : FunctionPass(ID) {}
+  AFLUseSite() : FunctionPass(ID) {}
 
   virtual void getAnalysisUsage(AnalysisUsage &) const override;
   virtual bool runOnFunction(Function &) override;
 
 private:
-  Value *getDefSite(Value *, IRBuilder<> &) const;
+  Value *getDefSite(Value *, IRBuilder<> &);
   void doInstrument(InterestingMemoryOperand *, ObjectSizeOffsetEvaluator *);
 
   Module *Mod;
@@ -51,6 +55,7 @@ private:
   const DataLayout *DL;
 
   FunctionCallee ReadPCAsm;
+  FunctionCallee BBLookup;
   GlobalVariable *AFLMapPtr;
 
   IntegerType *TagTy;
@@ -58,15 +63,18 @@ private:
   ConstantInt *DefaultTag;
 };
 
-char AFLUseSiteInstrument::ID = 0;
+char AFLUseSite::ID = 0;
 
-Value *AFLUseSiteInstrument::getDefSite(Value *Ptr, IRBuilder<> &IRB) const {
-  assert(false && "not yet implemented");
-  return nullptr;
+Value *AFLUseSite::getDefSite(Value *Ptr, IRBuilder<> &IRB) {
+  if (BBLookup) {
+    return IRB.CreateCall(BBLookup, {Ptr}, "def_lookup");
+  } else {
+    assert(false && "Not yet implemented");
+  }
 }
 
-void AFLUseSiteInstrument::doInstrument(
-    InterestingMemoryOperand *Op, ObjectSizeOffsetEvaluator *ObjSizeEval) {
+void AFLUseSite::doInstrument(InterestingMemoryOperand *Op,
+                              ObjectSizeOffsetEvaluator *ObjSizeEval) {
   if (Op->IsWrite) {
     NumInstrumentedWrites++;
   } else {
@@ -132,30 +140,40 @@ void AFLUseSiteInstrument::doInstrument(
                             MDNode::get(*Ctx, None));
 }
 
-void AFLUseSiteInstrument::getAnalysisUsage(AnalysisUsage &AU) const {
+void AFLUseSite::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<TargetLibraryInfoWrapperPass>();
   AU.addRequired<UseSiteIdentify>();
 }
 
-bool AFLUseSiteInstrument::runOnFunction(Function &F) {
+bool AFLUseSite::runOnFunction(Function &F) {
   // Initialize stuff
   this->Mod = F.getParent();
   this->Ctx = &Mod->getContext();
   this->DL = &Mod->getDataLayout();
 
-  auto *ReadPCAsmTy =
-      FunctionType::get(Type::getInt64Ty(*Ctx), /*isVarArg=*/false);
-  this->ReadPCAsm =
-      FunctionCallee(ReadPCAsmTy, InlineAsm::get(ReadPCAsmTy, "leaq (%tip), $0",
-                                                 /*Constraints=*/"=r",
-                                                 /*hasSideEffects=*/false));
-  this->AFLMapPtr = new GlobalVariable(
-      *Mod, PointerType::getUnqual(Type::getInt8Ty(*Ctx)), /*isConstant=*/false,
-      GlobalValue::ExternalLinkage, /*Initializer=*/nullptr, "__afl_area_ptr");
+  auto *Int8PtrTy = Type::getInt8PtrTy(*Ctx);
+
+  {
+    auto *ReadPCAsmTy =
+        FunctionType::get(Type::getInt64Ty(*Ctx), /*isVarArg=*/false);
+    this->ReadPCAsm = FunctionCallee(
+        ReadPCAsmTy, InlineAsm::get(ReadPCAsmTy, "leaq (%tip), $0",
+                                    /*Constraints=*/"=r",
+                                    /*hasSideEffects=*/false));
+  }
 
   this->TagTy = Type::getIntNTy(*Ctx, kNumTagBits);
   this->HashMul = ConstantInt::get(TagTy, 31);
   this->DefaultTag = ConstantInt::get(TagTy, kFuzzallocDefaultTag);
+
+  this->AFLMapPtr = new GlobalVariable(
+      *Mod, Int8PtrTy, /*isConstant=*/false, GlobalValue::ExternalLinkage,
+      /*Initializer=*/nullptr, "__afl_area_ptr");
+
+  this->BBLookup =
+      ClUseBBLookupFunc
+          ? Mod->getOrInsertFunction("__bb_lookup", TagTy, Int8PtrTy)
+          : nullptr;
 
   const auto *TLI = &getAnalysis<TargetLibraryInfoWrapperPass>().getTLI(F);
   auto &UseSiteOps = getAnalysis<UseSiteIdentify>().getUseSites();
@@ -188,18 +206,18 @@ bool AFLUseSiteInstrument::runOnFunction(Function &F) {
 // Pass registration
 //
 
-static RegisterPass<AFLUseSiteInstrument> X(DEBUG_TYPE, "Instrument use sites",
-                                            false, false);
+static RegisterPass<AFLUseSite> X(DEBUG_TYPE, "Instrument use sites", false,
+                                  false);
 
-static void registerUseSiteInstrumentPass(const PassManagerBuilder &,
-                                          legacy::PassManagerBase &PM) {
-  PM.add(new AFLUseSiteInstrument());
+static void registerAFLUseSitePass(const PassManagerBuilder &,
+                                   legacy::PassManagerBase &PM) {
+  PM.add(new AFLUseSite());
 }
 
 static RegisterStandardPasses
-    RegisterUseSiteInstrumentPass(PassManagerBuilder::EP_OptimizerLast,
-                                  registerUseSiteInstrumentPass);
+    RegisterAFLUseSitePass(PassManagerBuilder::EP_OptimizerLast,
+                           registerAFLUseSitePass);
 
 static RegisterStandardPasses
-    RegisterUseSiteInstrumentPass0(PassManagerBuilder::EP_EnabledOnOptLevel0,
-                                   registerUseSiteInstrumentPass);
+    RegisterAFLUseSitePass0(PassManagerBuilder::EP_EnabledOnOptLevel0,
+                            registerAFLUseSitePass);

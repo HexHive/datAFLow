@@ -79,15 +79,15 @@ bool LowerCExpr::runOnFunction(Function &F) {
 static RegisterPass<LowerCExpr> X(DEBUG_TYPE, "Lower constant expressions",
                                   false, false);
 
-static void registerLowerCExprsPass(const PassManagerBuilder &,
-                                    legacy::PassManagerBase &PM) {
+static void registerLowerCExprPass(const PassManagerBuilder &,
+                                   legacy::PassManagerBase &PM) {
   PM.add(new LowerCExpr());
 }
 
 static RegisterStandardPasses
-    RegisterLowerCExprsPass(PassManagerBuilder::EP_OptimizerLast,
-                            registerLowerCExprsPass);
+    RegisterLowerCExprPass(PassManagerBuilder::EP_OptimizerLast,
+                           registerLowerCExprPass);
 
 static RegisterStandardPasses
-    RegisterLowerCExprsPass0(PassManagerBuilder::EP_EnabledOnOptLevel0,
-                             registerLowerCExprsPass);
+    RegisterLowerCExprPass0(PassManagerBuilder::EP_EnabledOnOptLevel0,
+                            registerLowerCExprPass);

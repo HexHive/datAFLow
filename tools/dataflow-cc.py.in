@@ -32,7 +32,7 @@ def main():
         '@CLANG_BINARY@',
         '-g',
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libMem2Reg.so',
-        '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libLowerDbgDeclare.so',
+        '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libLowerDebugDeclare.so',
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libLowerAtomic.so',
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libLowerMemIntrinsic.so',
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libLowerConstantExpr.so',
@@ -42,7 +42,8 @@ def main():
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libDefSiteIdentify.so',
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libUseSiteIdentify.so',
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libHeapify.so',
-        '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libMemFuncInstrument.so',
+        '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libMemFuncTag.so',
+        '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libAFLUseSite.so',
     ]
 
     if args.custom_mem_funcs:
