@@ -1,4 +1,4 @@
 add_library(FuzzallocRuntime STATIC
-  PAMD.cpp
+  PAMD.c
 )
 install(TARGETS FuzzallocRuntime LIBRARY DESTINATION lib)
