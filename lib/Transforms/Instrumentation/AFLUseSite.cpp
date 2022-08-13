@@ -38,13 +38,13 @@ static cl::opt<bool> ClUseBBLookupFunc(
 } // anonymous namespace
 
 /// Instrument use sites
-class AFLUseSite : public FunctionPass {
+class AFLUseSite : public ModulePass {
 public:
   static char ID;
-  AFLUseSite() : FunctionPass(ID) {}
+  AFLUseSite() : ModulePass(ID) {}
 
   virtual void getAnalysisUsage(AnalysisUsage &) const override;
-  virtual bool runOnFunction(Function &) override;
+  virtual bool runOnModule(Module &) override;
 
 private:
   Value *getDefSite(Value *, IRBuilder<> &);
@@ -150,11 +150,11 @@ void AFLUseSite::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<UseSiteIdentify>();
 }
 
-bool AFLUseSite::runOnFunction(Function &F) {
+bool AFLUseSite::runOnModule(Module &M) {
   // Initialize stuff
-  this->Mod = F.getParent();
-  this->Ctx = &Mod->getContext();
-  this->DL = &Mod->getDataLayout();
+  this->Mod = &M;
+  this->Ctx = &M.getContext();
+  this->DL = &M.getDataLayout();
 
   auto *Int8PtrTy = Type::getInt8PtrTy(*Ctx);
 
@@ -180,28 +180,34 @@ bool AFLUseSite::runOnFunction(Function &F) {
           ? Mod->getOrInsertFunction("__bb_lookup", TagTy, Int8PtrTy)
           : nullptr;
 
-  const auto *TLI = &getAnalysis<TargetLibraryInfoWrapperPass>().getTLI(F);
-  auto &UseSiteOps = getAnalysis<UseSiteIdentify>().getUseSites();
-
-  if (UseSiteOps.empty()) {
-    return false;
-  }
-
-  auto ObjSizeEval = [&]() -> ObjectSizeOffsetEvaluator * {
-    if (ClUseOffset) {
-      ObjectSizeOpts EvalOpts;
-      EvalOpts.RoundToAlign = true;
-      return new ObjectSizeOffsetEvaluator(*DL, TLI, *Ctx, EvalOpts);
+  for (auto &F : M) {
+    if (F.isDeclaration()) {
+      continue;
     }
-    return nullptr;
-  }();
 
-  for (auto &Op : UseSiteOps) {
-    doInstrument(&Op, ObjSizeEval);
-  }
+    const auto &TLI = getAnalysis<TargetLibraryInfoWrapperPass>().getTLI(F);
+    auto &UseSiteOps = getAnalysis<UseSiteIdentify>(F).getUseSites();
 
-  if (ObjSizeEval) {
-    delete ObjSizeEval;
+    if (UseSiteOps.empty()) {
+      return false;
+    }
+
+    auto ObjSizeEval = [&]() -> ObjectSizeOffsetEvaluator * {
+      if (ClUseOffset) {
+        ObjectSizeOpts EvalOpts;
+        EvalOpts.RoundToAlign = true;
+        return new ObjectSizeOffsetEvaluator(*DL, &TLI, *Ctx, EvalOpts);
+      }
+      return nullptr;
+    }();
+
+    for (auto &Op : UseSiteOps) {
+      doInstrument(&Op, ObjSizeEval);
+    }
+
+    if (ObjSizeEval) {
+      delete ObjSizeEval;
+    }
   }
 
   return true;
