@@ -67,7 +67,8 @@ char AFLUseSite::ID = 0;
 
 Value *AFLUseSite::getDefSite(Value *Ptr, IRBuilder<> &IRB) {
   if (BBLookup) {
-    return IRB.CreateCall(BBLookup, {Ptr}, "def_lookup");
+    auto *Cast = IRB.CreatePointerCast(Ptr, IRB.getInt8PtrTy());
+    return IRB.CreateCall(BBLookup, {Cast}, "def_lookup");
   } else {
     assert(false && "Not yet implemented");
   }
@@ -97,11 +98,15 @@ void AFLUseSite::doInstrument(InterestingMemoryOperand *Op,
   // Compute the use site offset (the same size as the tag). If this cannot be
   // determined statically, build code that can determine it dynamically
   auto *UseOffset = [&]() -> Value * {
+    auto *Zero = Constant::getNullValue(TagTy);
     if (ObjSizeEval) {
       auto SizeOffset = ObjSizeEval->compute(Ptr);
-      return IRB.CreateIntCast(SizeOffset.second, TagTy, /*isSigned=*/true);
+      return SizeOffset == ObjSizeEval->unknown()
+                 ? Zero
+                 : IRB.CreateIntCast(SizeOffset.second, TagTy,
+                                     /*isSigned=*/true);
     }
-    return Constant::getNullValue(TagTy);
+    return Zero;
   }();
   UseOffset->setName(Ptr->getName() + ".offset");
 

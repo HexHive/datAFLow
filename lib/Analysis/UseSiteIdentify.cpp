@@ -18,12 +18,15 @@
 
 #include "fuzzalloc/Analysis/UseSiteIdentify.h"
 #include "fuzzalloc/Metadata.h"
+#include "fuzzalloc/Streams.h"
 
 using namespace llvm;
 
 #define DEBUG_TYPE "fuzzalloc-use-site-identify"
 
-STATISTIC(NumUseSites, "Number of use sites identified");
+STATISTIC(NumReadUseSites, "Number of read use sites");
+STATISTIC(NumWriteUseSites, "Number of write use sites");
+STATISTIC(NumUsesToTrack, "Number of uses to track");
 
 namespace {
 //
@@ -138,6 +141,7 @@ void UseSiteIdentify::getInterestingMemoryOperands(
       InterestingOperands.emplace_back(Load, Load->getPointerOperandIndex(),
                                        false, Load->getType(),
                                        Load->getAlign());
+      NumReadUseSites++;
     }
   } else if (auto *Store = dyn_cast<StoreInst>(Inst)) {
     if (ClUseSitesToTrack.isSet(UseSiteTypes::Write) &&
@@ -145,17 +149,20 @@ void UseSiteIdentify::getInterestingMemoryOperands(
       InterestingOperands.emplace_back(
           Store, Store->getPointerOperandIndex(), true,
           Store->getValueOperand()->getType(), Store->getAlign());
+      NumWriteUseSites++;
     }
   } else if (auto *RMW = dyn_cast<AtomicRMWInst>(Inst)) {
     if (ClTrackAtomics && !ignoreAccess(RMW->getPointerOperand())) {
       InterestingOperands.emplace_back(RMW, RMW->getPointerOperandIndex(), true,
                                        RMW->getValOperand()->getType(), None);
+      NumWriteUseSites++;
     }
   } else if (auto *XCHG = dyn_cast<AtomicCmpXchgInst>(Inst)) {
     if (ClTrackAtomics && !ignoreAccess(XCHG->getPointerOperand())) {
       InterestingOperands.emplace_back(
           XCHG, XCHG->getPointerOperandIndex(), true,
           XCHG->getCompareOperand()->getType(), None);
+      NumWriteUseSites++;
     }
   } else if (auto *Call = dyn_cast<CallInst>(Inst)) {
     auto *F = Call->getCalledFunction();
@@ -182,6 +189,11 @@ void UseSiteIdentify::getInterestingMemoryOperands(
       auto *Mask = Call->getOperand(2 + OpOffset);
       InterestingOperands.emplace_back(Call, OpOffset, IsWrite, Ty, Alignment,
                                        Mask);
+      if (IsWrite) {
+        NumWriteUseSites++;
+      } else {
+        NumReadUseSites++;
+      }
     } else {
       for (unsigned ArgNo = 0; ArgNo < Call->getNumArgOperands(); ++ArgNo) {
         if (!ClTrackByval || !Call->isByValArgument(ArgNo) ||
@@ -190,6 +202,7 @@ void UseSiteIdentify::getInterestingMemoryOperands(
         }
         auto *Ty = Call->getParamByValType(ArgNo);
         InterestingOperands.emplace_back(Call, ArgNo, false, Ty, Align(1));
+        NumReadUseSites++;
       }
     }
   }
@@ -231,10 +244,13 @@ bool UseSiteIdentify::runOnFunction(Function &F) {
           }
         }
         ToTrack.push_back(Operand);
-        NumUseSites++;
+        NumUsesToTrack++;
       }
     }
   }
+
+  status_stream() << F.getName() << ": " << NumUsesToTrack
+                  << " use sites tracked\n";
 
   return false;
 }
