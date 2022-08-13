@@ -6,6 +6,7 @@
 ///
 //===----------------------------------------------------------------------===//
 
+#include <assert.h>
 #include <errno.h>
 #include <limits.h>
 #include <stdint.h>
@@ -76,20 +77,26 @@ static void registerMemoryObject(tag_t Tag, void *Obj, size_t AllocSize) {
   }
 
   const auto P = (uintptr_t)Obj;
-  const auto Index = P >> log2(kSlotSize);
+  const auto SlotSize = log2(kSlotSize);
+  const auto Index = P >> SlotSize;
   const auto E = log2(AllocSize);
-  const auto Range = 1 << (E - kSlotSize);
+  assert(E >= SlotSize);
+  const auto Range = 1 << (E - SlotSize);
   memset(__BaggyBoundsTablePtr + Index, E, Range);
+
+  auto *TagAddr = (tag_t*)(P + AllocSize - kMetaSize);
+  *TagAddr = Tag;
 }
 
 static void unregisterMemoryObject(void *Obj) {
   initBaggyBounds();
 
   const auto P = (uintptr_t)Obj;
-  const auto Index = P >> log2(kSlotSize);
+  const auto SlotSize = log2(kSlotSize);
+  const auto Index = P >> SlotSize;
   const auto AllocSize = __BaggyBoundsTablePtr[Index];
   if (AllocSize != 0) {
-    const auto Range = 1 << (AllocSize - kSlotSize);
+    const auto Range = 1 << (AllocSize - SlotSize);
     memset(__BaggyBoundsTablePtr + Index, 0, Range);
   }
 }
@@ -143,8 +150,10 @@ extern "C" tag_t __bb_lookup(void *Ptr) {
     return kFuzzallocDefaultTag;
   }
   const auto AllocSize = 1 << E;
-  const auto Base = P & (AllocSize - 1);
-  return static_cast<tag_t>(Base + AllocSize - kMetaSize);
+  const auto Base = P & ~(AllocSize - 1);
+
+  auto *TagAddr = (tag_t*)(Base + AllocSize - kMetaSize);
+  return *TagAddr;
 }
 
 extern "C" void *malloc(size_t Size) {

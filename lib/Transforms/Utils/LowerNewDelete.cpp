@@ -1,4 +1,4 @@
-//===-- LowerNewDelete.cpp - Lower C++ new/delete functions ---------------===//
+//===-- LowerNewDelete.cpp - Lower C++ new/delete functions -----*- C++ -*-===//
 ///
 /// \file
 /// Lower C++ new/delete functions to malloc/free calls
@@ -16,6 +16,7 @@
 #include <llvm/Transforms/Utils/Local.h>
 
 #include "fuzzalloc/Analysis/MemFuncIdentify.h"
+#include "fuzzalloc/Metadata.h"
 
 using namespace llvm;
 
@@ -87,6 +88,9 @@ private:
   void lowerNew(User *, Function *) const;
   void lowerDelete(User *, Function *) const;
 
+  Module *Mod;
+  LLVMContext *Ctx;
+
   Function *MallocFn;
   Function *FreeFn;
 };
@@ -109,6 +113,8 @@ void LowerNewDelete::lowerNew(User *U, Function *NewFn) const {
     Malloc->takeName(CB);
     Malloc->setDebugLoc(CB->getDebugLoc());
     Malloc->copyMetadata(*CB);
+    Malloc->setMetadata(Mod->getMDKindID(kFuzzallocLoweredNewMD),
+                        MDNode::get(*Ctx, None));
 
     if (auto *MallocCall = dyn_cast<CallBase>(Malloc)) {
       MallocCall->setCallingConv(CB->getCallingConv());
@@ -132,12 +138,14 @@ void LowerNewDelete::lowerDelete(User *U, Function *DeleteFn) const {
   }
 
   if (auto *CB = dyn_cast<CallBase>(U)) {
-    auto *Ptr = CB->getArgOperand(CB->getNumOperands() - 1);
+    auto *Ptr = CB->getArgOperand(CB->getNumArgOperands() - 1);
 
     auto *Free = CallInst::CreateFree(Ptr, CB);
     Free->takeName(CB);
     Free->setDebugLoc(CB->getDebugLoc());
     Free->copyMetadata(*CB);
+    Free->setMetadata(Mod->getMDKindID(kFuzzallocLoweredDeleteMD),
+                      MDNode::get(*Ctx, None));
 
     if (auto *FreeCall = dyn_cast<CallBase>(Free)) {
       FreeCall->setCallingConv(CB->getCallingConv());
@@ -159,18 +167,20 @@ void LowerNewDelete::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 bool LowerNewDelete::runOnModule(Module &M) {
+  this->Mod = &M;
+  this->Ctx = &M.getContext();
+
   {
-    auto &Ctx = M.getContext();
     auto &DL = M.getDataLayout();
-    auto *IntPtrTy = DL.getIntPtrType(Ctx);
-    auto *Int8PtrTy = Type::getInt8PtrTy(Ctx);
+    auto *IntPtrTy = DL.getIntPtrType(*Ctx);
+    auto *Int8PtrTy = Type::getInt8PtrTy(*Ctx);
 
     auto Malloc = M.getOrInsertFunction("malloc", Int8PtrTy, IntPtrTy);
     assert(Malloc && isa<Function>(Malloc.getCallee()) &&
            "Unable to get malloc function");
     this->MallocFn = cast<Function>(Malloc.getCallee());
 
-    auto Free = M.getOrInsertFunction("free", Type::getVoidTy(Ctx), Int8PtrTy);
+    auto Free = M.getOrInsertFunction("free", Type::getVoidTy(*Ctx), Int8PtrTy);
     assert(Free && isa<Function>(Free.getCallee()) &&
            "Unable to get free function");
     this->FreeFn = cast<Function>(Free.getCallee());
