@@ -19,6 +19,14 @@ configure_file(dataflow-cc.py.in dataflow-c++ @ONLY)
 install(PROGRAMS "${CMAKE_CURRENT_BINARY_DIR}/dataflow-cc" TYPE BIN)
 install(PROGRAMS "${CMAKE_CURRENT_BINARY_DIR}/dataflow-c++" TYPE BIN)
 
+add_executable(dataflow-sa dataflow-sa.cpp)
+target_link_libraries(dataflow-sa PRIVATE
+  VariableRecovery
+  Svf
+  ${LLVM_LIBS}
+)
+install(TARGETS dataflow-sa RUNTIME DESTINATION bin)
+
 add_executable(dataflow-stats dataflow-stats.cpp)
 target_link_libraries(dataflow-stats PRIVATE
   CollectStats

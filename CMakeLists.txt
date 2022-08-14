@@ -36,7 +36,10 @@ add_definitions(${LLVM_DEFINITIONS})
 # datAFLow
 #
 
-include_directories(include)
+include_directories(
+  include
+  ext/svf/include
+)
 
 add_subdirectory(ext)
 add_subdirectory(lib)
