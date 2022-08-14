@@ -146,7 +146,7 @@ __attribute__((noinline))
 tag_t __bb_lookup(void *Ptr, uintptr_t *Base) {
   if (!Ptr) {
     *Base = 0;
-    return 0;
+    return kFuzzallocDefaultTag;
   }
 
   const uintptr_t P = (uintptr_t)Ptr;
@@ -154,7 +154,7 @@ tag_t __bb_lookup(void *Ptr, uintptr_t *Base) {
   const unsigned E = __baggy_bounds_table[Index];
   if (!E) {
     *Base = 0;
-    return 0;
+    return kFuzzallocDefaultTag;
   }
 
   const uint64_t AllocSize = 1 << E;
