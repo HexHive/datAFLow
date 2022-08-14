@@ -138,18 +138,22 @@ void *__bb_realloc(tag_t Tag, void *Ptr, size_t Size) {
   return NewPtr;
 }
 
-tag_t __bb_lookup(void *Ptr) {
+tag_t __bb_lookup(void *Ptr, uintptr_t *Base) {
   if (Ptr) {
+    *Base = 0;
     return 0;
   }
+
   const uintptr_t P = (uintptr_t)Ptr;
   const uintptr_t Index = P >> kSlotSizeLog2;
   const unsigned E = __baggy_bounds_table[Index];
   if (!E) {
+    *Base = 0;
     return 0;
   }
+
   const uint64_t AllocSize = 1 << E;
-  const uintptr_t Base = P & ~(AllocSize - 1);
+  *Base = P & ~(AllocSize - 1);
 
   tag_t *TagAddr = (tag_t *)(Base + AllocSize - kMetaSize);
   return *TagAddr;

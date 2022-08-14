@@ -27,11 +27,12 @@ const unsigned kSlotSizeLog2 = 4;
 
 extern uint8_t *__baggy_bounds_table;
 
-void __bb_free(void *Ptr);
 void *__bb_malloc(tag_t Tag, size_t Size);
 void *__bb_calloc(tag_t Tag, size_t NMemb, size_t Size);
 void *__bb_realloc(tag_t Tag, void *Ptr, size_t Size);
-tag_t __bb_lookup(void *Ptr);
+void __bb_free(void *Ptr);
+
+tag_t __bb_lookup(void *Ptr, uintptr_t *Base);
 
 #if defined(__cplusplus)
 }

@@ -6,7 +6,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <llvm/ADT/Statistic.h>
-#include <llvm/Analysis/MemoryBuiltins.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/InlineAsm.h>
 #include <llvm/IR/Instructions.h>
@@ -32,10 +31,6 @@ namespace {
 static cl::opt<bool> ClUseOffset("fuzzalloc-use-offset",
                                  cl::desc("Capture offsets in the use site"),
                                  cl::Hidden, cl::init(true));
-static cl::opt<bool> ClUseBBLookupFunc(
-    "fuzzalloc-use-lookup-func",
-    cl::desc("Use __bb_lookup function, rather than explicitly generating IR"),
-    cl::Hidden, cl::init(false));
 } // anonymous namespace
 
 /// Instrument use sites
@@ -48,8 +43,7 @@ public:
   virtual bool runOnModule(Module &) override;
 
 private:
-  Value *getDefSite(Value *, IRBuilder<> &);
-  void doInstrument(InterestingMemoryOperand *, ObjectSizeOffsetEvaluator *);
+  void doInstrument(InterestingMemoryOperand *);
 
   Module *Mod;
   LLVMContext *Ctx;
@@ -60,49 +54,14 @@ private:
   GlobalVariable *AFLMapPtr;
   GlobalVariable *BaggyBoundsPtr;
 
+  IntegerType *IntPtrTy;
   IntegerType *TagTy;
   ConstantInt *DefaultTag;
 };
 
 char AFLUseSite::ID = 0;
 
-Value *AFLUseSite::getDefSite(Value *Ptr, IRBuilder<> &IRB) {
-  if (BBLookup) {
-    auto *Cast = IRB.CreatePointerCast(Ptr, IRB.getInt8PtrTy());
-    return IRB.CreateCall(BBLookup, {Cast}, "def_lookup");
-  } else {
-    auto IntPtrTy = IRB.getIntPtrTy(*DL);
-    auto *One = ConstantInt::get(IntPtrTy, 1);
-    auto *TagSize = ConstantInt::get(IntPtrTy, kMetaSize);
-
-    auto *P = IRB.CreatePtrToInt(Ptr, IntPtrTy);
-    auto *Index = IRB.CreateLShr(P, static_cast<uint64_t>(kSlotSizeLog2));
-
-    auto *BaggyBoundsTable = IRB.CreateLoad(BaggyBoundsPtr);
-    BaggyBoundsTable->setMetadata(Mod->getMDKindID(kNoSanitizeMD),
-                                  MDNode::get(*Ctx, None));
-
-    auto *BaggyBoundsIdx = IRB.CreateGEP(BaggyBoundsTable, Index);
-    auto *BaggyBoundsIdxLoad = IRB.CreateLoad(BaggyBoundsIdx);
-    BaggyBoundsIdxLoad->setMetadata(Mod->getMDKindID(kNoSanitizeMD),
-                                    MDNode::get(*Ctx, None));
-
-    auto *E = IRB.CreateZExt(BaggyBoundsIdxLoad, IntPtrTy);
-
-    auto *AllocSize = IRB.CreateShl(One, E);
-    auto *Base = IRB.CreateAnd(P, IRB.CreateNeg(IRB.CreateSub(AllocSize, One)));
-
-    auto *TagAddr = IRB.CreateSub(IRB.CreateAdd(Base, AllocSize), TagSize);
-    return IRB.CreateSelect(
-        IRB.CreateICmpEQ(E, ConstantInt::getNullValue(IntPtrTy)),
-        ConstantInt::getNullValue(TagTy), IRB.CreateLoad(TagAddr));
-
-    assert(false && "Not yet implemented");
-  }
-}
-
-void AFLUseSite::doInstrument(InterestingMemoryOperand *Op,
-                              ObjectSizeOffsetEvaluator *ObjSizeEval) {
+void AFLUseSite::doInstrument(InterestingMemoryOperand *Op) {
   if (Op->IsWrite) {
     NumInstrumentedWrites++;
   } else {
@@ -118,22 +77,26 @@ void AFLUseSite::doInstrument(InterestingMemoryOperand *Op,
   Inst->setMetadata(Mod->getMDKindID(kFuzzallocInstrumentedDerefMD),
                     MDNode::get(*Ctx, None));
 
-  // Get the def site
   IRBuilder<> IRB(Inst);
-  auto *DefSite = getDefSite(Ptr, IRB);
+
+  // Get the def site
+  auto *Base = IRB.CreateAlloca(IntPtrTy, /*ArraySize=*/nullptr, "def_base");
+  auto *PtrCast = IRB.CreatePointerCast(Ptr, IRB.getInt8PtrTy());
+  auto *DefSite = IRB.CreateCall(BBLookup, {PtrCast, Base}, "def_lookup");
 
   // Compute the use site offset (the same size as the tag). If this cannot be
   // determined statically, build code that can determine it dynamically
   auto *UseOffset = [&]() -> Value * {
-    auto *Zero = Constant::getNullValue(TagTy);
-    if (ObjSizeEval) {
-      auto SizeOffset = ObjSizeEval->compute(Ptr);
-      return SizeOffset == ObjSizeEval->unknown()
-                 ? Zero
-                 : IRB.CreateIntCast(SizeOffset.second, TagTy,
-                                     /*isSigned=*/true);
+    if (ClUseOffset) {
+      auto *P = IRB.CreatePtrToInt(Ptr, IntPtrTy);
+      auto *BaseLoad = IRB.CreateLoad(Base);
+      BaseLoad->setMetadata(Mod->getMDKindID(kNoSanitizeMD),
+                            MDNode::get(*Ctx, None));
+
+      return IRB.CreateSExtOrTrunc(IRB.CreateSub(P, BaseLoad), TagTy);
+    } else {
+      return Constant::getNullValue(TagTy);
     }
-    return Zero;
   }();
   UseOffset->setName(Ptr->getName() + ".offset");
 
@@ -174,7 +137,6 @@ void AFLUseSite::doInstrument(InterestingMemoryOperand *Op,
 }
 
 void AFLUseSite::getAnalysisUsage(AnalysisUsage &AU) const {
-  AU.addRequired<TargetLibraryInfoWrapperPass>();
   AU.addRequired<UseSiteIdentify>();
 }
 
@@ -196,6 +158,7 @@ bool AFLUseSite::runOnModule(Module &M) {
   }
 
   this->TagTy = Type::getIntNTy(*Ctx, kNumTagBits);
+  this->IntPtrTy = DL->getIntPtrType(*Ctx);
   this->DefaultTag = ConstantInt::get(TagTy, kFuzzallocDefaultTag);
 
   this->AFLMapPtr = new GlobalVariable(
@@ -204,39 +167,21 @@ bool AFLUseSite::runOnModule(Module &M) {
   this->BaggyBoundsPtr = new GlobalVariable(
       *Mod, Int8PtrTy, /*isConstant=*/false, GlobalValue::ExternalLinkage,
       /*Initializer=*/nullptr, "__baggy_bounds_table");
-
-  this->BBLookup =
-      ClUseBBLookupFunc
-          ? Mod->getOrInsertFunction("__bb_lookup", TagTy, Int8PtrTy)
-          : nullptr;
+  this->BBLookup = Mod->getOrInsertFunction("__bb_lookup", TagTy, Int8PtrTy,
+                                            IntPtrTy->getPointerTo());
 
   for (auto &F : M) {
     if (F.isDeclaration()) {
       continue;
     }
 
-    const auto &TLI = getAnalysis<TargetLibraryInfoWrapperPass>().getTLI(F);
     auto &UseSiteOps = getAnalysis<UseSiteIdentify>(F).getUseSites();
-
     if (UseSiteOps.empty()) {
       return false;
     }
 
-    auto ObjSizeEval = [&]() -> ObjectSizeOffsetEvaluator * {
-      if (ClUseOffset) {
-        ObjectSizeOpts EvalOpts;
-        EvalOpts.RoundToAlign = true;
-        return new ObjectSizeOffsetEvaluator(*DL, &TLI, *Ctx, EvalOpts);
-      }
-      return nullptr;
-    }();
-
     for (auto &Op : UseSiteOps) {
-      doInstrument(&Op, ObjSizeEval);
-    }
-
-    if (ObjSizeEval) {
-      delete ObjSizeEval;
+      doInstrument(&Op);
     }
   }
 
