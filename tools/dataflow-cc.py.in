@@ -6,6 +6,7 @@ from subprocess import run
 import sys
 
 
+THIS_FILE = Path(__file__).name
 THIS_DIR = Path(__file__).parent.resolve()
 LIB_DIR = Path(THIS_DIR.parent) / 'lib'
 
@@ -13,6 +14,8 @@ LIB_DIR = Path(THIS_DIR.parent) / 'lib'
 def parse_args():
     """Parse command-line options."""
     parser = ArgumentParser(description='datAFLow C compiler')
+    parser.add_argument('--debug', action='store_true',
+                        help='Use debug use site instrumentation')
     parser.add_argument('--custom-mem-funcs', type=Path, metavar='TXT',
                         help='Special case list of custom memory allocation '
                              'functions')
@@ -28,8 +31,12 @@ def main():
     """The main function."""
     args, clang_args = parse_args()
 
-    cmd = [
-        '@CLANG_BINARY@',
+    if THIS_FILE.endswith('c++'):
+        cmd = [Path('@LLVM_TOOLS_BINARY_DIR@', 'clang++')]
+    else:
+        cmd = [Path('@LLVM_TOOLS_BINARY_DIR@', 'clang')]
+
+    cmd.extend([
         '-g',
 
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libMem2Reg.so',
@@ -47,8 +54,16 @@ def main():
 
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libHeapify.so',
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libMemFuncTag.so',
-        '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libAFLUseSite.so',
-    ]
+    ])
+
+    if args.debug:
+        cmd.extend([
+            '-O0', '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libDebugUseSite.so',
+        ])
+    else:
+        cmd.extend([
+            '-O3', '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libAFLUseSite.so',
+        ])
 
     if args.custom_mem_funcs:
         cmd.extend(['-mllvm',

@@ -22,7 +22,7 @@
 #define likely(x) __builtin_expect((x), 1)
 #define unlikely(x) __builtin_expect((x), 0)
 
-static const size_t kTableSize = 1UL << 43;    ///< Baggy bounds table size
+static const size_t kTableSize = 1UL << 43; ///< Baggy bounds table size
 
 uint8_t *__baggy_bounds_table;
 
@@ -155,13 +155,18 @@ tag_t __bb_lookup(void *Ptr, uintptr_t *Base) {
   const uint64_t AllocSize = 1 << E;
   *Base = P & ~(AllocSize - 1);
 
-  tag_t *TagAddr = (tag_t *)(Base + AllocSize - kMetaSize);
+  tag_t *TagAddr = (tag_t *)(*Base + AllocSize - kMetaSize);
   return *TagAddr;
 }
 
-void *malloc(size_t Size) {
-  return __bb_malloc(kFuzzallocDefaultTag, Size);
+#ifdef _DEBUG
+void __bb_dbg_use(tag_t Def, uintptr_t Offset) {
+  fprintf(stderr, "[datAFLow] accessing def site %#x from %p (offset=%ld)\n", Def,
+          __builtin_return_address(0), Offset);
 }
+#endif // _DEBUG
+
+void *malloc(size_t Size) { return __bb_malloc(kFuzzallocDefaultTag, Size); }
 
 void *calloc(size_t NMemb, size_t Size) {
   return __bb_calloc(kFuzzallocDefaultTag, NMemb, Size);

@@ -6,6 +6,14 @@ target_link_libraries(AFLUseSite PUBLIC
 )
 install(TARGETS AFLUseSite LIBRARY DESTINATION lib)
 
+add_library(DebugUseSite SHARED
+  DebugUseSite.cpp
+)
+target_link_libraries(DebugUseSite PUBLIC
+  UseSiteIdentify
+)
+install(TARGETS DebugUseSite LIBRARY DESTINATION lib)
+
 add_library(MemFuncTag SHARED
   MemFuncTag.cpp
 )

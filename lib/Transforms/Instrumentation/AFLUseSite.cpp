@@ -49,8 +49,9 @@ private:
   LLVMContext *Ctx;
   const DataLayout *DL;
 
-  FunctionCallee ReadPCAsm;
-  FunctionCallee BBLookup;
+  FunctionCallee ReadPCAsmFn;
+  FunctionCallee BBLookupFn;
+
   GlobalVariable *AFLMapPtr;
   GlobalVariable *BaggyBoundsPtr;
 
@@ -80,12 +81,12 @@ void AFLUseSite::doInstrument(InterestingMemoryOperand *Op) {
   IRBuilder<> IRB(Inst);
 
   // Get the def site
-  auto *Base = IRB.CreateAlloca(IntPtrTy, /*ArraySize=*/nullptr, "def_base");
+  auto *Base = IRB.CreateAlloca(IntPtrTy, /*ArraySize=*/nullptr, "def.base");
   auto *PtrCast = IRB.CreatePointerCast(Ptr, IRB.getInt8PtrTy());
-  auto *DefSite = IRB.CreateCall(BBLookup, {PtrCast, Base}, "def_lookup");
+  auto *DefSite = IRB.CreateCall(BBLookupFn, {PtrCast, Base}, "tag");
 
-  // Compute the use site offset (the same size as the tag). If this cannot be
-  // determined statically, build code that can determine it dynamically
+  // Compute the use site offset (the same size as the tag). This is just the
+  // difference between the pointer and the previously-computed base address
   auto *UseOffset = [&]() -> Value * {
     if (ClUseOffset) {
       auto *P = IRB.CreatePtrToInt(Ptr, IntPtrTy);
@@ -102,8 +103,8 @@ void AFLUseSite::doInstrument(InterestingMemoryOperand *Op) {
 
   // Use the PC as the use site identifier
   auto *UseSite =
-      IRB.CreateIntCast(IRB.CreateCall(ReadPCAsm), TagTy,
-                        /*isSigned=*/false, Ptr->getName() + ".use_site");
+      IRB.CreateIntCast(IRB.CreateCall(ReadPCAsmFn), TagTy,
+                        /*isSigned=*/false, Ptr->getName() + ".use");
 
   // Incorporate the memory access offset into the use site
   UseSite = IRB.CreateAdd(UseSite, UseOffset);
@@ -146,12 +147,10 @@ bool AFLUseSite::runOnModule(Module &M) {
   this->Ctx = &M.getContext();
   this->DL = &M.getDataLayout();
 
-  auto *Int8PtrTy = Type::getInt8PtrTy(*Ctx);
-
   {
     auto *ReadPCAsmTy =
         FunctionType::get(Type::getInt64Ty(*Ctx), /*isVarArg=*/false);
-    this->ReadPCAsm = FunctionCallee(
+    this->ReadPCAsmFn = FunctionCallee(
         ReadPCAsmTy, InlineAsm::get(ReadPCAsmTy, "leaq (%rip), $0",
                                     /*Constraints=*/"=r",
                                     /*hasSideEffects=*/false));
@@ -161,14 +160,18 @@ bool AFLUseSite::runOnModule(Module &M) {
   this->IntPtrTy = DL->getIntPtrType(*Ctx);
   this->DefaultTag = ConstantInt::get(TagTy, kFuzzallocDefaultTag);
 
-  this->AFLMapPtr = new GlobalVariable(
-      *Mod, Int8PtrTy, /*isConstant=*/false, GlobalValue::ExternalLinkage,
-      /*Initializer=*/nullptr, "__afl_area_ptr");
-  this->BaggyBoundsPtr = new GlobalVariable(
-      *Mod, Int8PtrTy, /*isConstant=*/false, GlobalValue::ExternalLinkage,
-      /*Initializer=*/nullptr, "__baggy_bounds_table");
-  this->BBLookup = Mod->getOrInsertFunction("__bb_lookup", TagTy, Int8PtrTy,
-                                            IntPtrTy->getPointerTo());
+  {
+    auto *Int8PtrTy = Type::getInt8PtrTy(*Ctx);
+    this->AFLMapPtr = new GlobalVariable(
+        *Mod, Int8PtrTy, /*isConstant=*/false, GlobalValue::ExternalLinkage,
+        /*Initializer=*/nullptr, "__afl_area_ptr");
+    this->BaggyBoundsPtr = new GlobalVariable(
+        *Mod, Int8PtrTy, /*isConstant=*/false, GlobalValue::ExternalLinkage,
+        /*Initializer=*/nullptr, "__baggy_bounds_table");
+
+    this->BBLookupFn = Mod->getOrInsertFunction("__bb_lookup", TagTy, Int8PtrTy,
+                                                IntPtrTy->getPointerTo());
+  }
 
   for (auto &F : M) {
     if (F.isDeclaration()) {
@@ -192,8 +195,8 @@ bool AFLUseSite::runOnModule(Module &M) {
 // Pass registration
 //
 
-static RegisterPass<AFLUseSite> X(DEBUG_TYPE, "Instrument use sites", false,
-                                  false);
+static RegisterPass<AFLUseSite> X(DEBUG_TYPE, "Instrument use sites (AFL)",
+                                  false, false);
 
 static void registerAFLUseSitePass(const PassManagerBuilder &,
                                    legacy::PassManagerBase &PM) {
