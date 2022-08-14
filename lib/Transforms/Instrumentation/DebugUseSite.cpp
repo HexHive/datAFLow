@@ -24,6 +24,9 @@ using namespace llvm;
 
 #define DEBUG_TYPE "fuzzalloc-dbg-use-site"
 
+STATISTIC(NumInstrumentedWrites, "Number of instrumented writes");
+STATISTIC(NumInstrumentedReads, "Number of instrumented reads");
+
 /// Instrument use sites
 class DebugUseSite : public ModulePass {
 public:
@@ -50,6 +53,12 @@ private:
 char DebugUseSite::ID = 0;
 
 void DebugUseSite::doInstrument(InterestingMemoryOperand *Op) {
+  if (Op->IsWrite) {
+    NumInstrumentedWrites++;
+  } else {
+    NumInstrumentedReads++;
+  }
+
   auto *Inst = Op->getInsn();
   auto *Ptr = Op->getPtr();
 

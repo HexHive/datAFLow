@@ -58,11 +58,13 @@ def main():
 
     if args.debug:
         cmd.extend([
-            '-O0', '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libDebugUseSite.so',
+            '-O0',
+            '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libDebugUseSite.so',
         ])
     else:
         cmd.extend([
-            '-O3', '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libAFLUseSite.so',
+            '-O3', '-flto',
+            '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libAFLUseSite.so',
         ])
 
     if args.custom_mem_funcs:
@@ -73,8 +75,12 @@ def main():
     for use_sensitivity in args.use_sensitivity:
         cmd.extend(['-mllvm', f'-fuzzalloc-use-{use_sensitivity}'])
     cmd.extend(clang_args)
-    cmd.extend([f'-L{LIB_DIR}', '-lFuzzallocRuntime', f'-lAFLRuntime',
-                '-Qunused-arguments'])
+    cmd.extend([f'-L{LIB_DIR}', '-lFuzzallocRuntime'])
+
+    if not args.debug:
+        cmd.extend([f'-L{LIB_DIR}', '-lAFLRuntime'])
+    
+    cmd.append('-Qunused-arguments')
 
     proc = run(cmd)
     return proc.returncode

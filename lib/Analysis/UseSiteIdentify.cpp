@@ -250,7 +250,7 @@ bool UseSiteIdentify::runOnFunction(Function &F) {
   }
 
   status_stream() << F.getName() << ": " << NumUsesToTrack
-                  << " use sites tracked\n";
+                  << " use sites identified\n";
 
   return false;
 }

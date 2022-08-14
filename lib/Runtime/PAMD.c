@@ -138,6 +138,11 @@ void *__bb_realloc(tag_t Tag, void *Ptr, size_t Size) {
   return NewPtr;
 }
 
+#ifdef NDEBUG
+__attribute__((always_inline))
+#else
+__attribute__((noinline))
+#endif
 tag_t __bb_lookup(void *Ptr, uintptr_t *Base) {
   if (!Ptr) {
     *Base = 0;
@@ -159,12 +164,10 @@ tag_t __bb_lookup(void *Ptr, uintptr_t *Base) {
   return *TagAddr;
 }
 
-#ifdef _DEBUG
-void __bb_dbg_use(tag_t Def, uintptr_t Offset) {
-  fprintf(stderr, "[datAFLow] accessing def site %#x from %p (offset=%ld)\n", Def,
-          __builtin_return_address(0), Offset);
+__attribute__((noinline)) void __bb_dbg_use(tag_t Def, uintptr_t Offset) {
+  fprintf(stderr, "[datAFLow] accessing def site %#x from %p (offset=%ld)\n",
+          Def, __builtin_return_address(0), Offset);
 }
-#endif // _DEBUG
 
 void *malloc(size_t Size) { return __bb_malloc(kFuzzallocDefaultTag, Size); }
 

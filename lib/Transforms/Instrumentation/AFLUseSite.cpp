@@ -17,6 +17,7 @@
 
 #include "fuzzalloc/Analysis/UseSiteIdentify.h"
 #include "fuzzalloc/Metadata.h"
+#include "fuzzalloc/Streams.h"
 #include "fuzzalloc/baggy_bounds.h"
 #include "fuzzalloc/fuzzalloc.h"
 
@@ -24,8 +25,8 @@ using namespace llvm;
 
 #define DEBUG_TYPE "fuzzalloc-afl-use-site"
 
-STATISTIC(NumInstrumentedWrites, "Number of instrumented writes");
 STATISTIC(NumInstrumentedReads, "Number of instrumented reads");
+STATISTIC(NumInstrumentedWrites, "Number of instrumented writes");
 
 namespace {
 static cl::opt<bool> ClUseOffset("fuzzalloc-use-offset",
@@ -187,6 +188,11 @@ bool AFLUseSite::runOnModule(Module &M) {
       doInstrument(&Op);
     }
   }
+
+  status_stream() << "Num. instrumented reads: " << NumInstrumentedReads
+                  << '\n';
+  status_stream() << "Num. instrumented writes: " << NumInstrumentedWrites
+                  << '\n';
 
   return true;
 }
