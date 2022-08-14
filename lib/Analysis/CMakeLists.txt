@@ -1,3 +1,8 @@
+add_library(CollectStats SHARED
+  CollectStats.cpp
+)
+install(TARGETS CollectStats LIBRARY DESTINATION lib)
+
 add_library(DefSiteIdentify SHARED
   DefSiteIdentify.cpp
 )
