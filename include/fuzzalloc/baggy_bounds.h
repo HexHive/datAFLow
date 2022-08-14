@@ -19,6 +19,9 @@ extern "C" {
 /// Slot size (in bytes)
 const unsigned kSlotSize = 16;
 
+/// Size of metadata
+const size_t kMetaSize = sizeof(tag_t);
+
 /// Binary logarithm of slot size
 const unsigned kSlotSizeLog2 = 4;
 

@@ -23,7 +23,6 @@
 #define unlikely(x) __builtin_expect((x), 0)
 
 static const size_t kTableSize = 1UL << 43;    ///< Baggy bounds table size
-static const size_t kMetaSize = sizeof(tag_t); ///< Size of metadata
 
 uint8_t *__baggy_bounds_table;
 
@@ -140,11 +139,14 @@ void *__bb_realloc(tag_t Tag, void *Ptr, size_t Size) {
 }
 
 tag_t __bb_lookup(void *Ptr) {
+  if (Ptr) {
+    return 0;
+  }
   const uintptr_t P = (uintptr_t)Ptr;
   const uintptr_t Index = P >> kSlotSizeLog2;
   const unsigned E = __baggy_bounds_table[Index];
   if (!E) {
-    return kFuzzallocDefaultTag;
+    return 0;
   }
   const uint64_t AllocSize = 1 << E;
   const uintptr_t Base = P & ~(AllocSize - 1);

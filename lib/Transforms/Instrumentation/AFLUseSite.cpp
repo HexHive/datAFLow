@@ -61,7 +61,6 @@ private:
   GlobalVariable *BaggyBoundsPtr;
 
   IntegerType *TagTy;
-  ConstantInt *HashMul;
   ConstantInt *DefaultTag;
 };
 
@@ -73,10 +72,30 @@ Value *AFLUseSite::getDefSite(Value *Ptr, IRBuilder<> &IRB) {
     return IRB.CreateCall(BBLookup, {Cast}, "def_lookup");
   } else {
     auto IntPtrTy = IRB.getIntPtrTy(*DL);
+    auto *One = ConstantInt::get(IntPtrTy, 1);
+    auto *TagSize = ConstantInt::get(IntPtrTy, kMetaSize);
+
     auto *P = IRB.CreatePtrToInt(Ptr, IntPtrTy);
     auto *Index = IRB.CreateLShr(P, static_cast<uint64_t>(kSlotSizeLog2));
 
     auto *BaggyBoundsTable = IRB.CreateLoad(BaggyBoundsPtr);
+    BaggyBoundsTable->setMetadata(Mod->getMDKindID(kNoSanitizeMD),
+                                  MDNode::get(*Ctx, None));
+
+    auto *BaggyBoundsIdx = IRB.CreateGEP(BaggyBoundsTable, Index);
+    auto *BaggyBoundsIdxLoad = IRB.CreateLoad(BaggyBoundsIdx);
+    BaggyBoundsIdxLoad->setMetadata(Mod->getMDKindID(kNoSanitizeMD),
+                                    MDNode::get(*Ctx, None));
+
+    auto *E = IRB.CreateZExt(BaggyBoundsIdxLoad, IntPtrTy);
+
+    auto *AllocSize = IRB.CreateShl(One, E);
+    auto *Base = IRB.CreateAnd(P, IRB.CreateNeg(IRB.CreateSub(AllocSize, One)));
+
+    auto *TagAddr = IRB.CreateSub(IRB.CreateAdd(Base, AllocSize), TagSize);
+    return IRB.CreateSelect(
+        IRB.CreateICmpEQ(E, ConstantInt::getNullValue(IntPtrTy)),
+        ConstantInt::getNullValue(TagTy), IRB.CreateLoad(TagAddr));
 
     assert(false && "Not yet implemented");
   }
@@ -134,6 +153,7 @@ void AFLUseSite::doInstrument(InterestingMemoryOperand *Op,
   // zext is necessary otherwise we end up using signed indices
   //
   // Hash algorithm: ((31 * (def_site - DEFAULT_TAG)) ^ use_site) - use_site
+  auto *HashMul = ConstantInt::get(TagTy, 31);
   auto *Hash = IRB.CreateSub(
       IRB.CreateXor(IRB.CreateMul(HashMul, IRB.CreateSub(DefSite, DefaultTag)),
                     UseSite),
@@ -176,7 +196,6 @@ bool AFLUseSite::runOnModule(Module &M) {
   }
 
   this->TagTy = Type::getIntNTy(*Ctx, kNumTagBits);
-  this->HashMul = ConstantInt::get(TagTy, 31);
   this->DefaultTag = ConstantInt::get(TagTy, kFuzzallocDefaultTag);
 
   this->AFLMapPtr = new GlobalVariable(
