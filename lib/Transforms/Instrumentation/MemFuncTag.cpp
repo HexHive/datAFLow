@@ -163,7 +163,7 @@ Instruction *MemFuncTag::tagCall(CallBase *CB, FunctionCallee TaggedF) const {
   TaggedCall->setAttributes(CB->getAttributes());
   TaggedCall->setDebugLoc(CB->getDebugLoc());
   TaggedCall->copyMetadata(*CB);
-  TaggedCall->setMetadata(Mod->getMDKindID(kFuzzallocTaggedAllocMD),
+  TaggedCall->setMetadata(Mod->getMDKindID(kFuzzallocBBAllocMD),
                           MDNode::get(*Ctx, None));
 
   // Replace the callee

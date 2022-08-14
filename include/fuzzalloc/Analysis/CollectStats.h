@@ -23,7 +23,7 @@ public:
   unsigned long getNumBasicBlocks() const { return NumBasicBlocks; }
   unsigned long getNumAllocas() const { return NumAllocas; }
   unsigned long getNumGlobalVars() const { return NumGlobalVars; }
-  unsigned long getNumTaggedAllocs() const { return NumTaggedAllocs; }
+  unsigned long getNumBBAllocs() const { return NumBBAllocs; }
   unsigned long getNumInstrumentedDerefs() const {
     return NumInstrumentedDerefs;
   }
@@ -33,7 +33,7 @@ private:
   unsigned long NumBasicBlocks;
   unsigned long NumAllocas;
   unsigned long NumGlobalVars;
-  unsigned long NumTaggedAllocs;
+  unsigned long NumBBAllocs;
   unsigned long NumInstrumentedDerefs;
   unsigned long NumHeapifiedAllocas;
 };
