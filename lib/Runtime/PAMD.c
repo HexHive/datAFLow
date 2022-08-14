@@ -139,7 +139,7 @@ void *__bb_realloc(tag_t Tag, void *Ptr, size_t Size) {
 }
 
 tag_t __bb_lookup(void *Ptr, uintptr_t *Base) {
-  if (Ptr) {
+  if (!Ptr) {
     *Base = 0;
     return 0;
   }

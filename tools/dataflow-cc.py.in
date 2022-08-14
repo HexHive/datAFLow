@@ -58,7 +58,7 @@ def main():
     for use_sensitivity in args.use_sensitivity:
         cmd.extend(['-mllvm', f'-fuzzalloc-use-{use_sensitivity}'])
     cmd.extend(clang_args)
-    cmd.extend([f'-L{LIB_DIR}', '-lFuzzallocRuntime', f'-Wl,-rpath,"{LIB_DIR}"',
+    cmd.extend([f'-L{LIB_DIR}', '-lFuzzallocRuntime', f'-lAFLRuntime',
                 '-Qunused-arguments'])
 
     proc = run(cmd)

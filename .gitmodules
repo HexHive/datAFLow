@@ -1,0 +1,3 @@
+[submodule "ext/aflplusplus"]
+	path = ext/aflplusplus
+	url = https://github.com/aflplusplus/aflplusplus
