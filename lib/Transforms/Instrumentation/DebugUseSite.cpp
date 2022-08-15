@@ -72,8 +72,12 @@ void DebugUseSite::doInstrument(InterestingMemoryOperand *Op) {
 
   IRBuilder<> IRB(Inst);
 
-  // Get the def site tag
+  // Get the def site tag. The __bb_lookup function also takes a pointer to the
+  // object's base address, which is used to compute the offset (if required).
+  // We only need the base address for this offset calculation, so set a fairly
+  // constrainted lifetime
   auto *Base = IRB.CreateAlloca(IntPtrTy, /*ArraySize=*/nullptr, "def.base");
+  IRB.CreateLifetimeStart(Base);
   auto *PtrCast = IRB.CreatePointerCast(Ptr, IRB.getInt8PtrTy());
   auto *Tag = IRB.CreateCall(BBLookupFn, {PtrCast, Base}, "tag");
 
@@ -89,6 +93,7 @@ void DebugUseSite::doInstrument(InterestingMemoryOperand *Op) {
   auto *Offset = IRB.CreateSelect(
       IRB.CreateICmpEQ(Tag, DefaultTag), Constant::getNullValue(IntPtrTy),
       IRB.CreateSub(P, BaseLoad, Ptr->getName() + ".offset"));
+  IRB.CreateLifetimeEnd(Base);
 
   IRB.CreateCall(BBDebugUseFn, {Tag, Offset});
 }
