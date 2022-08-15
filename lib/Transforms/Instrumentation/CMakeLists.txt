@@ -29,3 +29,11 @@ target_link_libraries(HeapTag PUBLIC
   MemFuncIdentify
 )
 install(TARGETS HeapTag LIBRARY DESTINATION lib)
+
+add_library(LocalVariableTag SHARED
+  LocalVariableTag.cpp
+)
+target_link_libraries(LocalVariableTag PUBLIC
+  DefSiteIdentify
+)
+install(TARGETS LocalVariableTag LIBRARY DESTINATION lib)

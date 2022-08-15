@@ -37,7 +37,7 @@ def main():
         cmd = [Path('@LLVM_TOOLS_BINARY_DIR@', 'clang')]
 
     cmd.extend([
-        '-g',
+        '-g', '-fno-discard-value-names',
 
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libMem2Reg.so',
 
@@ -53,7 +53,7 @@ def main():
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libUseSiteIdentify.so',
 
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libGlobalVariableTag.so',
-        '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libHeapify.so',
+        '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libLocalVariableTag.so',
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libHeapTag.so',
     ])
 

@@ -37,15 +37,15 @@ public:
 
 private:
   ConstantInt *generateTag() const;
-  size_t getTaggedGVSize(Type *) const;
+  size_t getTaggedVarSize(Type *) const;
   GlobalVariable *tagGlobalVariable(GlobalVariable *, BasicBlock *);
 
   Module *Mod;
   LLVMContext *Ctx;
   const DataLayout *DL;
 
-  IntegerType *IntPtrTy;
   IntegerType *TagTy;
+  IntegerType *IntPtrTy;
   FunctionCallee BBRegisterFn;
 };
 
@@ -56,7 +56,7 @@ ConstantInt *GlobalVarTag::generateTag() const {
       TagTy, static_cast<uint64_t>(RAND(kFuzzallocTagMin, kFuzzallocTagMax)));
 }
 
-size_t GlobalVarTag::getTaggedGVSize(Type *Ty) const {
+size_t GlobalVarTag::getTaggedVarSize(Type *Ty) const {
   auto AdjustedSize = DL->getTypeAllocSize(Ty) + kMetaSize;
   if (AdjustedSize < kSlotSize) {
     AdjustedSize = kSlotSize;
@@ -65,23 +65,22 @@ size_t GlobalVarTag::getTaggedGVSize(Type *Ty) const {
 }
 
 GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
-                                                BasicBlock *CtorBB) {
+                                      BasicBlock *CtorBB) {
   auto *Zero = ConstantInt::getNullValue(IntegerType::getInt32Ty(*Ctx));
   auto *OrigTy = OrigGV->getValueType();
   auto OrigSize = DL->getTypeAllocSize(OrigTy);
-  auto NewAllocSize = getTaggedGVSize(OrigTy);
+  auto NewAllocSize = getTaggedVarSize(OrigTy);
 
   auto PaddingSize = NewAllocSize - OrigSize - kMetaSize;
   auto *PaddingTy = ArrayType::get(Type::getInt8Ty(*Ctx), PaddingSize);
-  auto *ZeroInit = ConstantAggregateZero::get(PaddingTy);
   auto *Tag = generateTag();
 
   auto *NewGVTy =
       StructType::get(*Ctx, {OrigTy, PaddingTy, TagTy}, /*isPacked=*/true);
-  auto *NewInit = ConstantStruct::get(NewGVTy, {OrigGV->hasInitializer()
-                                                    ? OrigGV->getInitializer()
-                                                    : UndefValue::get(OrigTy),
-                                                ZeroInit, Tag});
+  auto *NewInit = ConstantStruct::get(
+      NewGVTy, {OrigGV->hasInitializer() ? OrigGV->getInitializer()
+                                         : UndefValue::get(OrigTy),
+                UndefValue::get(PaddingTy), Tag});
 
   // Create a tagged version of the global variable (only visible in this
   // module)
@@ -124,8 +123,8 @@ GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
   }
 
   // Register the allocation in the baggy bounds table
-  auto *NewGVCasted =
-      new BitCastInst(NewGV, Type::getInt8PtrTy(*Ctx), "", CtorBB);
+  auto *Int8PtrTy = Type::getInt8PtrTy(*Ctx);
+  auto *NewGVCasted = new BitCastInst(NewGV, Int8PtrTy, "", CtorBB);
   CallInst::Create(BBRegisterFn,
                    {NewGVCasted, ConstantInt::get(IntPtrTy, NewAllocSize)}, "",
                    CtorBB);

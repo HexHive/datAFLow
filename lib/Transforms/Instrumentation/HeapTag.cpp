@@ -278,18 +278,17 @@ bool HeapTag::runOnModule(Module &M) {
 // Pass registration
 //
 
-static RegisterPass<HeapTag> X(DEBUG_TYPE, "Tag heap variables", false,
-                                  false);
+static RegisterPass<HeapTag> X(DEBUG_TYPE, "Tag heap variables", false, false);
 
 static void registerHeapTagPass(const PassManagerBuilder &,
-                                   legacy::PassManagerBase &PM) {
+                                legacy::PassManagerBase &PM) {
   PM.add(new HeapTag());
 }
 
 static RegisterStandardPasses
     RegisterHeapTagPass(PassManagerBuilder::EP_OptimizerLast,
-                           registerHeapTagPass);
+                        registerHeapTagPass);
 
 static RegisterStandardPasses
     RegisterHeapTagPass0(PassManagerBuilder::EP_EnabledOnOptLevel0,
-                            registerHeapTagPass);
+                         registerHeapTagPass);
