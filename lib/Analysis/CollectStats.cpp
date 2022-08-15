@@ -31,7 +31,6 @@ void CollectStats::print(raw_ostream &O, const Module *) const {
   O << "  num. baggy bounds allocs: " << this->NumBBAllocs << "\n";
   O << "  num. of dereferenced pointers: " << this->NumInstrumentedDerefs
     << "\n";
-  O << "  num. of heapified allocas: " << this->NumHeapifiedAllocas << "\n";
 }
 
 bool CollectStats::doInitialization(Module &M) {
@@ -40,7 +39,6 @@ bool CollectStats::doInitialization(Module &M) {
   this->NumGlobalVars = 0;
   this->NumBBAllocs = 0;
   this->NumInstrumentedDerefs = 0;
-  this->NumHeapifiedAllocas = 0;
 
   return false;
 }
@@ -60,8 +58,6 @@ bool CollectStats::runOnModule(Module &M) {
         } else if (I.getMetadata(
                        M.getMDKindID(kFuzzallocInstrumentedDerefMD))) {
           this->NumInstrumentedDerefs++;
-        } else if (I.getMetadata(M.getMDKindID(kFuzzallocHeapifiedAllocaMD))) {
-          this->NumHeapifiedAllocas++;
         }
       }
     }
