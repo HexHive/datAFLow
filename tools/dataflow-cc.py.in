@@ -64,7 +64,7 @@ def main():
         ])
     else:
         cmd.extend([
-            '-O3', '-flto',
+            '-O3',
             '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libAFLUseSite.so',
         ])
 
