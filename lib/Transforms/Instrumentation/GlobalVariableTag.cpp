@@ -65,7 +65,7 @@ size_t GlobalVarTag::getTaggedVarSize(Type *Ty) const {
 }
 
 GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
-                                      BasicBlock *CtorBB) {
+                                                BasicBlock *CtorBB) {
   auto *Zero = ConstantInt::getNullValue(IntegerType::getInt32Ty(*Ctx));
   auto *OrigTy = OrigGV->getValueType();
   auto OrigSize = DL->getTypeAllocSize(OrigTy);

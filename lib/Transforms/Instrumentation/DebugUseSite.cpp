@@ -82,6 +82,7 @@ void DebugUseSite::doInstrument(InterestingMemoryOperand *Op) {
   BaseLoad->setMetadata(Mod->getMDKindID(kNoSanitizeMD),
                         MDNode::get(*Ctx, None));
 
+  // TODO use a select instruction based on whether default tag or not!!!!
   auto *UseOffset = IRB.CreateSub(P, BaseLoad, Ptr->getName() + ".offset");
 
   IRB.CreateCall(BBDebugUseFn, {DefSite, UseOffset});
@@ -92,6 +93,8 @@ void DebugUseSite::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 bool DebugUseSite::runOnModule(Module &M) {
+  bool Changed = false;
+
   // Initialize stuff
   this->Mod = &M;
   this->Ctx = &M.getContext();
@@ -115,15 +118,17 @@ bool DebugUseSite::runOnModule(Module &M) {
 
     auto &UseSiteOps = getAnalysis<UseSiteIdentify>(F).getUseSites();
     if (UseSiteOps.empty()) {
-      return false;
+      continue;
     }
 
     for (auto &Op : UseSiteOps) {
       doInstrument(&Op);
     }
+
+    Changed = true;
   }
 
-  return true;
+  return Changed;
 }
 
 //
