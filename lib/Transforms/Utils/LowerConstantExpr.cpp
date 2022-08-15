@@ -5,7 +5,6 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include <llvm/ADT/Statistic.h>
 #include <llvm/IR/InstIterator.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/Module.h>
@@ -19,9 +18,17 @@ using namespace llvm;
 
 #define DEBUG_TYPE "fuzzalloc-lower-cexpr"
 
-STATISTIC(NumLoweredCExprs, "Number of lowered constant expressions");
-
 namespace {
+//
+// Global variables
+//
+
+static unsigned NumLoweredCExprs = 0;
+
+//
+// Helper functions
+//
+
 bool expandInstruction(Instruction *);
 
 static Instruction *expandCExpr(ConstantExpr *CE, Instruction *InsertPt) {

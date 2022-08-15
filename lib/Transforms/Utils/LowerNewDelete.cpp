@@ -5,7 +5,6 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include <llvm/ADT/Statistic.h>
 #include <llvm/Analysis/TargetLibraryInfo.h>
 #include <llvm/IR/InstIterator.h>
 #include <llvm/IR/Instructions.h>
@@ -22,10 +21,18 @@ using namespace llvm;
 
 #define DEBUG_TYPE "fuzzalloc-lower-new-delete"
 
-STATISTIC(NumLoweredNews, "Number of lowered news");
-STATISTIC(NumLoweredDeletes, "Number of lowered deletes");
-
 namespace {
+//
+// Global variables
+//
+
+static unsigned NumLoweredNews = 0;
+static unsigned NumLoweredDeletes = 0;
+
+//
+// Helper functions
+//
+
 static bool isNewFn(const Function *F, const TargetLibraryInfo *TLI) {
   StringRef FnName = F->getName();
   LibFunc TLIFn;

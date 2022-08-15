@@ -5,7 +5,6 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include <llvm/ADT/Statistic.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/InlineAsm.h>
 #include <llvm/IR/Instructions.h>
@@ -24,8 +23,10 @@ using namespace llvm;
 
 #define DEBUG_TYPE "fuzzalloc-dbg-use-site"
 
-STATISTIC(NumInstrumentedWrites, "Number of instrumented writes");
-STATISTIC(NumInstrumentedReads, "Number of instrumented reads");
+namespace {
+static unsigned NumInstrumentedWrites = 0;
+static unsigned NumInstrumentedReads = 0;
+} // anonymous namespace
 
 /// Instrument use sites
 class DebugUseSite : public ModulePass {

@@ -5,7 +5,6 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include <llvm/ADT/Statistic.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/InlineAsm.h>
 #include <llvm/IR/Instructions.h>
@@ -25,13 +24,21 @@ using namespace llvm;
 
 #define DEBUG_TYPE "fuzzalloc-afl-use-site"
 
-STATISTIC(NumInstrumentedReads, "Number of instrumented reads");
-STATISTIC(NumInstrumentedWrites, "Number of instrumented writes");
-
 namespace {
+//
+// Command-line options
+//
+
 static cl::opt<bool> ClUseOffset("fuzzalloc-use-offset",
                                  cl::desc("Capture offsets in the use site"),
                                  cl::Hidden, cl::init(true));
+
+//
+// Global variables
+//
+
+static unsigned NumInstrumentedReads = 0;
+static unsigned NumInstrumentedWrites = 0;
 } // anonymous namespace
 
 /// Instrument use sites

@@ -5,7 +5,6 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include <llvm/ADT/Statistic.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DIBuilder.h>
 #include <llvm/IR/DebugInfoMetadata.h>
@@ -27,7 +26,9 @@ using namespace llvm;
 
 #define DEBUG_TYPE "fuzzalloc-tag-local-variable"
 
-STATISTIC(NumTaggedLocals, "Number of tagged local variables");
+namespace {
+static unsigned NumTaggedLocals = 0;
+} // anonymous namespace
 
 class LocalVarTag : public ModulePass {
 public:

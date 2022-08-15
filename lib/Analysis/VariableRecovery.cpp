@@ -5,7 +5,6 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include <llvm/ADT/Statistic.h>
 #include <llvm/IR/DebugInfo.h>
 #include <llvm/IR/DebugInfoMetadata.h>
 #include <llvm/IR/IntrinsicInst.h>
@@ -17,10 +16,12 @@
 
 #define DEBUG_TYPE "variable-recovery"
 
-STATISTIC(NumLocalVars, "Number of local variables");
-STATISTIC(NumGlobalVars, "Number of global variables");
-
 using namespace llvm;
+
+namespace {
+static unsigned NumLocalVars = 0;
+static unsigned NumGlobalVars = 0;
+} // anonymous namespace
 
 char VariableRecovery::ID = 0;
 

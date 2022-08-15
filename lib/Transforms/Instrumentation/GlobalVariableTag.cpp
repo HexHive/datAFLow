@@ -5,7 +5,6 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include <llvm/ADT/Statistic.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DebugInfoMetadata.h>
 #include <llvm/IR/LegacyPassManager.h>
@@ -25,7 +24,9 @@ using namespace llvm;
 
 #define DEBUG_TYPE "fuzzalloc-tag-global-variable"
 
-STATISTIC(NumTaggedGVs, "Number of tagged global variables");
+namespace {
+static unsigned NumTaggedGVs = 0;
+} // anonymous namespace
 
 class GlobalVarTag : public ModulePass {
 public:

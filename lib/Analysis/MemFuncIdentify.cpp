@@ -5,7 +5,6 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include <llvm/ADT/Statistic.h>
 #include <llvm/Analysis/MemoryBuiltins.h>
 #include <llvm/Analysis/TargetLibraryInfo.h>
 #include <llvm/IR/InstIterator.h>
@@ -21,8 +20,6 @@
 using namespace llvm;
 
 #define DEBUG_TYPE "fuzzalloc-mem-func-identify"
-
-STATISTIC(NumMemAllocFuncs, "Number of dynamic memory allocation functions");
 
 //
 // Classes
@@ -51,6 +48,12 @@ static cl::opt<std::string> ClMemFuncs(
     "fuzzalloc-custom-mem-funcs",
     cl::desc("Path to file listing custom memory allocation functions"),
     cl::value_desc("path"));
+
+//
+// Global variables
+//
+
+static unsigned NumMemAllocFuncs = 0;
 
 //
 // Helper functions

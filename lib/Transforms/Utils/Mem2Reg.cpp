@@ -6,7 +6,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <llvm/ADT/SmallVector.h>
-#include <llvm/ADT/Statistic.h>
 #include <llvm/Analysis/AssumptionCache.h>
 #include <llvm/IR/Dominators.h>
 #include <llvm/IR/Instructions.h>
@@ -19,7 +18,9 @@ using namespace llvm;
 
 #define DEBUG_TYPE "fuzzalloc-mem2reg"
 
-STATISTIC(NumPromoted, "Number of allocas promoted");
+namespace {
+static unsigned NumPromoted = 0;
+} // anonymous namespace
 
 class Mem2Reg : public FunctionPass {
 public:

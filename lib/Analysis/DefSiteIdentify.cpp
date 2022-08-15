@@ -5,7 +5,6 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include <llvm/ADT/Statistic.h>
 #include <llvm/Analysis/MemoryBuiltins.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/GlobalVariable.h>
@@ -21,8 +20,6 @@
 using namespace llvm;
 
 #define DEBUG_TYPE "fuzzalloc-def-site-identify"
-
-STATISTIC(NumDefSites, "Number of def sites identified");
 
 namespace {
 
@@ -40,6 +37,12 @@ static cl::opt<bool>
     ClIgnoreGlobalConstants("fuzzalloc-ignore-constant-globals",
                             cl::desc("Ignore constant globals"), cl::Hidden,
                             cl::init(false));
+
+//
+// Global variables
+//
+
+static unsigned NumDefSites = 0;
 } // anonymous namespace
 
 char DefSiteIdentify::ID = 0;

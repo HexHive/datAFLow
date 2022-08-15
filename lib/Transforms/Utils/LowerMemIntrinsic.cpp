@@ -5,7 +5,6 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include <llvm/ADT/Statistic.h>
 #include <llvm/Analysis/TargetTransformInfo.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/InstIterator.h>
@@ -19,11 +18,19 @@ using namespace llvm;
 
 #define DEBUG_TYPE "fuzzalloc-lower-mem-intrinsic"
 
-STATISTIC(NumMemCpyExpanded, "Number of memcpy expansions");
-STATISTIC(NumMemMoveExpanded, "Number of memmove expansions");
-STATISTIC(NumMemSetExpanded, "Number of memset expansions");
-
 namespace {
+//
+// Global variables
+//
+//
+
+static unsigned NumMemCpyExpanded = 0;
+static unsigned NumMemMoveExpanded = 0;
+static unsigned NumMemSetExpanded = 0;
+
+// Helper functions
+//
+
 // Adapted from llvm/lib/Transforms/LowerMemIntrinsics.cpp
 static void createMemCpyLoopKnownSize(Instruction *InsertBefore, Value *SrcAddr,
                                       Value *DstAddr, ConstantInt *CopyLen,

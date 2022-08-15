@@ -5,7 +5,6 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include <llvm/ADT/Statistic.h>
 #include <llvm/IR/InstIterator.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Intrinsics.h>
@@ -23,10 +22,6 @@
 using namespace llvm;
 
 #define DEBUG_TYPE "fuzzalloc-use-site-identify"
-
-STATISTIC(NumReadUseSites, "Number of read use sites");
-STATISTIC(NumWriteUseSites, "Number of write use sites");
-STATISTIC(NumUsesToTrack, "Number of uses to track");
 
 namespace {
 //
@@ -49,6 +44,14 @@ static cl::opt<bool>
 static cl::opt<bool> ClTrackByval("fuzzalloc-track-byvals",
                                   cl::desc("Track byval call arguments"),
                                   cl::Hidden, cl::init(true));
+
+//
+// Global variables
+//
+
+static unsigned NumUsesToTrack = 0;
+static unsigned NumReadUseSites = 0;
+static unsigned NumWriteUseSites = 0;
 
 //
 // Helper functions
