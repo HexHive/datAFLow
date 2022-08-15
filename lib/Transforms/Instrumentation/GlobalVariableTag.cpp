@@ -108,12 +108,14 @@ GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
 
     if (isa<Instruction>(User)) {
       auto *InsertPt = phiSafeInsertPt(U);
-      auto *GEP =
-          GetElementPtrInst::CreateInBounds(NewGVTy, NewGV, {Zero, Zero});
-      GEP->insertBefore(InsertPt);
+      auto *GEP = GetElementPtrInst::CreateInBounds(NewGVTy, NewGV,
+                                                    {Zero, Zero}, "", InsertPt);
       User->replaceUsesOfWith(OrigGV, GEP);
+    } else if (auto *CE = dyn_cast<ConstantExpr>(User)) {
+      auto *GEP = ConstantExpr::getInBoundsGetElementPtr(
+          NewGVTy, NewGV, ArrayRef<Constant *>({Zero, Zero}));
+      CE->handleOperandChange(OrigGV, GEP);
     } else {
-      // Constant expressions should have been lowered
       llvm_unreachable("Unsupported global variable user");
     }
   }
@@ -122,8 +124,8 @@ GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
   auto *NewGVCasted =
       new BitCastInst(NewGV, Type::getInt8PtrTy(*Ctx), "", CtorBB);
   CallInst::Create(BBRegisterFn,
-                   {Tag, NewGVCasted, ConstantInt::get(IntPtrTy, NewAllocSize)},
-                   "", CtorBB);
+                   {NewGVCasted, ConstantInt::get(IntPtrTy, NewAllocSize)}, "",
+                   CtorBB);
 
   // If the original global variable is externally visible, replace it with an
   // alias that points to the original data in the new global variable
@@ -154,7 +156,7 @@ bool GlobalVarTag::runOnModule(Module &M) {
   this->TagTy = Type::getIntNTy(*Ctx, kNumTagBits);
   this->IntPtrTy = DL->getIntPtrType(*Ctx);
   this->BBRegisterFn =
-      M.getOrInsertFunction("__bb_register", Type::getVoidTy(*Ctx), TagTy,
+      M.getOrInsertFunction("__bb_register", Type::getVoidTy(*Ctx),
                             Type::getInt8PtrTy(*Ctx), IntPtrTy);
 
   const auto &Vars = getAnalysis<VariableRecovery>().getVariables();

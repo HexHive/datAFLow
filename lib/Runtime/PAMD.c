@@ -55,7 +55,7 @@ static uint64_t calculateAllocSize(size_t Size) {
 /// Register an allocated memory object.
 ///
 /// Based on Algorithm 1 on the PAMD paper.
-void __bb_register(tag_t Tag, void *Obj, size_t AllocSize) {
+void __bb_register(void *Obj, size_t AllocSize) {
   initBaggyBounds();
 
   if (!Obj || !AllocSize) {
@@ -69,9 +69,6 @@ void __bb_register(tag_t Tag, void *Obj, size_t AllocSize) {
   assert(E >= SlotSize);
   const uint64_t Range = 1 << (E - SlotSize);
   memset(__baggy_bounds_table + Index, E, Range);
-
-  tag_t *TagAddr = (tag_t *)(P + AllocSize - kMetaSize);
-  *TagAddr = Tag;
 }
 
 static void unregisterMemoryObject(void *Obj) {
@@ -100,7 +97,9 @@ void *__bb_malloc(tag_t Tag, size_t Size) {
   uint64_t AllocSize = calculateAllocSize(Size);
   void *Ptr = NULL;
   posix_memalign(&Ptr, AllocSize, AllocSize);
-  __bb_register(Tag, Ptr, AllocSize);
+  __bb_register(Ptr, AllocSize);
+  tag_t *TagAddr = (tag_t *)((uintptr_t)Ptr + AllocSize - kMetaSize);
+  *TagAddr = Tag;
   return Ptr;
 }
 

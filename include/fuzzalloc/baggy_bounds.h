@@ -43,7 +43,7 @@ void *__bb_calloc(tag_t Tag, size_t NMemb, size_t Size);
 void *__bb_realloc(tag_t Tag, void *Ptr, size_t Size);
 void __bb_free(void *Ptr);
 
-void __bb_register(tag_t Tag, void *Obj, size_t Size);
+void __bb_register(void *Obj, size_t Size);
 tag_t __bb_lookup(void *Ptr, uintptr_t *Base);
 
 #if defined(__cplusplus)
