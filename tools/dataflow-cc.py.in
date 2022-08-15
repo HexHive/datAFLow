@@ -54,7 +54,7 @@ def main():
 
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libGlobalVariableTag.so',
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libHeapify.so',
-        '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libMemFuncTag.so',
+        '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libHeapTag.so',
     ])
 
     if args.debug:

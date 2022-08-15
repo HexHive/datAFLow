@@ -1,4 +1,4 @@
-//===-- MemFuncTag.cpp - Instrument dynamic memory funcs --------*- C++ -*-===//
+//===-- HeapTag.cpp - Instrument dynamic memory funcs -----------*- C++ -*-===//
 ///
 /// \file
 /// Instrument dynamic memory allocation functions
@@ -23,12 +23,12 @@
 
 using namespace llvm;
 
-#define DEBUG_TYPE "fuzzalloc-def-site-tag"
+#define DEBUG_TYPE "fuzzalloc-tag-heap"
 
-class MemFuncTag : public ModulePass {
+class HeapTag : public ModulePass {
 public:
   static char ID;
-  MemFuncTag() : ModulePass(ID) {}
+  HeapTag() : ModulePass(ID) {}
 
   virtual void getAnalysisUsage(AnalysisUsage &) const override;
   virtual bool runOnModule(Module &) override;
@@ -50,21 +50,21 @@ private:
       TaggedFuncMap;
 };
 
-char MemFuncTag::ID = 0;
+char HeapTag::ID = 0;
 
-ConstantInt *MemFuncTag::generateTag() const {
+ConstantInt *HeapTag::generateTag() const {
   return ConstantInt::get(
       TagTy, static_cast<uint64_t>(RAND(kFuzzallocTagMin, kFuzzallocTagMax)));
 }
 
-FunctionType *MemFuncTag::getTaggedFunctionType(const FunctionType *Ty) const {
+FunctionType *HeapTag::getTaggedFunctionType(const FunctionType *Ty) const {
   SmallVector<Type *, 4> TaggedFuncParams = {TagTy};
   TaggedFuncParams.append(Ty->param_begin(), Ty->param_end());
   return FunctionType::get(Ty->getReturnType(), TaggedFuncParams,
                            Ty->isVarArg());
 }
 
-Function *MemFuncTag::getTaggedFunction(const Function *OrigF) const {
+Function *HeapTag::getTaggedFunction(const Function *OrigF) const {
   const auto &Name = "__bb_" + OrigF->getName().str();
   auto *TaggedFTy = getTaggedFunctionType(OrigF->getFunctionType());
   auto TaggedCallee = Mod->getOrInsertFunction(Name, TaggedFTy);
@@ -79,7 +79,7 @@ Function *MemFuncTag::getTaggedFunction(const Function *OrigF) const {
   return TaggedF;
 }
 
-Function *MemFuncTag::tagFunction(const Function *OrigF) const {
+Function *HeapTag::tagFunction(const Function *OrigF) const {
   LLVM_DEBUG(dbgs() << "tagging function " << OrigF->getName() << '\n');
 
   // Insert (or get, if it already exists) the tagged function declaration
@@ -121,7 +121,7 @@ Function *MemFuncTag::tagFunction(const Function *OrigF) const {
   return TaggedF;
 }
 
-Instruction *MemFuncTag::tagCall(CallBase *CB, FunctionCallee TaggedF) const {
+Instruction *HeapTag::tagCall(CallBase *CB, FunctionCallee TaggedF) const {
   LLVM_DEBUG(dbgs() << "tagging call " << *CB << " (in function "
                     << CB->getFunction()->getName() << ")\n");
 
@@ -170,7 +170,7 @@ Instruction *MemFuncTag::tagCall(CallBase *CB, FunctionCallee TaggedF) const {
 }
 
 /// Replace the use of a memory allocation function with the tagged version
-void MemFuncTag::tagUser(User *U, Function *F) const {
+void HeapTag::tagUser(User *U, Function *F) const {
   LLVM_DEBUG(dbgs() << "replacing user " << *U << " of function "
                     << F->getName() << '\n');
 
@@ -210,11 +210,11 @@ void MemFuncTag::tagUser(User *U, Function *F) const {
   }
 }
 
-void MemFuncTag::getAnalysisUsage(AnalysisUsage &AU) const {
+void HeapTag::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<MemFuncIdentify>();
 }
 
-bool MemFuncTag::runOnModule(Module &M) {
+bool HeapTag::runOnModule(Module &M) {
   auto &MemFuncs = getAnalysis<MemFuncIdentify>().getFuncs();
 
   if (MemFuncs.empty()) {
@@ -278,18 +278,18 @@ bool MemFuncTag::runOnModule(Module &M) {
 // Pass registration
 //
 
-static RegisterPass<MemFuncTag> X(DEBUG_TYPE, "Instrument def sites", false,
+static RegisterPass<HeapTag> X(DEBUG_TYPE, "Tag heap variables", false,
                                   false);
 
-static void registerMemFuncTagPass(const PassManagerBuilder &,
+static void registerHeapTagPass(const PassManagerBuilder &,
                                    legacy::PassManagerBase &PM) {
-  PM.add(new MemFuncTag());
+  PM.add(new HeapTag());
 }
 
 static RegisterStandardPasses
-    RegisterMemFuncTagPass(PassManagerBuilder::EP_OptimizerLast,
-                           registerMemFuncTagPass);
+    RegisterHeapTagPass(PassManagerBuilder::EP_OptimizerLast,
+                           registerHeapTagPass);
 
 static RegisterStandardPasses
-    RegisterMemFuncTagPass0(PassManagerBuilder::EP_EnabledOnOptLevel0,
-                            registerMemFuncTagPass);
+    RegisterHeapTagPass0(PassManagerBuilder::EP_EnabledOnOptLevel0,
+                            registerHeapTagPass);

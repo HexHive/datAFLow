@@ -22,10 +22,10 @@ target_link_libraries(GlobalVariableTag PUBLIC
 )
 install(TARGETS GlobalVariableTag LIBRARY DESTINATION lib)
 
-add_library(MemFuncTag SHARED
-  MemFuncTag.cpp
+add_library(HeapTag SHARED
+  HeapTag.cpp
 )
-target_link_libraries(MemFuncTag PUBLIC
+target_link_libraries(HeapTag PUBLIC
   MemFuncIdentify
 )
-install(TARGETS MemFuncTag LIBRARY DESTINATION lib)
+install(TARGETS HeapTag LIBRARY DESTINATION lib)
