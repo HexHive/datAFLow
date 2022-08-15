@@ -47,7 +47,8 @@ bool VariableRecovery::runOnModule(Module &M) {
         if (!V) {
           continue;
         }
-        VarInfo VI(Var, V->getType());
+        auto *Ty = V->getType();
+        VarInfo VI(Var, Ty);
         if (Vars.insert({V, VI}).second) {
           NumLocalVars++;
         }
@@ -56,7 +57,10 @@ bool VariableRecovery::runOnModule(Module &M) {
         if (!Addr) {
           continue;
         }
-        VarInfo VI(Var, Addr->getType()->getPointerElementType());
+        auto *Ty = Addr->getType()->isPointerTy()
+                       ? Addr->getType()->getPointerElementType()
+                       : Addr->getType();
+        VarInfo VI(Var, Ty);
         if (Vars.insert({Addr, VI}).second) {
           NumLocalVars++;
         }
