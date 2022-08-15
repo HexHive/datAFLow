@@ -48,6 +48,7 @@ private:
 
   IntegerType *IntPtrTy;
   IntegerType *TagTy;
+  ConstantInt *DefaultTag;
 };
 
 char DebugUseSite::ID = 0;
@@ -70,10 +71,10 @@ void DebugUseSite::doInstrument(InterestingMemoryOperand *Op) {
 
   IRBuilder<> IRB(Inst);
 
-  // Get the def site
+  // Get the def site tag
   auto *Base = IRB.CreateAlloca(IntPtrTy, /*ArraySize=*/nullptr, "def.base");
   auto *PtrCast = IRB.CreatePointerCast(Ptr, IRB.getInt8PtrTy());
-  auto *DefSite = IRB.CreateCall(BBLookupFn, {PtrCast, Base}, "tag");
+  auto *Tag = IRB.CreateCall(BBLookupFn, {PtrCast, Base}, "tag");
 
   // Compute the use site offset (the same size as the tag). This is just the
   // difference between the pointer and the previously-computed base address
@@ -82,10 +83,13 @@ void DebugUseSite::doInstrument(InterestingMemoryOperand *Op) {
   BaseLoad->setMetadata(Mod->getMDKindID(kNoSanitizeMD),
                         MDNode::get(*Ctx, None));
 
-  // TODO use a select instruction based on whether default tag or not!!!!
-  auto *UseOffset = IRB.CreateSub(P, BaseLoad, Ptr->getName() + ".offset");
+  // If the tag is just the default tag, then the subtraction will produce an
+  // invalid result. So just use zero instead
+  auto *Offset = IRB.CreateSelect(
+      IRB.CreateICmpEQ(Tag, DefaultTag), Constant::getNullValue(IntPtrTy),
+      IRB.CreateSub(P, BaseLoad, Ptr->getName() + ".offset"));
 
-  IRB.CreateCall(BBDebugUseFn, {DefSite, UseOffset});
+  IRB.CreateCall(BBDebugUseFn, {Tag, Offset});
 }
 
 void DebugUseSite::getAnalysisUsage(AnalysisUsage &AU) const {
@@ -102,6 +106,7 @@ bool DebugUseSite::runOnModule(Module &M) {
 
   this->TagTy = Type::getIntNTy(*Ctx, kNumTagBits);
   this->IntPtrTy = DL->getIntPtrType(*Ctx);
+  this->DefaultTag = ConstantInt::get(TagTy, kFuzzallocDefaultTag);
 
   {
     auto *Int8PtrTy = Type::getInt8PtrTy(*Ctx);

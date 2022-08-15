@@ -81,26 +81,31 @@ void AFLUseSite::doInstrument(InterestingMemoryOperand *Op) {
 
   IRBuilder<> IRB(Inst);
 
-  // Get the def site
+  // Get the def site tag
   auto *Base = IRB.CreateAlloca(IntPtrTy, /*ArraySize=*/nullptr, "def.base");
   auto *PtrCast = IRB.CreatePointerCast(Ptr, IRB.getInt8PtrTy());
-  auto *DefSite = IRB.CreateCall(BBLookupFn, {PtrCast, Base}, "tag");
+  auto *Tag = IRB.CreateCall(BBLookupFn, {PtrCast, Base}, "tag");
 
   // Compute the use site offset (the same size as the tag). This is just the
   // difference between the pointer and the previously-computed base address
-  auto *UseOffset = [&]() -> Value * {
+  auto *Offset = [&]() -> Value * {
     if (ClUseOffset) {
       auto *P = IRB.CreatePtrToInt(Ptr, IntPtrTy);
       auto *BaseLoad = IRB.CreateLoad(Base);
       BaseLoad->setMetadata(Mod->getMDKindID(kNoSanitizeMD),
                             MDNode::get(*Ctx, None));
 
-      return IRB.CreateSExtOrTrunc(IRB.CreateSub(P, BaseLoad), TagTy);
+      // If the tag is just the default tag, then the subtraction will produce
+      // an invalid result. So just use zero instead
+      auto *Offset = IRB.CreateSelect(
+          IRB.CreateICmpEQ(Tag, DefaultTag), Constant::getNullValue(IntPtrTy),
+          IRB.CreateSub(P, BaseLoad, Ptr->getName() + ".offset"));
+      return IRB.CreateSExtOrTrunc(Offset, TagTy);
     } else {
       return Constant::getNullValue(TagTy);
     }
   }();
-  UseOffset->setName(Ptr->getName() + ".offset");
+  Offset->setName(Ptr->getName() + ".offset");
 
   // Use the PC as the use site identifier
   auto *UseSite =
@@ -108,7 +113,7 @@ void AFLUseSite::doInstrument(InterestingMemoryOperand *Op) {
                         /*isSigned=*/false, Ptr->getName() + ".use");
 
   // Incorporate the memory access offset into the use site
-  UseSite = IRB.CreateAdd(UseSite, UseOffset);
+  UseSite = IRB.CreateAdd(UseSite, Offset);
 
   // Load the AFL bitmap
   auto *AFLMap = IRB.CreateLoad(AFLMapPtr);
@@ -120,7 +125,7 @@ void AFLUseSite::doInstrument(InterestingMemoryOperand *Op) {
   // Hash algorithm: ((31 * (def_site - DEFAULT_TAG)) ^ use_site) - use_site
   auto *HashMul = ConstantInt::get(TagTy, 31);
   auto *Hash = IRB.CreateSub(
-      IRB.CreateXor(IRB.CreateMul(HashMul, IRB.CreateSub(DefSite, DefaultTag)),
+      IRB.CreateXor(IRB.CreateMul(HashMul, IRB.CreateSub(Tag, DefaultTag)),
                     UseSite),
       UseSite, Ptr->getName() + ".def_use_hash");
   auto *AFLMapIdx = IRB.CreateGEP(
