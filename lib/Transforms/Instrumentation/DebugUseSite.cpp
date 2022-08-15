@@ -85,6 +85,8 @@ void DebugUseSite::doInstrument(InterestingMemoryOperand *Op) {
   // difference between the pointer and the previously-computed base address
   auto *P = IRB.CreatePtrToInt(Ptr, IntPtrTy);
   auto *BaseLoad = IRB.CreateLoad(Base);
+  BaseLoad->setMetadata(Mod->getMDKindID(kFuzzallocNoInstrumentMD),
+                        MDNode::get(*Ctx, None));
   BaseLoad->setMetadata(Mod->getMDKindID(kNoSanitizeMD),
                         MDNode::get(*Ctx, None));
 

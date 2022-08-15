@@ -12,6 +12,7 @@
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 
 #include "fuzzalloc/Analysis/CollectStats.h"
+#include "fuzzalloc/Analysis/VariableRecovery.h"
 #include "fuzzalloc/Metadata.h"
 
 using namespace llvm;
@@ -21,22 +22,23 @@ using namespace llvm;
 char CollectStats::ID = 0;
 
 void CollectStats::getAnalysisUsage(AnalysisUsage &AU) const {
+  AU.addRequired<VariableRecovery>();
   AU.setPreservesAll();
 }
 
 void CollectStats::print(raw_ostream &O, const Module *) const {
-  O << "  num. basic blocks: " << this->NumBasicBlocks << "\n";
-  O << "  num. allocas: " << this->NumAllocas << "\n";
-  O << "  num. global variables: " << this->NumGlobalVars << "\n";
-  O << "  num. tagged allocas: " << this->NumTaggedAllocas << "\n";
-  O << "  num. instrumented use sites: " << this->NumInstrumentedUseSites
-    << "\n";
+  O << "  num. basic blocks: " << NumBasicBlocks << "\n";
+  O << "  num. local variables: " << NumLocalVars << "\n";
+  O << "  num. global variables: " << NumGlobalVars << "\n";
+  O << "  num. tagged local variables: " << NumTaggedLocalVars << "\n";
+  O << "  num. tagged local variables: " << NumTaggedGlobalVars << "\n";
+  O << "  num. instrumented use sites: " << NumInstrumentedUseSites << "\n";
 }
 
 bool CollectStats::doInitialization(Module &M) {
   this->NumBasicBlocks = 0;
-  this->NumAllocas = 0;
-  this->NumTaggedAllocas = 0;
+  this->NumLocalVars = 0;
+  this->NumTaggedLocalVars = 0;
   this->NumGlobalVars = 0;
   this->NumTaggedGlobalVars = 0;
   this->NumInstrumentedUseSites = 0;
@@ -45,20 +47,25 @@ bool CollectStats::doInitialization(Module &M) {
 }
 
 bool CollectStats::runOnModule(Module &M) {
+  const auto &Vars = getAnalysis<VariableRecovery>().getVariables();
+  for (const auto &[_, Var] : Vars) {
+    if (isa<DILocalVariable>(Var.getDbgVar())) {
+      NumLocalVars++;
+    } else {
+      NumGlobalVars++;
+    }
+  }
+
   for (const auto &F : M.functions()) {
     for (auto &BB : F) {
-      this->NumBasicBlocks++;
+      NumBasicBlocks++;
 
       for (auto &I : BB) {
-        if (isa<AllocaInst>(I)) {
-          this->NumAllocas++;
-        }
-
         if (I.getMetadata(M.getMDKindID(kFuzzallocTaggVarMD))) {
-          this->NumTaggedAllocas++;
+          NumTaggedLocalVars++;
         } else if (I.getMetadata(
                        M.getMDKindID(kFuzzallocInstrumentedUseSiteMD))) {
-          this->NumInstrumentedUseSites++;
+          NumInstrumentedUseSites++;
         }
       }
     }
@@ -66,11 +73,8 @@ bool CollectStats::runOnModule(Module &M) {
 
   for (const auto &G : M.globals()) {
     if (auto *GV = dyn_cast<GlobalVariable>(&G)) {
-      if (!GV->isDeclaration()) {
-        this->NumGlobalVars++;
-      }
       if (GV->getMetadata(M.getMDKindID(kFuzzallocTaggVarMD))) {
-        this->NumTaggedGlobalVars++;
+        NumTaggedGlobalVars++;
       }
     }
   }

@@ -8,6 +8,7 @@
 #ifndef VARIABLE_RECOVERY_H
 #define VARIABLE_RECOVERY_H
 
+#include <llvm/IR/DebugInfoMetadata.h>
 #include <llvm/IR/ValueMap.h>
 #include <llvm/Pass.h>
 

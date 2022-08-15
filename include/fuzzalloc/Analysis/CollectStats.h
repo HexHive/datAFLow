@@ -21,8 +21,8 @@ public:
   bool runOnModule(llvm::Module &) override;
 
   unsigned long getNumBasicBlocks() const { return NumBasicBlocks; }
-  unsigned long getNumAllocas() const { return NumAllocas; }
-  unsigned long getNumTaggedAllocas() const { return NumTaggedAllocas; }
+  unsigned long getNumLocalVars() const { return NumLocalVars; }
+  unsigned long getNumTaggedLocalVars() const { return NumTaggedLocalVars; }
   unsigned long getNumGlobalVars() const { return NumGlobalVars; }
   unsigned long getNumTaggedGlobalVars() const { return NumTaggedGlobalVars; }
   unsigned long getNumInstrumenteduseSites() const {
@@ -31,8 +31,8 @@ public:
 
 private:
   unsigned long NumBasicBlocks;
-  unsigned long NumAllocas;
-  unsigned long NumTaggedAllocas;
+  unsigned long NumLocalVars;
+  unsigned long NumTaggedLocalVars;
   unsigned long NumGlobalVars;
   unsigned long NumTaggedGlobalVars;
   unsigned long NumInstrumentedUseSites;

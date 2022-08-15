@@ -6,7 +6,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <llvm/IR/DebugInfo.h>
-#include <llvm/IR/DebugInfoMetadata.h>
 #include <llvm/IR/IntrinsicInst.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/Passes/PassBuilder.h>

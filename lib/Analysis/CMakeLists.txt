@@ -1,6 +1,9 @@
 add_library(CollectStats SHARED
   CollectStats.cpp
 )
+target_link_libraries(CollectStats PUBLIC
+  VariableRecovery
+)
 install(TARGETS CollectStats LIBRARY DESTINATION lib)
 
 add_library(DefSiteIdentify SHARED

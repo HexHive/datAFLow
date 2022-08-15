@@ -7,7 +7,6 @@
 
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DIBuilder.h>
-#include <llvm/IR/DebugInfoMetadata.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/Module.h>
