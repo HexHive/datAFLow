@@ -91,6 +91,8 @@ GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
       OrigGV->getType()->getPointerAddressSpace(),
       OrigGV->isExternallyInitialized());
   NewGV->copyAttributesFrom(OrigGV);
+  NewGV->setMetadata(Mod->getMDKindID(kFuzzallocBBAllocMD),
+                     MDNode::get(*Ctx, None));
   NewGV->setAlignment(MaybeAlign(NewAllocSize));
 
   // Copy debug info
