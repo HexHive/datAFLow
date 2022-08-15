@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <assert.h>
-#include <limits.h>
+#include <errno.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>

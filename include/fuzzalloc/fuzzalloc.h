@@ -20,16 +20,16 @@ extern "C" {
 typedef uint16_t tag_t;
 
 /// Number of bits in a tag
-const unsigned kNumTagBits = 16;
+extern const unsigned kNumTagBits;
 
 /// The default def site tag. Used by default for non-instrumented code
-const tag_t kFuzzallocDefaultTag = 1;
+extern const tag_t kFuzzallocDefaultTag;
 
 /// The default minimum tag value
-const tag_t kFuzzallocTagMin = kFuzzallocDefaultTag + 1;
+extern const tag_t kFuzzallocTagMin;
 
 /// The default maximum tag value
-const tag_t kFuzzallocTagMax = (tag_t)((~0) - 1);
+extern const tag_t kFuzzallocTagMax;
 
 // Adapted from http://c-faq.com/lib/randrange.html
 #define RAND(x, y) ((tag_t)((x) + random() / (RAND_MAX / ((y) - (x) + 1) + 1)))

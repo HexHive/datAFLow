@@ -17,7 +17,6 @@
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/Utils/EscapeEnumerator.h>
 #include <llvm/Transforms/Utils/Local.h>
-#include <llvm/Transforms/Utils/ModuleUtils.h>
 
 #include "fuzzalloc/Analysis/DefSiteIdentify.h"
 #include "fuzzalloc/Analysis/VariableRecovery.h"

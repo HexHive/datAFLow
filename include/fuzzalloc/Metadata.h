@@ -1,4 +1,4 @@
-//===-- Metadata.h - Metadata kinds -----------------------------*- C++ -*-===//
+//===-- Metadata.h - Metadata kinds -------------------------------*- C -*-===//
 ///
 /// \file
 /// Fuzzalloc LLVM metadata kinds
@@ -8,13 +8,21 @@
 #ifndef METADATA_H
 #define METADATA_H
 
-const char *kFuzzallocHeapifiedAllocaMD = "fuzzalloc.heapified_alloca";
-const char *kFuzzallocInstrumentedDerefMD = "fuzzalloc.instrumented_deref";
-const char *kFuzzallocNoInstrumentMD = "fuzzalloc.noinstrument";
-const char *kFuzzallocBBAllocMD = "fuzzalloc.bb_alloc";
-const char *kFuzzallocLoweredNewMD = "fuzzalloc.lowered_new";
-const char *kFuzzallocLoweredDeleteMD = "fuzzalloc.lowered_delete";
+#if defined(__cplusplus)
+extern "C" {
+#endif // __cplusplus
 
-const char *kNoSanitizeMD = "nosanitize";
+extern const char *kFuzzallocHeapifiedAllocaMD;
+extern const char *kFuzzallocInstrumentedDerefMD;
+extern const char *kFuzzallocNoInstrumentMD;
+extern const char *kFuzzallocBBAllocMD;
+extern const char *kFuzzallocLoweredNewMD;
+extern const char *kFuzzallocLoweredDeleteMD;
 
-#endif
+extern const char *kNoSanitizeMD;
+
+#if defined(__cplusplus)
+}
+#endif // __cplusplus
+
+#endif // METADATA_H
