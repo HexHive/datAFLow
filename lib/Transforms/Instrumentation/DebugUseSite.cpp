@@ -130,7 +130,6 @@ bool DebugUseSite::runOnModule(Module &M) {
     for (auto &Op : UseSiteOps) {
       doInstrument(&Op);
     }
-
     Changed = true;
   }
 

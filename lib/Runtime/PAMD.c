@@ -8,6 +8,7 @@
 
 #include <assert.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -153,7 +154,8 @@ tag_t __bb_lookup(void *Ptr, uintptr_t *Base) {
 }
 
 __attribute__((noinline)) void __bb_dbg_use(tag_t Def, uintptr_t Offset) {
-  fprintf(stderr, "[datAFLow] accessing def site %#x from %p (offset=%ld)\n",
+  fprintf(stderr,
+          "[datAFLow] accessing def site 0x%" PRIx16 " from %p (offset=%ld)\n",
           Def, __builtin_return_address(0), Offset);
 }
 

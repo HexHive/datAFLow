@@ -16,7 +16,6 @@
 
 #include "fuzzalloc/Analysis/UseSiteIdentify.h"
 #include "fuzzalloc/Metadata.h"
-#include "fuzzalloc/Streams.h"
 #include "fuzzalloc/baggy_bounds.h"
 #include "fuzzalloc/fuzzalloc.h"
 
@@ -155,6 +154,8 @@ void AFLUseSite::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 bool AFLUseSite::runOnModule(Module &M) {
+  bool Changed = false;
+
   // Initialize stuff
   this->Mod = &M;
   this->Ctx = &M.getContext();
@@ -193,20 +194,16 @@ bool AFLUseSite::runOnModule(Module &M) {
 
     auto &UseSiteOps = getAnalysis<UseSiteIdentify>(F).getUseSites();
     if (UseSiteOps.empty()) {
-      return false;
+      continue;
     }
 
     for (auto &Op : UseSiteOps) {
       doInstrument(&Op);
     }
+    Changed = true;
   }
 
-  status_stream() << "Num. instrumented reads: " << NumInstrumentedReads
-                  << '\n';
-  status_stream() << "Num. instrumented writes: " << NumInstrumentedWrites
-                  << '\n';
-
-  return true;
+  return Changed;
 }
 
 //
