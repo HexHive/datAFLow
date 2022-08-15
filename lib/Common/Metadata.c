@@ -7,9 +7,9 @@
 
 #include "fuzzalloc/Metadata.h"
 
-const char *kFuzzallocInstrumentedDerefMD = "fuzzalloc.instrumented_deref";
+const char *kFuzzallocInstrumentedUseSiteMD = "fuzzalloc.instrumented_use";
 const char *kFuzzallocNoInstrumentMD = "fuzzalloc.noinstrument";
-const char *kFuzzallocBBAllocMD = "fuzzalloc.bb_alloc";
+const char *kFuzzallocTaggVarMD = "fuzzalloc.tagged_var";
 const char *kFuzzallocLoweredNewMD = "fuzzalloc.lowered_new";
 const char *kFuzzallocLoweredDeleteMD = "fuzzalloc.lowered_delete";
 

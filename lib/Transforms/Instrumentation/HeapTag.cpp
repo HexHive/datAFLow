@@ -159,7 +159,7 @@ Instruction *HeapTag::tagCall(CallBase *CB, FunctionCallee TaggedF) const {
   TaggedCall->setAttributes(CB->getAttributes());
   TaggedCall->setDebugLoc(CB->getDebugLoc());
   TaggedCall->copyMetadata(*CB);
-  TaggedCall->setMetadata(Mod->getMDKindID(kFuzzallocBBAllocMD),
+  TaggedCall->setMetadata(Mod->getMDKindID(kFuzzallocTaggVarMD),
                           MDNode::get(*Ctx, None));
 
   // Replace the callee

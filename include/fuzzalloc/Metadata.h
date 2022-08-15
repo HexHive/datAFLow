@@ -12,9 +12,9 @@
 extern "C" {
 #endif // __cplusplus
 
-extern const char *kFuzzallocInstrumentedDerefMD;
+extern const char *kFuzzallocInstrumentedUseSiteMD;
 extern const char *kFuzzallocNoInstrumentMD;
-extern const char *kFuzzallocBBAllocMD;
+extern const char *kFuzzallocTaggVarMD;
 extern const char *kFuzzallocLoweredNewMD;
 extern const char *kFuzzallocLoweredDeleteMD;
 

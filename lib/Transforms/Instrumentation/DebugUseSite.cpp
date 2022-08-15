@@ -66,7 +66,7 @@ void DebugUseSite::doInstrument(InterestingMemoryOperand *Op) {
   LLVM_DEBUG(dbgs() << "Instrumenting " << *Inst << " (ptr=" << *Ptr << ")\n");
 
   // This metadata can be used by the static pointer analysis
-  Inst->setMetadata(Mod->getMDKindID(kFuzzallocInstrumentedDerefMD),
+  Inst->setMetadata(Mod->getMDKindID(kFuzzallocInstrumentedUseSiteMD),
                     MDNode::get(*Ctx, None));
 
   IRBuilder<> IRB(Inst);

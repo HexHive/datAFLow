@@ -28,17 +28,18 @@ void CollectStats::print(raw_ostream &O, const Module *) const {
   O << "  num. basic blocks: " << this->NumBasicBlocks << "\n";
   O << "  num. allocas: " << this->NumAllocas << "\n";
   O << "  num. global variables: " << this->NumGlobalVars << "\n";
-  O << "  num. baggy bounds allocs: " << this->NumBBAllocs << "\n";
-  O << "  num. of dereferenced pointers: " << this->NumInstrumentedDerefs
+  O << "  num. tagged allocas: " << this->NumTaggedAllocas << "\n";
+  O << "  num. instrumented use sites: " << this->NumInstrumentedUseSites
     << "\n";
 }
 
 bool CollectStats::doInitialization(Module &M) {
   this->NumBasicBlocks = 0;
   this->NumAllocas = 0;
+  this->NumTaggedAllocas = 0;
   this->NumGlobalVars = 0;
-  this->NumBBAllocs = 0;
-  this->NumInstrumentedDerefs = 0;
+  this->NumTaggedGlobalVars = 0;
+  this->NumInstrumentedUseSites = 0;
 
   return false;
 }
@@ -53,11 +54,11 @@ bool CollectStats::runOnModule(Module &M) {
           this->NumAllocas++;
         }
 
-        if (I.getMetadata(M.getMDKindID(kFuzzallocBBAllocMD))) {
-          this->NumBBAllocs++;
+        if (I.getMetadata(M.getMDKindID(kFuzzallocTaggVarMD))) {
+          this->NumTaggedAllocas++;
         } else if (I.getMetadata(
-                       M.getMDKindID(kFuzzallocInstrumentedDerefMD))) {
-          this->NumInstrumentedDerefs++;
+                       M.getMDKindID(kFuzzallocInstrumentedUseSiteMD))) {
+          this->NumInstrumentedUseSites++;
         }
       }
     }
@@ -67,6 +68,9 @@ bool CollectStats::runOnModule(Module &M) {
     if (auto *GV = dyn_cast<GlobalVariable>(&G)) {
       if (!GV->isDeclaration()) {
         this->NumGlobalVars++;
+      }
+      if (GV->getMetadata(M.getMDKindID(kFuzzallocTaggVarMD))) {
+        this->NumTaggedGlobalVars++;
       }
     }
   }

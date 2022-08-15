@@ -83,7 +83,7 @@ AllocaInst *LocalVarTag::tagAlloca(AllocaInst *OrigAlloca) {
       NewAllocaTy, OrigAlloca->getType()->getPointerAddressSpace(),
       OrigAlloca->hasName() ? OrigAlloca->getName() + ".tagged" : "",
       OrigAlloca);
-  NewAlloca->setMetadata(Mod->getMDKindID(kFuzzallocBBAllocMD),
+  NewAlloca->setMetadata(Mod->getMDKindID(kFuzzallocTaggVarMD),
                          MDNode::get(*Ctx, None));
   NewAlloca->copyMetadata(*OrigAlloca);
   NewAlloca->setAlignment(Align(NewAllocSize));

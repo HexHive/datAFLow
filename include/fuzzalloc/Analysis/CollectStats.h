@@ -22,20 +22,20 @@ public:
 
   unsigned long getNumBasicBlocks() const { return NumBasicBlocks; }
   unsigned long getNumAllocas() const { return NumAllocas; }
+  unsigned long getNumTaggedAllocas() const { return NumTaggedAllocas; }
   unsigned long getNumGlobalVars() const { return NumGlobalVars; }
-  unsigned long getNumBBAllocs() const { return NumBBAllocs; }
-  unsigned long getNumInstrumentedDerefs() const {
-    return NumInstrumentedDerefs;
+  unsigned long getNumTaggedGlobalVars() const { return NumTaggedGlobalVars; }
+  unsigned long getNumInstrumenteduseSites() const {
+    return NumInstrumentedUseSites;
   }
-  unsigned long getNumHeapifiedAllocas() const { return NumHeapifiedAllocas; }
 
 private:
   unsigned long NumBasicBlocks;
   unsigned long NumAllocas;
+  unsigned long NumTaggedAllocas;
   unsigned long NumGlobalVars;
-  unsigned long NumBBAllocs;
-  unsigned long NumInstrumentedDerefs;
-  unsigned long NumHeapifiedAllocas;
+  unsigned long NumTaggedGlobalVars;
+  unsigned long NumInstrumentedUseSites;
 };
 
 #endif // COLLECT_STATS_H

@@ -198,7 +198,7 @@ static bool isTaggedAlloc(const Value *V) {
     return false;
   }
   if (const auto *I = dyn_cast<Instruction>(V)) {
-    return I->hasMetadata() && I->getMetadata(kFuzzallocBBAllocMD);
+    return I->hasMetadata() && I->getMetadata(kFuzzallocTaggVarMD);
   }
   return false;
 }
@@ -208,7 +208,7 @@ static bool isInstrumentedDeref(const Value *V) {
     return false;
   }
   if (const auto *I = dyn_cast<Instruction>(V)) {
-    return I->hasMetadata() && I->getMetadata(kFuzzallocInstrumentedDerefMD);
+    return I->hasMetadata() && I->getMetadata(kFuzzallocInstrumentedUseSiteMD);
   }
   return false;
 }
