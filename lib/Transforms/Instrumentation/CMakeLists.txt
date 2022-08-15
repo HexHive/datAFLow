@@ -14,6 +14,14 @@ target_link_libraries(DebugUseSite PUBLIC
 )
 install(TARGETS DebugUseSite LIBRARY DESTINATION lib)
 
+add_library(GlobalVariableTag SHARED
+  GlobalVariableTag.cpp
+)
+target_link_libraries(GlobalVariableTag PUBLIC
+  DefSiteIdentify
+)
+install(TARGETS GlobalVariableTag LIBRARY DESTINATION lib)
+
 add_library(MemFuncTag SHARED
   MemFuncTag.cpp
 )

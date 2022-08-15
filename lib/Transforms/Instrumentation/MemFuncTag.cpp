@@ -5,8 +5,6 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include <stdlib.h>
-
 #include <llvm/ADT/Statistic.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/LegacyPassManager.h>
@@ -24,9 +22,6 @@
 #include "fuzzalloc/fuzzalloc.h"
 
 using namespace llvm;
-
-// Adapted from http://c-faq.com/lib/randrange.html
-#define RAND(x, y) ((tag_t)((x) + random() / (RAND_MAX / ((y) - (x) + 1) + 1)))
 
 #define DEBUG_TYPE "fuzzalloc-def-site-tag"
 
@@ -58,7 +53,8 @@ private:
 char MemFuncTag::ID = 0;
 
 ConstantInt *MemFuncTag::generateTag() const {
-  return ConstantInt::get(TagTy, RAND(kFuzzallocTagMin, kFuzzallocTagMax));
+  return ConstantInt::get(
+      TagTy, static_cast<uint64_t>(RAND(kFuzzallocTagMin, kFuzzallocTagMax)));
 }
 
 FunctionType *MemFuncTag::getTaggedFunctionType(const FunctionType *Ty) const {

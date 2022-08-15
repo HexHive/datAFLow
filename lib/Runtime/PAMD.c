@@ -7,7 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <assert.h>
-#include <errno.h>
 #include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -25,16 +24,6 @@
 static const size_t kTableSize = 1UL << 43; ///< Baggy bounds table size
 
 uint8_t *__baggy_bounds_table;
-
-/// Efficiently calculate the next power-of-2 of `X`
-static uint64_t nextPow2(uint64_t X) {
-  return X == 1 ? 1 : 1 << (64 - __builtin_clzl(X - 1));
-}
-
-/// Efficiently calculate log2 of `X`
-static uint64_t log2(uint64_t X) {
-  return ((CHAR_BIT * sizeof(uint64_t)) - 1) - __builtin_clzll(X);
-}
 
 /// Initialize the baggy bounds table
 static void initBaggyBounds() {
@@ -60,13 +49,13 @@ static uint64_t calculateAllocSize(size_t Size) {
   if (AdjustedSize < kSlotSize) {
     AdjustedSize = kSlotSize;
   }
-  return nextPow2(AdjustedSize);
+  return bb_nextPow2(AdjustedSize);
 }
 
 /// Register an allocated memory object.
 ///
 /// Based on Algorithm 1 on the PAMD paper.
-static void registerMemoryObject(tag_t Tag, void *Obj, size_t AllocSize) {
+void __bb_register(tag_t Tag, void *Obj, size_t AllocSize) {
   initBaggyBounds();
 
   if (!Obj || !AllocSize) {
@@ -76,7 +65,7 @@ static void registerMemoryObject(tag_t Tag, void *Obj, size_t AllocSize) {
   const uintptr_t P = (uintptr_t)Obj;
   const uint64_t SlotSize = kSlotSizeLog2;
   const uintptr_t Index = P >> SlotSize;
-  const uint64_t E = log2(AllocSize);
+  const uint64_t E = bb_log2(AllocSize);
   assert(E >= SlotSize);
   const uint64_t Range = 1 << (E - SlotSize);
   memset(__baggy_bounds_table + Index, E, Range);
@@ -111,7 +100,7 @@ void *__bb_malloc(tag_t Tag, size_t Size) {
   uint64_t AllocSize = calculateAllocSize(Size);
   void *Ptr = NULL;
   posix_memalign(&Ptr, AllocSize, AllocSize);
-  registerMemoryObject(Tag, Ptr, AllocSize);
+  __bb_register(Tag, Ptr, AllocSize);
   return Ptr;
 }
 

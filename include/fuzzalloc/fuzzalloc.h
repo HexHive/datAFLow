@@ -9,6 +9,7 @@
 #define FUZZALLOC_H
 
 #include <stddef.h>
+#include <stdlib.h>
 #include <stdint.h>
 
 #if defined(__cplusplus)
@@ -29,6 +30,9 @@ const tag_t kFuzzallocTagMin = kFuzzallocDefaultTag + 1;
 
 /// The default maximum tag value
 const tag_t kFuzzallocTagMax = (tag_t)((~0) - 1);
+
+// Adapted from http://c-faq.com/lib/randrange.html
+#define RAND(x, y) ((tag_t)((x) + random() / (RAND_MAX / ((y) - (x) + 1) + 1)))
 
 #if defined(__cplusplus)
 }

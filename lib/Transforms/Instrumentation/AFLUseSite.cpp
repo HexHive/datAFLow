@@ -175,7 +175,7 @@ bool AFLUseSite::runOnModule(Module &M) {
   }
 
   for (auto &F : M) {
-    if (F.isDeclaration()) {
+    if (F.isDeclaration() || F.getName().startswith("fuzzalloc.")) {
       continue;
     }
 
