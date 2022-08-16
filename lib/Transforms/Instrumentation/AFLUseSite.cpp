@@ -40,11 +40,13 @@ enum UseSiteCapture {
 
 static cl::opt<UseSiteCapture> ClUseCapture(
     cl::desc("What to capture at use site"),
-    cl::values(clEnumValN(UseSiteCapture::UseOnly, "fuzzalloc-use-only",
+    cl::values(clEnumValN(UseSiteCapture::UseOnly, "fuzzalloc-capture-use",
                           "Record a def was used"),
-               clEnumValN(UseSiteCapture::UseWithOffset, "fuzzalloc-use-offset",
+               clEnumValN(UseSiteCapture::UseWithOffset,
+                          "fuzzalloc-capture-offset",
                           "Record the offset a def was used"),
-               clEnumValN(UseSiteCapture::UseWithValue, "fuzzalloc-use-value",
+               clEnumValN(UseSiteCapture::UseWithValue,
+                          "fuzzalloc-capture-value",
                           "Record the value of the def")));
 
 //

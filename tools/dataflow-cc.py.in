@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 
 from argparse import ArgumentParser
+from itertools import chain
 from pathlib import Path
 from subprocess import run
+import os
 import sys
 
 
@@ -29,14 +31,11 @@ def parse_args():
     use_arg_group.add_argument('--use-sensitivity', default=[], action='append',
                                choices=('read', 'write'),
                                help='use site sensitivity')
-    use_arg_group.add_argument('--use-capture', default='use-offset',
-                                choices=('use-only', 'use-offset', 'use-value'),
-                                help='what to capture at the use site '
-                                     '(default=use-offset)')
-    use_arg_group.add_argument('--use-inst', default='afl',
-                               choices=('afl', 'debug'),
-                               help='use site instrumentation type '
-                                    '(default=afl)')
+    use_arg_group.add_argument('--use-capture',
+                                choices=('use', 'offset', 'value'),
+                                help='what to capture at the use site')
+    use_arg_group.add_argument('--use-inst', choices=('afl', 'debug'),
+                               help='use site instrumentation type')
 
     return parser.parse_known_args()
 
@@ -44,6 +43,7 @@ def parse_args():
 def main():
     """The main function."""
     args, clang_args = parse_args()
+    env = os.environ.copy()
 
     if THIS_FILE.endswith('c++'):
         cmd = [Path('@LLVM_TOOLS_BINARY_DIR@', 'clang++')]
@@ -71,35 +71,87 @@ def main():
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libHeapTag.so',
     ])
 
-    if args.use_inst == 'afl':
+    # Def site dynamic memory allocation functions
+    if 'FUZZALLOC_DEF_MEM_FUNCS' in env:
+        def_mem_funcs = env['FUZZALLOC_DEF_MEM_FUNCS']
+    elif args.def_mem_funcs:
+        def_mem_funcs = args.def_mem_funcs
+    else:
+        def_mem_funcs = None
+
+    if def_mem_funcs:
+        cmd.extend(['-mllvm',
+                    f'-fuzzalloc-custom-mem-funcs={def_mem_funcs}'])
+
+    # Def site sensitivity
+    if 'FUZZALLOC_DEF_SENSITIVITY' in env:
+        def_iter = (['-mllvm', f'-fuzzalloc-def-{def_sensitivity}'] for
+                def_sensitivity in env['FUZZALLOC_DEF_SENSITIVITY'].split(':'))
+        def_sensitivities = chain.from_iterable(def_iter)
+    elif args.def_sensitivity:
+        def_iter = (['-mllvm', f'-fuzzalloc-def-{def_sensitivity}'] for
+                def_sensitivity in args.def_sensitivity)
+        def_sensitivities = chain.from_iterable(def_iter)
+    else:
+        def_sensitivities = []
+
+    cmd.extend(def_sensitivities)
+
+    # Use site sensitivity
+    if 'FUZZALLOC_USE_SENSITIVITY' in env:
+        use_iter = (['-mllvm', f'-fuzzalloc-use-{use_sensitivity}'] for
+                use_sensitivity in env['FUZZALLOC_USE_SENSITIVITY'].split(':'))
+        use_sensitivities = chain.from_iterable(use_iter)
+    elif args.use_sensitivity:
+        use_iter = (['-mllvm', f'-fuzzalloc-use-{use_sensitivity}'] for
+                use_sensitivity in args.use_sensitivity)
+        use_sensitivities = chain.from_iterable(use_iter)
+    else:
+        use_sensitivities = []
+
+    cmd.extend(use_sensitivities)
+
+    # Use site capture
+    if 'FUZZALLOC_USE_CAPTURE' in env:
+        use_capture = env['FUZZALLOC_USE_CAPTURE']
+    elif args.use_capture:
+        use_capture = args.use_capture
+    else:
+        use_capture = None
+
+    if use_capture:
+        cmd.extend(['-mllvm', f'-fuzzalloc-capture-{use_capture}'])
+
+    # Use site instrumentation
+    if 'FUZZALLOC_USE_INST' in env:
+        use_inst = env['FUZZALLOC_USE_INST']
+    elif args.use_inst:
+        use_inst = args.use_inst
+    else:
+        use_inst = None
+
+    if use_inst == 'afl':
         cmd.extend([
             '-O3',
             '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libAFLUseSite.so',
         ])
-    elif args.use_inst == 'debug':
+    elif use_inst == 'debug':
         cmd.extend([
             '-O0',
             '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libDebugUseSite.so',
         ])
 
-    if args.def_mem_funcs:
-        cmd.extend(['-mllvm',
-                    f'-fuzzalloc-custom-mem-funcs={args.def_mem_funcs}'])
-    for def_sensitivity in args.def_sensitivity:
-        cmd.extend(['-mllvm', f'-fuzzalloc-def-{def_sensitivity}'])
-    for use_sensitivity in args.use_sensitivity:
-        cmd.extend(['-mllvm', f'-fuzzalloc-use-{use_sensitivity}'])
-    cmd.extend(['-mllvm', f'-fuzzalloc-{args.use_capture}'])
+    # Clang args
     cmd.extend(clang_args)
 
+    # Linker args
     cmd.extend([f'-L{LIB_DIR}', '-lFuzzallocRuntime'])
-
-    if args.use_inst == 'afl':
+    if use_inst == 'afl':
         cmd.extend([f'-L{LIB_DIR}', '-lAFLRuntime'])
-    
+
     cmd.append('-Qunused-arguments')
 
-    proc = run(cmd)
+    proc = run(cmd, check=False)
     return proc.returncode
 
 
