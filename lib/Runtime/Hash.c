@@ -40,7 +40,7 @@ XXH64_hash_t __afl_hash_def_use_offset(void *Ptr, size_t Size) {
   uintptr_t Base;
   tag_t Tag = __bb_lookup(Ptr, &Base);
   uintptr_t Use = (uintptr_t)__builtin_return_address(0);
-  ptrdiff_t Offset = (uintptr_t)Ptr - Base;
+  ptrdiff_t Offset = Tag == kFuzzallocDefaultTag ? 0 : (uintptr_t)Ptr - Base;
 
   uint64_t Data[] = {Tag, Use, Offset};
   XXH64_hash_t Hash = XXH64(Data, sizeof(Data), Seed);
@@ -71,7 +71,7 @@ XXH64_hash_t __afl_hash_def_use_value(void *Ptr, size_t Size) {
   uintptr_t Base;
   tag_t Tag = __bb_lookup(Ptr, &Base);
   uintptr_t Use = (uintptr_t)__builtin_return_address(0);
-  ptrdiff_t Offset = (uintptr_t)Ptr - Base;
+  ptrdiff_t Offset = Tag == kFuzzallocDefaultTag ? 0 : (uintptr_t)Ptr - Base;
   uint64_t Data[] = {Tag, Use, Offset};
 
   if (unlikely(XXH64_update(State, Data, sizeof(Data)) == XXH_ERROR)) {

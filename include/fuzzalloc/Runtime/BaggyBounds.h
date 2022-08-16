@@ -22,11 +22,6 @@ extern const unsigned kSlotSize;
 /// Size of metadata
 extern const size_t kMetaSize;
 
-/// Binary logarithm of slot size
-extern const unsigned kSlotSizeLog2;
-
-extern uint8_t *__baggy_bounds_table;
-
 /// Efficiently calculate the next power-of-2 of `X`
 uint64_t bb_nextPow2(uint64_t X);
 

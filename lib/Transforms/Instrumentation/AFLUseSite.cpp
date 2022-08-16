@@ -81,7 +81,6 @@ private:
   IntegerType *IntPtrTy;
   IntegerType *HashTy;
   IntegerType *TagTy;
-  ConstantInt *DefaultTag;
 };
 
 char AFLUseSite::ID = 0;
@@ -156,7 +155,6 @@ bool AFLUseSite::runOnModule(Module &M) {
   this->Int8PtrTy = Type::getInt8PtrTy(*Ctx);
   this->HashTy = Type::getIntNTy(*Ctx, sizeof(XXH64_hash_t) * CHAR_BIT);
   this->TagTy = Type::getIntNTy(*Ctx, kNumTagBits);
-  this->DefaultTag = ConstantInt::get(TagTy, kFuzzallocDefaultTag);
 
   {
     this->AFLMapPtr = new GlobalVariable(

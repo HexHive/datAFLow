@@ -23,9 +23,10 @@
 #define likely(x) __builtin_expect((x), 1)
 #define unlikely(x) __builtin_expect((x), 0)
 
+static const unsigned kSlotSizeLog2 = 4;
 static const size_t kTableSize = 1UL << 43; ///< Baggy bounds table size
 
-uint8_t *__baggy_bounds_table;
+static uint8_t *__baggy_bounds_table;
 
 /// Initialize the baggy bounds table
 static void initBaggyBounds() {

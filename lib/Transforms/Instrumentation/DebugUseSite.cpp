@@ -49,7 +49,6 @@ private:
   PointerType *Int8PtrTy;
   IntegerType *IntPtrTy;
   IntegerType *TagTy;
-  ConstantInt *DefaultTag;
 };
 
 char DebugUseSite::ID = 0;
@@ -93,7 +92,6 @@ bool DebugUseSite::runOnModule(Module &M) {
   this->IntPtrTy = DL->getIntPtrType(*Ctx);
   this->Int8PtrTy = Type::getInt8PtrTy(*Ctx);
   this->TagTy = Type::getIntNTy(*Ctx, kNumTagBits);
-  this->DefaultTag = ConstantInt::get(TagTy, kFuzzallocDefaultTag);
 
   this->BBDebugUseFn = Mod->getOrInsertFunction(
       "__bb_dbg_use", Type::getVoidTy(*Ctx), Int8PtrTy, IntPtrTy);

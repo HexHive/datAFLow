@@ -13,7 +13,6 @@
 #include <llvm/Transforms/Utils/ModuleUtils.h>
 
 #include "fuzzalloc/Analysis/DefSiteIdentify.h"
-#include "fuzzalloc/Analysis/VariableRecovery.h"
 #include "fuzzalloc/Metadata.h"
 #include "fuzzalloc/Runtime/BaggyBounds.h"
 #include "fuzzalloc/Transforms/Utils.h"
@@ -144,7 +143,6 @@ GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
 }
 
 void GlobalVarTag::getAnalysisUsage(AnalysisUsage &AU) const {
-  AU.addRequired<VariableRecovery>();
   AU.addRequired<DefSiteIdentify>();
 }
 
@@ -159,7 +157,6 @@ bool GlobalVarTag::runOnModule(Module &M) {
       M.getOrInsertFunction("__bb_register", Type::getVoidTy(*Ctx),
                             Type::getInt8PtrTy(*Ctx), IntPtrTy);
 
-  const auto &Vars = getAnalysis<VariableRecovery>().getVariables();
   const auto &DefSites = getAnalysis<DefSiteIdentify>().getDefSites();
 
   if (DefSites.empty()) {
