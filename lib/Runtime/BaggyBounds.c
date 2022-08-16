@@ -65,11 +65,10 @@ void __bb_register(void *Obj, size_t AllocSize) {
   }
 
   const uintptr_t P = (uintptr_t)Obj;
-  const uint64_t SlotSize = kSlotSizeLog2;
-  const uintptr_t Index = P >> SlotSize;
+  const uintptr_t Index = P >> kSlotSize;
   const uint64_t E = bb_log2(AllocSize);
-  assert(E >= SlotSize);
-  const uint64_t Range = 1 << (E - SlotSize);
+  assert(E >= kSlotSize);
+  const size_t Range = 1 << (E - kSlotSize);
   memset(__baggy_bounds_table + Index, E, Range);
 }
 
@@ -77,11 +76,10 @@ static void unregisterMemoryObject(void *Obj) {
   initBaggyBounds();
 
   const uintptr_t P = (uintptr_t)Obj;
-  const uint64_t SlotSize = kSlotSizeLog2;
-  const uintptr_t Index = P >> SlotSize;
+  const uintptr_t Index = P >> kSlotSize;
   const unsigned AllocSize = __baggy_bounds_table[Index];
   if (AllocSize != 0) {
-    const uint64_t Range = 1 << (AllocSize - SlotSize);
+    const size_t Range = 1 << (AllocSize - kSlotSize);
     memset(__baggy_bounds_table + Index, 0, Range);
   }
 }
@@ -96,7 +94,7 @@ void __bb_free(void *Ptr) {
 }
 
 void *__bb_malloc(tag_t Tag, size_t Size) {
-  uint64_t AllocSize = calculateAllocSize(Size);
+  size_t AllocSize = calculateAllocSize(Size);
   void *Ptr = NULL;
   posix_memalign(&Ptr, AllocSize, AllocSize);
   __bb_register(Ptr, AllocSize);
@@ -123,7 +121,21 @@ void *__bb_realloc(tag_t Tag, void *Ptr, size_t Size) {
   }
 
   void *NewPtr = __bb_malloc(Tag, Size);
-  // TODO memcpy data
+
+  const uintptr_t OldIndex = (uintptr_t)Ptr >> kSlotSize;
+  const unsigned OldE = __baggy_bounds_table[OldIndex];
+  const size_t OldSize = 1 << OldE;
+
+  const uintptr_t NewIndex = (uintptr_t)NewPtr >> kSlotSize;
+  const unsigned NewE = __baggy_bounds_table[NewIndex];
+  const size_t NewSize = 1 << NewE;
+
+  if (NewSize > OldSize) {
+    memcpy(NewPtr, Ptr, OldSize);
+  } else {
+    memcpy(NewPtr, Ptr, NewSize);
+  }
+
   __bb_free(Ptr);
   return NewPtr;
 }
@@ -142,7 +154,7 @@ tag_t __bb_lookup(void *Ptr, uintptr_t *Base) {
     return kFuzzallocDefaultTag;
   }
 
-  const uint64_t AllocSize = 1 << E;
+  const size_t AllocSize = 1 << E;
   *Base = P & ~(AllocSize - 1);
 
   tag_t *TagAddr = (tag_t *)(*Base + AllocSize - kMetaSize);
@@ -155,7 +167,8 @@ void __bb_dbg_use(void *Ptr, size_t Size) {
   ptrdiff_t Offset = (uintptr_t)Ptr - Base;
 
   fprintf(stderr,
-          "[datAFLow] accessing def site 0x%" PRIx16 " from %p (offset=%td, size=%zu)\n",
+          "[datAFLow] accessing def site 0x%" PRIx16
+          " from %p (offset=%td, size=%zu)\n",
           Tag, __builtin_return_address(0), Offset, Size);
 }
 
