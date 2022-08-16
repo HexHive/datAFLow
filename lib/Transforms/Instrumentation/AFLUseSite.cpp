@@ -133,8 +133,8 @@ void AFLUseSite::doInstrument(InterestingMemoryOperand *Op) {
   //
   // zext is necessary otherwise we end up using signed indices
   //
-  // Hash algorithm: ((31 * (def_site - DEFAULT_TAG)) ^ use_site) - use_site
-  auto *HashMul = ConstantInt::get(TagTy, 31);
+  // Hash algorithm: ((33 * (def_site - DEFAULT_TAG)) ^ use_site) - use_site
+  auto *HashMul = ConstantInt::get(TagTy, 33);
   auto *Hash = IRB.CreateSub(
       IRB.CreateXor(IRB.CreateMul(HashMul, IRB.CreateSub(Tag, DefaultTag)),
                     UseSite),

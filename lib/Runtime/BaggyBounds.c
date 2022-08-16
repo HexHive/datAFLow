@@ -1,8 +1,9 @@
-//===-- PAMD.c - Padding Area MetaData ----------------------------*- C -*-===//
+//===-- BaggyBounds.c - BaggyBounds metadata ----------------------*- C -*-===//
 ///
 /// \file
 /// Implements the Padding Area MetaData (PAMD) approach proposed by Zhengyang
-/// Liu and John Criswell in "Flexible and Efficient Memory Object Metadata"
+/// Liu and John Criswell in "Flexible and Efficient Memory Object Metadata".
+/// This approach is based on baggy bounds.
 ///
 //===----------------------------------------------------------------------===//
 

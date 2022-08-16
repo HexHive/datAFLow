@@ -1,4 +1,5 @@
 add_library(FuzzallocRuntime STATIC
-  PAMD.c
+  BaggyBounds.c
+  Hash.c
 )
 install(TARGETS FuzzallocRuntime LIBRARY DESTINATION lib)
