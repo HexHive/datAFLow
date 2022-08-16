@@ -16,7 +16,6 @@
 #include "fuzzalloc/Analysis/VariableRecovery.h"
 #include "fuzzalloc/Metadata.h"
 #include "fuzzalloc/Runtime/BaggyBounds.h"
-#include "fuzzalloc/Streams.h"
 #include "fuzzalloc/Transforms/Utils.h"
 
 using namespace llvm;
@@ -86,13 +85,13 @@ GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
   // module)
   auto *NewGV = new GlobalVariable(
       *Mod, NewGVTy, OrigGV->isConstant(), GlobalValue::PrivateLinkage, NewInit,
-      OrigGV->hasName() ? OrigGV->getName() + ".tagged" : "",
-      /*insertBefore=*/nullptr, OrigGV->getThreadLocalMode(),
-      OrigGV->getType()->getPointerAddressSpace(),
+      OrigGV->hasName() ? OrigGV->getName() + ".tagged" : "", OrigGV,
+      OrigGV->getThreadLocalMode(), OrigGV->getType()->getPointerAddressSpace(),
       OrigGV->isExternallyInitialized());
   NewGV->copyAttributesFrom(OrigGV);
   NewGV->setMetadata(Mod->getMDKindID(kFuzzallocTaggVarMD),
                      MDNode::get(*Ctx, None));
+  NewGV->setDSOLocal(true);
   NewGV->setAlignment(MaybeAlign(NewAllocSize));
 
   // Copy debug info
@@ -180,7 +179,6 @@ bool GlobalVarTag::runOnModule(Module &M) {
 
   for (auto *Def : DefSites) {
     if (auto *GV = dyn_cast<GlobalVariable>(Def)) {
-      status_stream() << "tagging " << Vars.lookup(GV) << '\n';
       tagGlobalVariable(GV, CtorEntryBB);
       NumTaggedGVs++;
     }

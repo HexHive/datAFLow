@@ -90,7 +90,7 @@ XXH64_hash_t __afl_hash_def_use_value(void *Ptr, size_t Size) {
   fprintf(stderr,
           "[datAFLow] hash(0x%" PRIx16 ", %" PRIu64 ", 0x%" PRIx64
           ", %p, %zu) -> %zu\n",
-          Tag, Offset, Use, Val, ValSize, Hash);
+          Tag, Offset, Use, Ptr, Size, Hash);
 #endif
   return Hash;
 }

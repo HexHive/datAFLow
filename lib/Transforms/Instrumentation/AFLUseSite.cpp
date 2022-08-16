@@ -42,11 +42,9 @@ static cl::opt<UseSiteCapture> ClUseCapture(
     cl::desc("What to capture at use site"),
     cl::values(clEnumValN(UseSiteCapture::UseOnly, "fuzzalloc-use-only",
                           "Record a def was used"),
-               clEnumValN(UseSiteCapture::UseWithOffset,
-                          "fuzzalloc-use-offset",
+               clEnumValN(UseSiteCapture::UseWithOffset, "fuzzalloc-use-offset",
                           "Record the offset a def was used"),
-               clEnumValN(UseSiteCapture::UseWithValue,
-                          "fuzzalloc-use-value",
+               clEnumValN(UseSiteCapture::UseWithValue, "fuzzalloc-use-value",
                           "Record the value of the def")));
 
 //

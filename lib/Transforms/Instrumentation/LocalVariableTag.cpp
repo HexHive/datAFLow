@@ -18,7 +18,6 @@
 #include "fuzzalloc/Analysis/VariableRecovery.h"
 #include "fuzzalloc/Metadata.h"
 #include "fuzzalloc/Runtime/BaggyBounds.h"
-#include "fuzzalloc/Streams.h"
 #include "fuzzalloc/Transforms/Utils.h"
 
 using namespace llvm;
@@ -156,7 +155,6 @@ bool LocalVarTag::runOnModule(Module &M) {
 
   for (auto *Def : DefSites) {
     if (auto *Alloca = dyn_cast<AllocaInst>(Def)) {
-      status_stream() << "tagging " << Vars.lookup(Alloca) << '\n';
       tagAlloca(Alloca);
       NumTaggedLocals++;
     }

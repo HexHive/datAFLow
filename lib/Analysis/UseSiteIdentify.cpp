@@ -17,7 +17,6 @@
 
 #include "fuzzalloc/Analysis/UseSiteIdentify.h"
 #include "fuzzalloc/Metadata.h"
-#include "fuzzalloc/Streams.h"
 
 using namespace llvm;
 
@@ -251,9 +250,6 @@ bool UseSiteIdentify::runOnFunction(Function &F) {
       }
     }
   }
-
-  status_stream() << F.getName() << ": " << NumUsesToTrack
-                  << " use sites identified\n";
 
   return false;
 }
