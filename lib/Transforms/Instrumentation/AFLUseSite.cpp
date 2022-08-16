@@ -109,10 +109,10 @@ void AFLUseSite::doInstrument(InterestingMemoryOperand *Op) {
   // Compute the AFL coverage bitmap index based on the def-use chain
   auto *PtrCast = IRB.CreatePointerCast(Ptr, Int8PtrTy);
   auto *PtrElemTy = Ptr->getType()->getPointerElementType();
-  auto *Hash = IRB.CreateCall(
-      HashFn,
-      {PtrCast, ConstantInt::get(IntPtrTy, DL->getTypeStoreSize(PtrElemTy))},
-      Ptr->hasName() ? Ptr->getName() + ".hash" : "hash");
+  auto *Size = ConstantInt::get(IntPtrTy, DL->getTypeStoreSize(PtrElemTy));
+  auto *Hash =
+      IRB.CreateCall(HashFn, {PtrCast, Size},
+                     Ptr->hasName() ? Ptr->getName() + ".hash" : "hash");
 
   auto *HashMask = [&]() -> ConstantInt * {
     if (MAP_SIZE_POW2 <= 16) {

@@ -149,10 +149,14 @@ tag_t __bb_lookup(void *Ptr, uintptr_t *Base) {
   return *TagAddr;
 }
 
-void __bb_dbg_use(tag_t Def, uintptr_t Offset) {
+void __bb_dbg_use(void *Ptr, size_t Size) {
+  uintptr_t Base;
+  tag_t Tag = __bb_lookup(Ptr, &Base);
+  ptrdiff_t Offset = (uintptr_t)Ptr - Base;
+
   fprintf(stderr,
-          "[datAFLow] accessing def site 0x%" PRIx16 " from %p (offset=%ld)\n",
-          Def, __builtin_return_address(0), Offset);
+          "[datAFLow] accessing def site 0x%" PRIx16 " from %p (offset=%td, size=%zu)\n",
+          Tag, __builtin_return_address(0), Offset, Size);
 }
 
 void *malloc(size_t Size) { return __bb_malloc(kFuzzallocDefaultTag, Size); }

@@ -44,9 +44,9 @@ private:
   LLVMContext *Ctx;
   const DataLayout *DL;
 
-  FunctionCallee BBLookupFn;
   FunctionCallee BBDebugUseFn;
 
+  PointerType *Int8PtrTy;
   IntegerType *IntPtrTy;
   IntegerType *TagTy;
   ConstantInt *DefaultTag;
@@ -72,32 +72,10 @@ void DebugUseSite::doInstrument(InterestingMemoryOperand *Op) {
 
   IRBuilder<> IRB(Inst);
 
-  // Get the def site tag. The __bb_lookup function also takes a pointer to the
-  // object's base address, which is used to compute the offset (if required).
-  // We only need the base address for this offset calculation, so set a fairly
-  // constrainted lifetime
-  auto *Base = IRB.CreateAlloca(IntPtrTy, /*ArraySize=*/nullptr, "def.base");
-  IRB.CreateLifetimeStart(Base);
-  auto *PtrCast = IRB.CreatePointerCast(Ptr, IRB.getInt8PtrTy());
-  auto *Tag = IRB.CreateCall(BBLookupFn, {PtrCast, Base}, "tag");
-
-  // Compute the use site offset (the same size as the tag). This is just the
-  // difference between the pointer and the previously-computed base address
-  auto *P = IRB.CreatePtrToInt(Ptr, IntPtrTy);
-  auto *BaseLoad = IRB.CreateLoad(Base);
-  BaseLoad->setMetadata(Mod->getMDKindID(kFuzzallocNoInstrumentMD),
-                        MDNode::get(*Ctx, None));
-  BaseLoad->setMetadata(Mod->getMDKindID(kNoSanitizeMD),
-                        MDNode::get(*Ctx, None));
-
-  // If the tag is just the default tag, then the subtraction will produce an
-  // invalid result. So just use zero instead
-  auto *Offset = IRB.CreateSelect(
-      IRB.CreateICmpEQ(Tag, DefaultTag), Constant::getNullValue(IntPtrTy),
-      IRB.CreateSub(P, BaseLoad, Ptr->getName() + ".offset"));
-  IRB.CreateLifetimeEnd(Base);
-
-  IRB.CreateCall(BBDebugUseFn, {Tag, Offset});
+  auto *PtrCast = IRB.CreatePointerCast(Ptr, Int8PtrTy);
+  auto *PtrElemTy = Ptr->getType()->getPointerElementType();
+  auto *Size = ConstantInt::get(IntPtrTy, DL->getTypeStoreSize(PtrElemTy));
+  IRB.CreateCall(BBDebugUseFn, {PtrCast, Size});
 }
 
 void DebugUseSite::getAnalysisUsage(AnalysisUsage &AU) const {
@@ -112,17 +90,13 @@ bool DebugUseSite::runOnModule(Module &M) {
   this->Ctx = &M.getContext();
   this->DL = &M.getDataLayout();
 
-  this->TagTy = Type::getIntNTy(*Ctx, kNumTagBits);
   this->IntPtrTy = DL->getIntPtrType(*Ctx);
+  this->Int8PtrTy = Type::getInt8PtrTy(*Ctx);
+  this->TagTy = Type::getIntNTy(*Ctx, kNumTagBits);
   this->DefaultTag = ConstantInt::get(TagTy, kFuzzallocDefaultTag);
 
-  {
-    auto *Int8PtrTy = Type::getInt8PtrTy(*Ctx);
-    this->BBLookupFn = Mod->getOrInsertFunction("__bb_lookup", TagTy, Int8PtrTy,
-                                                IntPtrTy->getPointerTo());
-    this->BBDebugUseFn = Mod->getOrInsertFunction(
-        "__bb_dbg_use", Type::getVoidTy(*Ctx), TagTy, IntPtrTy);
-  }
+  this->BBDebugUseFn = Mod->getOrInsertFunction(
+      "__bb_dbg_use", Type::getVoidTy(*Ctx), Int8PtrTy, IntPtrTy);
 
   for (auto &F : M) {
     if (F.isDeclaration() || F.getName().startswith("fuzzalloc.")) {
