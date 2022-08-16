@@ -19,7 +19,9 @@
 #include "fuzzalloc/Runtime/BaggyBounds.h"
 #include "fuzzalloc/fuzzalloc.h"
 
-#include "config.h" // AFL++
+// AFL++ headers
+#include "config.h"
+#include "xxhash.h"
 
 using namespace llvm;
 
@@ -31,8 +33,11 @@ namespace {
 //
 
 static cl::opt<bool> ClUseOffset("fuzzalloc-use-offset",
-                                 cl::desc("Capture offsets in the use site"),
+                                 cl::desc("Capture offsets at the use site"),
                                  cl::Hidden, cl::init(true));
+static cl::opt<bool> ClUseValue("fuzzalloc-use-value",
+                                cl::desc("Capture values at the use site"),
+                                cl::init(false));
 
 //
 // Global variables
@@ -65,6 +70,7 @@ private:
   GlobalVariable *BaggyBoundsPtr;
 
   IntegerType *IntPtrTy;
+  IntegerType *HashTy;
   IntegerType *TagTy;
   ConstantInt *DefaultTag;
 };
@@ -94,7 +100,9 @@ void AFLUseSite::doInstrument(InterestingMemoryOperand *Op) {
   // We only need the base address for this offset calculation, so set a fairly
   // constrainted lifetime
   auto *Base = IRB.CreateAlloca(IntPtrTy, /*ArraySize=*/nullptr, "def.base");
-  IRB.CreateLifetimeStart(Base);
+  auto *BaseSize = ConstantInt::get(
+      IntPtrTy, DL->getTypeAllocSize(Base->getAllocatedType()));
+  IRB.CreateLifetimeStart(Base, BaseSize);
   auto *PtrCast = IRB.CreatePointerCast(Ptr, IRB.getInt8PtrTy());
   auto *Tag = IRB.CreateCall(BBLookupFn, {PtrCast, Base}, "tag");
 
@@ -116,34 +124,50 @@ void AFLUseSite::doInstrument(InterestingMemoryOperand *Op) {
       return Constant::getNullValue(IntPtrTy);
     }
   }();
-  Offset->setName(Ptr->getName() + ".offset");
-  IRB.CreateLifetimeEnd(Base);
+  Offset->setName(Ptr->hasName() ? Ptr->getName() + ".offset" : "offset");
+  IRB.CreateLifetimeEnd(Base, BaseSize);
 
-  // Hash the tag, offset, and use site to generate the coverage map index
-  auto *Hash = IRB.CreateCall(HashFn, {Tag, Offset}, "hash");
+  // Hash the data-flow to get an index into the AFL coverage bitmap. At a
+  // minimum, we hash the object's def-site tag. If enabled, the offset at which
+  // the object is being accessed is also hashed. Finally, the value of the
+  // object being accessed can also be included in the hash
+  auto *Hash = [&]() -> Value * {
+    if (ClUseValue) {
+      auto *PtrElemTy = Ptr->getType()->getPointerElementType();
+      return IRB.CreateCall(
+          HashFn,
+          {Tag, Offset, Ptr,
+           ConstantInt::get(IntPtrTy, DL->getTypeStoreSize(PtrElemTy))});
+    } else {
+      return IRB.CreateCall(HashFn, {Tag, Offset});
+    }
+  }();
+  Hash->setName(Ptr->hasName() ? Ptr->getName() + ".hash" : "hash");
+
   auto *HashMask = [&]() -> ConstantInt * {
     if (MAP_SIZE_POW2 <= 16) {
-      return ConstantInt::get(IntPtrTy, 0xFFFF);
+      return ConstantInt::get(HashTy, 0xFFFF);
     } else if (MAP_SIZE_POW2 <= 32) {
-      return ConstantInt::get(IntPtrTy, 0xFFFFFFFF);
+      return ConstantInt::get(HashTy, 0xFFFFFFFF);
     } else {
-      return ConstantInt::get(IntPtrTy, 0xFFFFFFFFFFFFFFFF);
+      return ConstantInt::get(HashTy, 0xFFFFFFFFFFFFFFFF);
     }
   }();
 
   // Load the AFL bitmap (first mask out the hash depending on the bitmap size)
   auto *AFLMap = IRB.CreateLoad(AFLMapPtr);
+  AFLMap->setMetadata(Mod->getMDKindID(kNoSanitizeMD), MDNode::get(*Ctx, None));
+
   auto *AFLMapIdx = IRB.CreateGEP(AFLMap, IRB.CreateAnd(Hash, HashMask),
                                   "__afl_area_ptr_idx");
 
   // Update the bitmap by incrementing the count
   auto *CounterLoad = IRB.CreateLoad(AFLMapIdx);
-  auto *Incr = IRB.CreateAdd(CounterLoad, IRB.getInt8(1));
-  auto *CounterStore = IRB.CreateStore(Incr, AFLMapIdx);
-
-  AFLMap->setMetadata(Mod->getMDKindID(kNoSanitizeMD), MDNode::get(*Ctx, None));
   CounterLoad->setMetadata(Mod->getMDKindID(kNoSanitizeMD),
                            MDNode::get(*Ctx, None));
+  auto *Incr = IRB.CreateAdd(CounterLoad, IRB.getInt8(1));
+
+  auto *CounterStore = IRB.CreateStore(Incr, AFLMapIdx);
   CounterStore->setMetadata(Mod->getMDKindID(kNoSanitizeMD),
                             MDNode::get(*Ctx, None));
 }
@@ -160,8 +184,9 @@ bool AFLUseSite::runOnModule(Module &M) {
   this->Ctx = &M.getContext();
   this->DL = &M.getDataLayout();
 
-  this->TagTy = Type::getIntNTy(*Ctx, kNumTagBits);
   this->IntPtrTy = DL->getIntPtrType(*Ctx);
+  this->HashTy = Type::getIntNTy(*Ctx, sizeof(XXH64_hash_t) * CHAR_BIT);
+  this->TagTy = Type::getIntNTy(*Ctx, kNumTagBits);
   this->DefaultTag = ConstantInt::get(TagTy, kFuzzallocDefaultTag);
 
   {
@@ -175,9 +200,17 @@ bool AFLUseSite::runOnModule(Module &M) {
 
     this->BBLookupFn = Mod->getOrInsertFunction("__bb_lookup", TagTy, Int8PtrTy,
                                                 IntPtrTy->getPointerTo());
-    this->HashFn =
-        Mod->getOrInsertFunction("__afl_hash", IntPtrTy, TagTy, IntPtrTy);
   }
+
+  this->HashFn = [&]() -> FunctionCallee {
+    auto *Int8PtrTy = Type::getInt8PtrTy(*Ctx);
+    if (ClUseValue) {
+      return Mod->getOrInsertFunction("__afl_hash_with_val", HashTy, TagTy,
+                                      IntPtrTy, Int8PtrTy, IntPtrTy);
+    } else {
+      return Mod->getOrInsertFunction("__afl_hash", HashTy, TagTy, IntPtrTy);
+    }
+  }();
 
   for (auto &F : M) {
     if (F.isDeclaration() || F.getName().startswith("fuzzalloc.")) {
