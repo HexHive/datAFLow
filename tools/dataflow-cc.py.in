@@ -14,16 +14,30 @@ LIB_DIR = Path(THIS_DIR.parent) / 'lib'
 def parse_args():
     """Parse command-line options."""
     parser = ArgumentParser(description='datAFLow C compiler')
-    parser.add_argument('--custom-mem-funcs', type=Path, metavar='TXT',
-                        help='Special case list of custom memory allocation '
-                             'functions')
-    parser.add_argument('--def-sensitivity', default=[], action='append',
-                        choices=('array', 'struct'),
-                        help='Def site sensitivity')
-    parser.add_argument('--use-sensitivity', default=[], action='append',
-                        choices=('read', 'write'), help='Use site sensitivity')
-    parser.add_argument('--use-inst', default='afl', choices=('afl', 'debug'),
-                        help='Use site instrumentation type')
+
+    # def site options
+    def_arg_group = parser.add_argument_group('def sites', 'Def site options')
+    def_arg_group.add_argument('--def-mem-funcs', type=Path, metavar='TXT',
+                               help='LLVM special case list of custom memory '
+                               'allocation functions')
+    def_arg_group.add_argument('--def-sensitivity', default=[], action='append',
+                               choices=('array', 'struct'),
+                               help='def site sensitivity')
+
+    # Use site options
+    use_arg_group = parser.add_argument_group('use sites', 'Use site options')
+    use_arg_group.add_argument('--use-sensitivity', default=[], action='append',
+                               choices=('read', 'write'),
+                               help='use site sensitivity')
+    use_arg_group.add_argument('--use-capture', default='use-offset',
+                                choices=('use-only', 'use-offset', 'use-value'),
+                                help='what to capture at the use site '
+                                     '(default=use-offset)')
+    use_arg_group.add_argument('--use-inst', default='afl',
+                               choices=('afl', 'debug'),
+                               help='use site instrumentation type '
+                                    '(default=afl)')
+
     return parser.parse_known_args()
 
 
@@ -68,14 +82,16 @@ def main():
             '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libDebugUseSite.so',
         ])
 
-    if args.custom_mem_funcs:
+    if args.def_mem_funcs:
         cmd.extend(['-mllvm',
-                    f'-fuzzalloc-custom-mem-funcs={args.custom_mem_funcs}'])
+                    f'-fuzzalloc-custom-mem-funcs={args.def_mem_funcs}'])
     for def_sensitivity in args.def_sensitivity:
         cmd.extend(['-mllvm', f'-fuzzalloc-def-{def_sensitivity}'])
     for use_sensitivity in args.use_sensitivity:
         cmd.extend(['-mllvm', f'-fuzzalloc-use-{use_sensitivity}'])
+    cmd.extend(['-mllvm', f'-fuzzalloc-{args.use_capture}'])
     cmd.extend(clang_args)
+
     cmd.extend([f'-L{LIB_DIR}', '-lFuzzallocRuntime'])
 
     if args.use_inst == 'afl':
