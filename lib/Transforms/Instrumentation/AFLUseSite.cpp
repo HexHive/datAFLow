@@ -16,8 +16,11 @@
 
 #include "fuzzalloc/Analysis/UseSiteIdentify.h"
 #include "fuzzalloc/Metadata.h"
-#include "fuzzalloc/baggy_bounds.h"
+#include "fuzzalloc/Runtime/BaggyBounds.h"
+#include "fuzzalloc/Runtime/Hash.h"
 #include "fuzzalloc/fuzzalloc.h"
+
+#include "config.h" // AFL++
 
 using namespace llvm;
 
@@ -56,14 +59,15 @@ private:
   LLVMContext *Ctx;
   const DataLayout *DL;
 
-  FunctionCallee ReadPCAsmFn;
   FunctionCallee BBLookupFn;
+  FunctionCallee HashFn;
 
   GlobalVariable *AFLMapPtr;
   GlobalVariable *BaggyBoundsPtr;
 
   IntegerType *IntPtrTy;
   IntegerType *TagTy;
+  IntegerType *HashTy;
   ConstantInt *DefaultTag;
 };
 
@@ -107,42 +111,24 @@ void AFLUseSite::doInstrument(InterestingMemoryOperand *Op) {
 
       // If the tag is just the default tag, then the subtraction will produce
       // an invalid result. So just use zero instead
-      auto *Offset = IRB.CreateSelect(
+      return IRB.CreateSelect(
           IRB.CreateICmpEQ(Tag, DefaultTag), Constant::getNullValue(IntPtrTy),
           IRB.CreateSub(P, BaseLoad, Ptr->getName() + ".offset"));
-      return IRB.CreateSExtOrTrunc(Offset, TagTy);
     } else {
-      return Constant::getNullValue(TagTy);
+      return Constant::getNullValue(IntPtrTy);
     }
   }();
   Offset->setName(Ptr->getName() + ".offset");
   IRB.CreateLifetimeEnd(Base);
 
-  // Use the PC as the use site identifier
-  auto *UseSite =
-      IRB.CreateIntCast(IRB.CreateCall(ReadPCAsmFn), TagTy,
-                        /*isSigned=*/false, Ptr->getName() + ".use");
-
-  // Incorporate the memory access offset into the use site
-  UseSite = IRB.CreateAdd(UseSite, Offset);
+  // Hash the tag, offset, and use site to generate the coverage map index
+  auto *Hash = IRB.CreateCall(HashFn, {Tag, Offset}, "hash");
 
   // Load the AFL bitmap
   auto *AFLMap = IRB.CreateLoad(AFLMapPtr);
+  auto *AFLMapIdx = IRB.CreateGEP(AFLMap, Hash, "__afl_area_ptr_idx");
 
-  // Hash the allocation site and use site to index into the bitmap
-  //
-  // zext is necessary otherwise we end up using signed indices
-  //
-  // Hash algorithm: ((33 * (def_site - DEFAULT_TAG)) ^ use_site) - use_site
-  auto *HashMul = ConstantInt::get(TagTy, 33);
-  auto *Hash = IRB.CreateSub(
-      IRB.CreateXor(IRB.CreateMul(HashMul, IRB.CreateSub(Tag, DefaultTag)),
-                    UseSite),
-      UseSite, Ptr->getName() + ".def_use_hash");
-  auto *AFLMapIdx = IRB.CreateGEP(
-      AFLMap, IRB.CreateZExt(Hash, IRB.getInt32Ty()), "__afl_area_ptr_idx");
-
-  // Update the bitmap only if the def site is not the default tag
+  // Update the bitmap by incrementing the count
   auto *CounterLoad = IRB.CreateLoad(AFLMapIdx);
   auto *Incr = IRB.CreateAdd(CounterLoad, IRB.getInt8(1));
   auto *CounterStore = IRB.CreateStore(Incr, AFLMapIdx);
@@ -166,16 +152,8 @@ bool AFLUseSite::runOnModule(Module &M) {
   this->Ctx = &M.getContext();
   this->DL = &M.getDataLayout();
 
-  {
-    auto *ReadPCAsmTy =
-        FunctionType::get(Type::getInt64Ty(*Ctx), /*isVarArg=*/false);
-    this->ReadPCAsmFn = FunctionCallee(
-        ReadPCAsmTy, InlineAsm::get(ReadPCAsmTy, "leaq (%rip), $0",
-                                    /*Constraints=*/"=r",
-                                    /*hasSideEffects=*/false));
-  }
-
   this->TagTy = Type::getIntNTy(*Ctx, kNumTagBits);
+  this->HashTy = Type::getIntNTy(*Ctx, sizeof(HASH_T) * CHAR_BIT);
   this->IntPtrTy = DL->getIntPtrType(*Ctx);
   this->DefaultTag = ConstantInt::get(TagTy, kFuzzallocDefaultTag);
 
@@ -190,6 +168,8 @@ bool AFLUseSite::runOnModule(Module &M) {
 
     this->BBLookupFn = Mod->getOrInsertFunction("__bb_lookup", TagTy, Int8PtrTy,
                                                 IntPtrTy->getPointerTo());
+    this->HashFn =
+        Mod->getOrInsertFunction("__afl_hash", HashTy, TagTy, IntPtrTy);
   }
 
   for (auto &F : M) {

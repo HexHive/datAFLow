@@ -17,7 +17,7 @@
 #include <string.h>
 #include <sys/mman.h>
 
-#include "fuzzalloc/baggy_bounds.h"
+#include "fuzzalloc/Runtime/BaggyBounds.h"
 #include "fuzzalloc/fuzzalloc.h"
 
 #define likely(x) __builtin_expect((x), 1)

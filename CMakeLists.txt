@@ -39,6 +39,7 @@ add_definitions(${LLVM_DEFINITIONS})
 include_directories(
   include
   ext/svf/include
+  ext/aflplusplus/include
 )
 
 add_subdirectory(ext)

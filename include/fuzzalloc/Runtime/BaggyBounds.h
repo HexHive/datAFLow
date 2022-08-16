@@ -10,7 +10,7 @@
 
 #include <stdint.h>
 
-#include "fuzzalloc.h"
+#include "fuzzalloc/fuzzalloc.h"
 
 #if defined(__cplusplus)
 extern "C" {

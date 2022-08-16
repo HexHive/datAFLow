@@ -16,7 +16,7 @@
 
 #include "fuzzalloc/Analysis/UseSiteIdentify.h"
 #include "fuzzalloc/Metadata.h"
-#include "fuzzalloc/baggy_bounds.h"
+#include "fuzzalloc/Runtime/BaggyBounds.h"
 #include "fuzzalloc/fuzzalloc.h"
 
 using namespace llvm;

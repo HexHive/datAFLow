@@ -7,7 +7,7 @@
 
 #include <limits.h>
 
-#include "fuzzalloc/baggy_bounds.h"
+#include "fuzzalloc/Runtime/BaggyBounds.h"
 
 const unsigned kNumTagBits = 16;
 const tag_t kFuzzallocDefaultTag = 1;
