@@ -14,8 +14,6 @@ LIB_DIR = Path(THIS_DIR.parent) / 'lib'
 def parse_args():
     """Parse command-line options."""
     parser = ArgumentParser(description='datAFLow C compiler')
-    parser.add_argument('--debug', action='store_true',
-                        help='Use debug use site instrumentation')
     parser.add_argument('--custom-mem-funcs', type=Path, metavar='TXT',
                         help='Special case list of custom memory allocation '
                              'functions')
@@ -24,6 +22,8 @@ def parse_args():
                         help='Def site sensitivity')
     parser.add_argument('--use-sensitivity', default=[], action='append',
                         choices=('read', 'write'), help='Use site sensitivity')
+    parser.add_argument('--use-inst', default='afl', choices=('afl', 'debug'),
+                        help='Use site instrumentation type')
     return parser.parse_known_args()
 
 
@@ -57,15 +57,15 @@ def main():
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libHeapTag.so',
     ])
 
-    if args.debug:
-        cmd.extend([
-            '-O0',
-            '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libDebugUseSite.so',
-        ])
-    else:
+    if args.use_inst == 'afl':
         cmd.extend([
             '-O3',
             '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libAFLUseSite.so',
+        ])
+    elif args.use_inst == 'debug':
+        cmd.extend([
+            '-O0',
+            '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libDebugUseSite.so',
         ])
 
     if args.custom_mem_funcs:
@@ -78,7 +78,7 @@ def main():
     cmd.extend(clang_args)
     cmd.extend([f'-L{LIB_DIR}', '-lFuzzallocRuntime'])
 
-    if not args.debug:
+    if args.use_inst == 'afl':
         cmd.extend([f'-L{LIB_DIR}', '-lAFLRuntime'])
     
     cmd.append('-Qunused-arguments')

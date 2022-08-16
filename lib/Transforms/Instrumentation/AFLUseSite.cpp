@@ -17,7 +17,6 @@
 #include "fuzzalloc/Analysis/UseSiteIdentify.h"
 #include "fuzzalloc/Metadata.h"
 #include "fuzzalloc/Runtime/BaggyBounds.h"
-#include "fuzzalloc/Runtime/Hash.h"
 #include "fuzzalloc/fuzzalloc.h"
 
 #include "config.h" // AFL++
@@ -67,7 +66,6 @@ private:
 
   IntegerType *IntPtrTy;
   IntegerType *TagTy;
-  IntegerType *HashTy;
   ConstantInt *DefaultTag;
 };
 
@@ -123,10 +121,20 @@ void AFLUseSite::doInstrument(InterestingMemoryOperand *Op) {
 
   // Hash the tag, offset, and use site to generate the coverage map index
   auto *Hash = IRB.CreateCall(HashFn, {Tag, Offset}, "hash");
+  auto *HashMask = [&]() -> ConstantInt * {
+    if (MAP_SIZE_POW2 <= 16) {
+      return ConstantInt::get(IntPtrTy, 0xFFFF);
+    } else if (MAP_SIZE_POW2 <= 32) {
+      return ConstantInt::get(IntPtrTy, 0xFFFFFFFF);
+    } else {
+      return ConstantInt::get(IntPtrTy, 0xFFFFFFFFFFFFFFFF);
+    }
+  }();
 
-  // Load the AFL bitmap
+  // Load the AFL bitmap (first mask out the hash depending on the bitmap size)
   auto *AFLMap = IRB.CreateLoad(AFLMapPtr);
-  auto *AFLMapIdx = IRB.CreateGEP(AFLMap, Hash, "__afl_area_ptr_idx");
+  auto *AFLMapIdx = IRB.CreateGEP(AFLMap, IRB.CreateAnd(Hash, HashMask),
+                                  "__afl_area_ptr_idx");
 
   // Update the bitmap by incrementing the count
   auto *CounterLoad = IRB.CreateLoad(AFLMapIdx);
@@ -153,7 +161,6 @@ bool AFLUseSite::runOnModule(Module &M) {
   this->DL = &M.getDataLayout();
 
   this->TagTy = Type::getIntNTy(*Ctx, kNumTagBits);
-  this->HashTy = Type::getIntNTy(*Ctx, sizeof(HASH_T) * CHAR_BIT);
   this->IntPtrTy = DL->getIntPtrType(*Ctx);
   this->DefaultTag = ConstantInt::get(TagTy, kFuzzallocDefaultTag);
 
@@ -169,7 +176,7 @@ bool AFLUseSite::runOnModule(Module &M) {
     this->BBLookupFn = Mod->getOrInsertFunction("__bb_lookup", TagTy, Int8PtrTy,
                                                 IntPtrTy->getPointerTo());
     this->HashFn =
-        Mod->getOrInsertFunction("__afl_hash", HashTy, TagTy, IntPtrTy);
+        Mod->getOrInsertFunction("__afl_hash", IntPtrTy, TagTy, IntPtrTy);
   }
 
   for (auto &F : M) {
