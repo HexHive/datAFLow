@@ -9,7 +9,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#include "fuzzalloc/fuzzalloc.h"
+#include "fuzzalloc/Runtime/BaggyBounds.h"
 
 // AFL++ headers
 #include "config.h"
@@ -20,16 +20,30 @@
 #define likely(x) __builtin_expect((x), 1)
 #define unlikely(x) __builtin_expect((x), 0)
 
-#ifdef NDEBUG
-__attribute__((always_inline))
-#else
-__attribute__((noinline))
-#endif
-XXH64_hash_t
-__afl_hash(tag_t Tag, size_t Offset) {
+static const XXH64_hash_t Seed = 0;
+
+XXH64_hash_t __afl_hash_def_use(void *Ptr, size_t Size) {
+  uintptr_t Base;
+  tag_t Tag = __bb_lookup(Ptr, &Base);
   uintptr_t Use = (uintptr_t)__builtin_return_address(0);
-  uint64_t Data[] = {Tag, Offset, Use};
-  XXH64_hash_t Hash = XXH3_64bits(Data, sizeof(Data));
+
+  uint64_t Data[] = {Tag, Use};
+  XXH64_hash_t Hash = XXH64(Data, sizeof(Data), Seed);
+#ifdef _DEBUG
+  fprintf(stderr, "[datAFLow] hash(0x%" PRIx16 ", %" PRIu64 ") -> %zu\n", Tag,
+          Use, Hash);
+#endif
+  return Hash;
+}
+
+XXH64_hash_t __afl_hash_def_use_offset(void *Ptr, size_t Size) {
+  uintptr_t Base;
+  tag_t Tag = __bb_lookup(Ptr, &Base);
+  uintptr_t Use = (uintptr_t)__builtin_return_address(0);
+  ptrdiff_t Offset = (uintptr_t)Ptr - Base;
+
+  uint64_t Data[] = {Tag, Use, Offset};
+  XXH64_hash_t Hash = XXH64(Data, sizeof(Data), Seed);
 #ifdef _DEBUG
   fprintf(stderr,
           "[datAFLow] hash(0x%" PRIx16 ", %" PRIu64 ", 0x%" PRIx64 ") -> %zu\n",
@@ -38,13 +52,7 @@ __afl_hash(tag_t Tag, size_t Offset) {
   return Hash;
 }
 
-#ifdef NDEBUG
-__attribute__((always_inline))
-#else
-__attribute__((noinline))
-#endif
-XXH64_hash_t
-__afl_hash_with_val(tag_t Tag, size_t Offset, void *Val, size_t ValSize) {
+XXH64_hash_t __afl_hash_def_use_value(void *Ptr, size_t Size) {
   // Initialize the hash state
   static XXH64_state_t *State = NULL;
   if (unlikely(!State)) {
@@ -55,20 +63,23 @@ __afl_hash_with_val(tag_t Tag, size_t Offset, void *Val, size_t ValSize) {
   }
 
   // Reset hash state
-  if (unlikely(XXH64_reset(State, /*Seed=*/0) == XXH_ERROR)) {
+  if (unlikely(XXH64_reset(State, Seed) == XXH_ERROR)) {
     abort();
   }
 
   // Hash the def-site tag, use-site identifier, and access offset
+  uintptr_t Base;
+  tag_t Tag = __bb_lookup(Ptr, &Base);
   uintptr_t Use = (uintptr_t)__builtin_return_address(0);
-  uint64_t Data[] = {Tag, Offset, Use};
+  ptrdiff_t Offset = (uintptr_t)Ptr - Base;
+  uint64_t Data[] = {Tag, Use, Offset};
 
   if (unlikely(XXH64_update(State, Data, sizeof(Data)) == XXH_ERROR)) {
     abort();
   }
 
   // Hash the value at the use site
-  if (unlikely(XXH64_update(State, Val, ValSize) == XXH_ERROR)) {
+  if (unlikely(XXH64_update(State, Ptr, Size) == XXH_ERROR)) {
     abort();
   }
 

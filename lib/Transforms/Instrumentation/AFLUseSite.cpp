@@ -28,16 +28,26 @@ using namespace llvm;
 #define DEBUG_TYPE "fuzzalloc-afl-use-site"
 
 namespace {
+enum UseSiteCapture {
+  UseOnly,
+  UseWithOffset,
+  UseWithValue,
+};
+
 //
 // Command-line options
 //
 
-static cl::opt<bool> ClUseOffset("fuzzalloc-use-offset",
-                                 cl::desc("Capture offsets at the use site"),
-                                 cl::Hidden, cl::init(true));
-static cl::opt<bool> ClUseValue("fuzzalloc-use-value",
-                                cl::desc("Capture values at the use site"),
-                                cl::init(false));
+static cl::opt<UseSiteCapture> ClUseCapture(
+    cl::desc("What to capture at use site"),
+    cl::values(clEnumValN(UseSiteCapture::UseOnly, "fuzzalloc-use-only",
+                          "Record a def was used"),
+               clEnumValN(UseSiteCapture::UseWithOffset,
+                          "fuzzalloc-use-with-offset",
+                          "Record the offset a def was used"),
+               clEnumValN(UseSiteCapture::UseWithValue,
+                          "fuzzalloc-use-with-value",
+                          "Record the value of the def")));
 
 //
 // Global variables
@@ -69,6 +79,7 @@ private:
   GlobalVariable *AFLMapPtr;
   GlobalVariable *BaggyBoundsPtr;
 
+  PointerType *Int8PtrTy;
   IntegerType *IntPtrTy;
   IntegerType *HashTy;
   IntegerType *TagTy;
@@ -95,54 +106,13 @@ void AFLUseSite::doInstrument(InterestingMemoryOperand *Op) {
 
   IRBuilder<> IRB(Inst);
 
-  // Get the def site tag. The __bb_lookup function also takes a pointer to the
-  // object's base address, which is used to compute the offset (if required).
-  // We only need the base address for this offset calculation, so set a fairly
-  // constrainted lifetime
-  auto *Base = IRB.CreateAlloca(IntPtrTy, /*ArraySize=*/nullptr, "def.base");
-  auto *BaseSize = ConstantInt::get(
-      IntPtrTy, DL->getTypeAllocSize(Base->getAllocatedType()));
-  IRB.CreateLifetimeStart(Base, BaseSize);
-  auto *PtrCast = IRB.CreatePointerCast(Ptr, IRB.getInt8PtrTy());
-  auto *Tag = IRB.CreateCall(BBLookupFn, {PtrCast, Base}, "tag");
-
-  // Compute the use site offset (the same size as the tag). This is just the
-  // difference between the pointer and the previously-computed base address
-  auto *Offset = [&]() -> Value * {
-    if (ClUseOffset) {
-      auto *P = IRB.CreatePtrToInt(Ptr, IntPtrTy);
-      auto *BaseLoad = IRB.CreateLoad(Base);
-      BaseLoad->setMetadata(Mod->getMDKindID(kNoSanitizeMD),
-                            MDNode::get(*Ctx, None));
-
-      // If the tag is just the default tag, then the subtraction will produce
-      // an invalid result. So just use zero instead
-      return IRB.CreateSelect(
-          IRB.CreateICmpEQ(Tag, DefaultTag), Constant::getNullValue(IntPtrTy),
-          IRB.CreateSub(P, BaseLoad, Ptr->getName() + ".offset"));
-    } else {
-      return Constant::getNullValue(IntPtrTy);
-    }
-  }();
-  Offset->setName(Ptr->hasName() ? Ptr->getName() + ".offset" : "offset");
-  IRB.CreateLifetimeEnd(Base, BaseSize);
-
-  // Hash the data-flow to get an index into the AFL coverage bitmap. At a
-  // minimum, we hash the object's def-site tag. If enabled, the offset at which
-  // the object is being accessed is also hashed. Finally, the value of the
-  // object being accessed can also be included in the hash
-  auto *Hash = [&]() -> Value * {
-    if (ClUseValue) {
-      auto *PtrElemTy = Ptr->getType()->getPointerElementType();
-      return IRB.CreateCall(
-          HashFn,
-          {Tag, Offset, Ptr,
-           ConstantInt::get(IntPtrTy, DL->getTypeStoreSize(PtrElemTy))});
-    } else {
-      return IRB.CreateCall(HashFn, {Tag, Offset});
-    }
-  }();
-  Hash->setName(Ptr->hasName() ? Ptr->getName() + ".hash" : "hash");
+  // Compute the AFL coverage bitmap index based on the def-use chain
+  auto *PtrCast = IRB.CreatePointerCast(Ptr, Int8PtrTy);
+  auto *PtrElemTy = Ptr->getType()->getPointerElementType();
+  auto *Hash = IRB.CreateCall(
+      HashFn,
+      {PtrCast, ConstantInt::get(IntPtrTy, DL->getTypeStoreSize(PtrElemTy))},
+      Ptr->hasName() ? Ptr->getName() + ".hash" : "hash");
 
   auto *HashMask = [&]() -> ConstantInt * {
     if (MAP_SIZE_POW2 <= 16) {
@@ -185,12 +155,12 @@ bool AFLUseSite::runOnModule(Module &M) {
   this->DL = &M.getDataLayout();
 
   this->IntPtrTy = DL->getIntPtrType(*Ctx);
+  this->Int8PtrTy = Type::getInt8PtrTy(*Ctx);
   this->HashTy = Type::getIntNTy(*Ctx, sizeof(XXH64_hash_t) * CHAR_BIT);
   this->TagTy = Type::getIntNTy(*Ctx, kNumTagBits);
   this->DefaultTag = ConstantInt::get(TagTy, kFuzzallocDefaultTag);
 
   {
-    auto *Int8PtrTy = Type::getInt8PtrTy(*Ctx);
     this->AFLMapPtr = new GlobalVariable(
         *Mod, Int8PtrTy, /*isConstant=*/false, GlobalValue::ExternalLinkage,
         /*Initializer=*/nullptr, "__afl_area_ptr");
@@ -202,15 +172,20 @@ bool AFLUseSite::runOnModule(Module &M) {
                                                 IntPtrTy->getPointerTo());
   }
 
-  this->HashFn = [&]() -> FunctionCallee {
-    auto *Int8PtrTy = Type::getInt8PtrTy(*Ctx);
-    if (ClUseValue) {
-      return Mod->getOrInsertFunction("__afl_hash_with_val", HashTy, TagTy,
-                                      IntPtrTy, Int8PtrTy, IntPtrTy);
-    } else {
-      return Mod->getOrInsertFunction("__afl_hash", HashTy, TagTy, IntPtrTy);
-    }
-  }();
+  {
+    auto HashFnName = [&]() {
+      if (ClUseCapture == UseOnly) {
+        return "__afl_hash_def_use";
+      } else if (ClUseCapture == UseWithOffset) {
+        return "__afl_hash_def_use_offset";
+      } else if (ClUseCapture == UseWithValue) {
+        return "__afl_hash_def_use_value";
+      }
+      llvm_unreachable("Invalid use capture option");
+    }();
+    this->HashFn =
+        Mod->getOrInsertFunction(HashFnName, HashTy, Int8PtrTy, IntPtrTy);
+  }
 
   for (auto &F : M) {
     if (F.isDeclaration() || F.getName().startswith("fuzzalloc.")) {
