@@ -91,7 +91,6 @@ GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
   NewGV->copyAttributesFrom(OrigGV);
   NewGV->setMetadata(Mod->getMDKindID(kFuzzallocTaggVarMD),
                      MDNode::get(*Ctx, None));
-  NewGV->setDSOLocal(true);
   NewGV->setAlignment(MaybeAlign(NewAllocSize));
 
   // Copy debug info
