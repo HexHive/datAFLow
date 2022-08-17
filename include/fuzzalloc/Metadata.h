@@ -12,6 +12,8 @@
 extern "C" {
 #endif // __cplusplus
 
+extern const char *kFuzzallocHeapifiedAllocaMD;
+extern const char *kFuzzallocHeapifiedGlobalMD;
 extern const char *kFuzzallocInstrumentedUseSiteMD;
 extern const char *kFuzzallocNoInstrumentMD;
 extern const char *kFuzzallocTaggVarMD;

@@ -11,12 +11,22 @@
 namespace llvm {
 class ConstantInt;
 class IntegerType;
+class Instruction;
+class Type;
 class TypeSize;
+class Value;
 } // llvm namespace
 
 /// Randomly generate a def site tag
 llvm::ConstantInt *generateTag(llvm::IntegerType *);
 
+/// Compute the adjusted size for a tagged variable
 size_t getTaggedVarSize(const llvm::TypeSize &);
+
+/// Insert a call to `malloc`
+llvm::Instruction *insertMalloc(llvm::Type *, llvm::Value *, llvm::Instruction *);
+
+/// Insert a call to `free`
+llvm::Instruction *insertFree(llvm::Type *, llvm::Value *, llvm::Instruction *);
 
 #endif // VARIABLE_TAG_H
