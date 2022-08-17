@@ -66,10 +66,10 @@ void __bb_register(void *Obj, size_t AllocSize) {
   }
 
   const uintptr_t P = (uintptr_t)Obj;
-  const uintptr_t Index = P >> kSlotSize;
+  const uintptr_t Index = P >> kSlotSizeLog2;
   const uint64_t E = bb_log2(AllocSize);
-  assert(E >= kSlotSize);
-  const size_t Range = 1 << (E - kSlotSize);
+  assert(E >= kSlotSizeLog2);
+  const size_t Range = 1 << (E - kSlotSizeLog2);
   memset(__baggy_bounds_table + Index, E, Range);
 }
 
@@ -77,10 +77,10 @@ static void unregisterMemoryObject(void *Obj) {
   initBaggyBounds();
 
   const uintptr_t P = (uintptr_t)Obj;
-  const uintptr_t Index = P >> kSlotSize;
+  const uintptr_t Index = P >> kSlotSizeLog2;
   const unsigned AllocSize = __baggy_bounds_table[Index];
   if (AllocSize != 0) {
-    const size_t Range = 1 << (AllocSize - kSlotSize);
+    const size_t Range = 1 << (AllocSize - kSlotSizeLog2);
     memset(__baggy_bounds_table + Index, 0, Range);
   }
 }
@@ -96,7 +96,7 @@ void __bb_free(void *Ptr) {
 
 void *__bb_malloc(tag_t Tag, size_t Size) {
   size_t AllocSize = calculateAllocSize(Size);
-  void *Ptr = NULL;
+  void *Ptr;
   posix_memalign(&Ptr, AllocSize, AllocSize);
   __bb_register(Ptr, AllocSize);
   tag_t *TagAddr = (tag_t *)((uintptr_t)Ptr + AllocSize - kMetaSize);
@@ -123,11 +123,11 @@ void *__bb_realloc(tag_t Tag, void *Ptr, size_t Size) {
 
   void *NewPtr = __bb_malloc(Tag, Size);
 
-  const uintptr_t OldIndex = (uintptr_t)Ptr >> kSlotSize;
+  const uintptr_t OldIndex = (uintptr_t)Ptr >> kSlotSizeLog2;
   const unsigned OldE = __baggy_bounds_table[OldIndex];
   const size_t OldSize = 1 << OldE;
 
-  const uintptr_t NewIndex = (uintptr_t)NewPtr >> kSlotSize;
+  const uintptr_t NewIndex = (uintptr_t)NewPtr >> kSlotSizeLog2;
   const unsigned NewE = __baggy_bounds_table[NewIndex];
   const size_t NewSize = 1 << NewE;
 
