@@ -17,7 +17,6 @@
 #include "fuzzalloc/Analysis/UseSiteIdentify.h"
 #include "fuzzalloc/Metadata.h"
 #include "fuzzalloc/Runtime/BaggyBounds.h"
-#include "fuzzalloc/fuzzalloc.h"
 
 using namespace llvm;
 
@@ -48,7 +47,6 @@ private:
 
   PointerType *Int8PtrTy;
   IntegerType *IntPtrTy;
-  IntegerType *TagTy;
 };
 
 char DebugUseSite::ID = 0;
@@ -91,7 +89,6 @@ bool DebugUseSite::runOnModule(Module &M) {
 
   this->IntPtrTy = DL->getIntPtrType(*Ctx);
   this->Int8PtrTy = Type::getInt8PtrTy(*Ctx);
-  this->TagTy = Type::getIntNTy(*Ctx, kNumTagBits);
 
   this->BBDebugUseFn = Mod->getOrInsertFunction(
       "__bb_dbg_use", Type::getVoidTy(*Ctx), Int8PtrTy, IntPtrTy);
