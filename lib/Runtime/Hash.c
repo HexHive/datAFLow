@@ -73,7 +73,7 @@ XXH64_hash_t __afl_hash_def_use_value(void *Ptr, size_t Size) {
   // If this is an untagged variable, all we can do is hash the def-use chain
   // itself
   if (unlikely(Tag == kFuzzallocDefaultTag)) {
-    return __hash_def_use_commong(Tag, Use);
+    return __hash_def_use_common(Tag, Use);
   }
 
   // Otherwise, we setup a rolling hash for hashing the (variable-lengthed)
