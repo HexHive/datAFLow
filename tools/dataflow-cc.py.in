@@ -78,8 +78,8 @@ def main():
     ])
 
     # Def site function ignore list
-    if 'FUZZALLOC_FUNC_IGNORE' in env:
-        func_ignore = env['FUZZALLOC_FUNC_IGNORE']
+    if 'FUZZALLOC_DEF_FUNC_IGNORE' in env:
+        func_ignore = env['FUZZALLOC_DEF_FUNC_IGNORE']
     else:
         func_ignore = None
 
