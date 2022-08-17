@@ -21,32 +21,31 @@ using namespace llvm;
 
 #define DEBUG_TYPE "fuzzalloc-mem-func-identify"
 
+namespace {
 //
 // Classes
 //
 
-class FuzzallocMemFuncList {
+class MemFuncList {
 private:
   std::unique_ptr<SpecialCaseList> SCL;
 
 public:
-  FuzzallocMemFuncList() = default;
-  FuzzallocMemFuncList(std::unique_ptr<SpecialCaseList> List)
-      : SCL(std::move(List)) {}
+  MemFuncList() = default;
+  MemFuncList(std::unique_ptr<SpecialCaseList> List) : SCL(std::move(List)) {}
 
   bool isIn(const Function &F) const {
     return SCL && SCL->inSection("fuzzalloc", "fun", F.getName());
   }
 };
 
-namespace {
 //
 // Command-line options
 //
 
 static cl::opt<std::string> ClMemFuncs(
     "fuzzalloc-custom-mem-funcs",
-    cl::desc("Path to file listing custom memory allocation functions"),
+    cl::desc("Special case list of custom memory allocation functions"),
     cl::value_desc("path"));
 
 //
@@ -59,9 +58,9 @@ static unsigned NumMemAllocFuncs = 0;
 // Helper functions
 //
 
-static FuzzallocMemFuncList getMemFuncList() {
+static MemFuncList getMemFuncList() {
   if (ClMemFuncs.empty()) {
-    return FuzzallocMemFuncList();
+    return MemFuncList();
   }
 
   if (!sys::fs::exists(ClMemFuncs)) {
@@ -72,7 +71,7 @@ static FuzzallocMemFuncList getMemFuncList() {
     report_fatal_error(Err);
   }
 
-  return FuzzallocMemFuncList(
+  return MemFuncList(
       SpecialCaseList::createOrDie({ClMemFuncs}, *vfs::getRealFileSystem()));
 }
 

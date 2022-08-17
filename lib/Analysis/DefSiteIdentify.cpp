@@ -22,7 +22,6 @@ using namespace llvm;
 #define DEBUG_TYPE "fuzzalloc-def-site-identify"
 
 namespace {
-
 //
 // Command-line options
 //
@@ -34,7 +33,7 @@ static cl::bits<DefSiteIdentify::DefSiteTypes> ClDefSitesToTrack(
                clEnumValN(DefSiteIdentify::DefSiteTypes::Struct,
                           "fuzzalloc-def-struct", "Track structs (defs)")));
 static cl::opt<bool>
-    ClIgnoreGlobalConstants("fuzzalloc-ignore-constant-globals",
+    ClIgnoreGlobalConstants("fuzzalloc-def-ignore-constant-globals",
                             cl::desc("Ignore constant globals"), cl::Hidden,
                             cl::init(false));
 

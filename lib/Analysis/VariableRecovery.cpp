@@ -9,6 +9,8 @@
 #include <llvm/IR/IntrinsicInst.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/Passes/PassBuilder.h>
+#include <llvm/Support/CommandLine.h>
+#include <llvm/Support/SpecialCaseList.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 
 #include "fuzzalloc/Analysis/VariableRecovery.h"
@@ -18,8 +20,61 @@
 using namespace llvm;
 
 namespace {
+//
+// Classes
+//
+
+class FuncIgnoreList {
+private:
+  std::unique_ptr<SpecialCaseList> SCL;
+
+public:
+  FuncIgnoreList() = default;
+  FuncIgnoreList(std::unique_ptr<SpecialCaseList> List)
+      : SCL(std::move(List)) {}
+
+  bool isIn(const Function &F) const {
+    return SCL && SCL->inSection("", "fun", F.getName());
+  }
+};
+
+//
+// Command-line options
+//
+
+static cl::opt<std::string>
+    ClFuncIgnoreList("fuzzalloc-def-ignore-funcs",
+                     cl::desc("Special case list of functions to ignore"),
+                     cl::value_desc("path"));
+
+//
+// Global variables
+//
+
 static unsigned NumLocalVars = 0;
 static unsigned NumGlobalVars = 0;
+
+//
+// Helper functions
+//
+
+static FuncIgnoreList getFuncIgnoreList() {
+  if (ClFuncIgnoreList.empty()) {
+    return FuncIgnoreList();
+  }
+
+  if (!sys::fs::exists(ClFuncIgnoreList)) {
+    std::string Err;
+    raw_string_ostream OS(Err);
+    OS << "fuzzalloc def ignore function list does not exist at "
+       << ClFuncIgnoreList;
+    OS.flush();
+    report_fatal_error(Err);
+  }
+
+  return FuncIgnoreList(SpecialCaseList::createOrDie(
+      {ClFuncIgnoreList}, *vfs::getRealFileSystem()));
+}
 } // anonymous namespace
 
 char VariableRecovery::ID = 0;
@@ -29,8 +84,14 @@ void VariableRecovery::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 bool VariableRecovery::runOnModule(Module &M) {
+  const auto &FuncIgnores = getFuncIgnoreList();
+
   // STEP 1: Local variables
   for (auto &F : M) {
+    if (FuncIgnores.isIn(F)) {
+      continue;
+    }
+
     for (auto &I : instructions(&F)) {
       // We only care about llvm.dbg.* variable declarations
       if (!isa<DbgVariableIntrinsic>(&I)) {
