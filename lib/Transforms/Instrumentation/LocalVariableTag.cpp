@@ -19,6 +19,8 @@
 #include "fuzzalloc/Runtime/BaggyBounds.h"
 #include "fuzzalloc/Transforms/Utils.h"
 
+#include "VariableTag.h"
+
 using namespace llvm;
 
 #define DEBUG_TYPE "fuzzalloc-tag-local-variable"
@@ -36,8 +38,6 @@ public:
   virtual bool runOnModule(Module &) override;
 
 private:
-  ConstantInt *generateTag() const;
-  size_t getTaggedVarSize(Type *) const;
   AllocaInst *tagAlloca(AllocaInst *);
 
   Module *Mod;
@@ -52,28 +52,15 @@ private:
 
 char LocalVarTag::ID = 0;
 
-ConstantInt *LocalVarTag::generateTag() const {
-  return ConstantInt::get(
-      TagTy, static_cast<uint64_t>(RAND(kFuzzallocTagMin, kFuzzallocTagMax)));
-}
-
-size_t LocalVarTag::getTaggedVarSize(Type *Ty) const {
-  auto AdjustedSize = DL->getTypeAllocSize(Ty) + kMetaSize;
-  if (AdjustedSize < kSlotSize) {
-    AdjustedSize = kSlotSize;
-  }
-  return bb_nextPow2(AdjustedSize);
-}
-
 AllocaInst *LocalVarTag::tagAlloca(AllocaInst *OrigAlloca) {
   auto *Zero = ConstantInt::getNullValue(IntegerType::getInt32Ty(*Ctx));
   auto *OrigTy = OrigAlloca->getAllocatedType();
   auto OrigSize = DL->getTypeAllocSize(OrigTy);
-  auto NewAllocSize = getTaggedVarSize(OrigTy);
+  auto NewAllocSize = getTaggedVarSize(DL->getTypeAllocSize(OrigTy));
 
   auto PaddingSize = NewAllocSize - OrigSize - kMetaSize;
   auto *PaddingTy = ArrayType::get(Type::getInt8Ty(*Ctx), PaddingSize);
-  auto *Tag = generateTag();
+  auto *Tag = generateTag(TagTy);
 
   auto *NewAllocaTy =
       StructType::get(*Ctx, {OrigTy, PaddingTy, TagTy}, /*isPacked=*/true);

@@ -17,6 +17,8 @@
 #include "fuzzalloc/Runtime/BaggyBounds.h"
 #include "fuzzalloc/Transforms/Utils.h"
 
+#include "VariableTag.h"
+
 using namespace llvm;
 
 #define DEBUG_TYPE "fuzzalloc-tag-global-variable"
@@ -34,8 +36,6 @@ public:
   virtual bool runOnModule(Module &) override;
 
 private:
-  ConstantInt *generateTag() const;
-  size_t getTaggedVarSize(Type *) const;
   GlobalVariable *tagGlobalVariable(GlobalVariable *, BasicBlock *);
 
   Module *Mod;
@@ -49,29 +49,16 @@ private:
 
 char GlobalVarTag::ID = 0;
 
-ConstantInt *GlobalVarTag::generateTag() const {
-  return ConstantInt::get(
-      TagTy, static_cast<uint64_t>(RAND(kFuzzallocTagMin, kFuzzallocTagMax)));
-}
-
-size_t GlobalVarTag::getTaggedVarSize(Type *Ty) const {
-  auto AdjustedSize = DL->getTypeAllocSize(Ty) + kMetaSize;
-  if (AdjustedSize < kSlotSize) {
-    AdjustedSize = kSlotSize;
-  }
-  return bb_nextPow2(AdjustedSize);
-}
-
 GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
                                                 BasicBlock *CtorBB) {
   auto *Zero = ConstantInt::getNullValue(IntegerType::getInt32Ty(*Ctx));
   auto *OrigTy = OrigGV->getValueType();
   auto OrigSize = DL->getTypeAllocSize(OrigTy);
-  auto NewAllocSize = getTaggedVarSize(OrigTy);
+  auto NewAllocSize = getTaggedVarSize(DL->getTypeAllocSize(OrigTy));
 
   auto PaddingSize = NewAllocSize - OrigSize - kMetaSize;
   auto *PaddingTy = ArrayType::get(Type::getInt8Ty(*Ctx), PaddingSize);
-  auto *Tag = generateTag();
+  auto *Tag = generateTag(TagTy);
 
   auto *NewGVTy =
       StructType::get(*Ctx, {OrigTy, PaddingTy, TagTy}, /*isPacked=*/true);

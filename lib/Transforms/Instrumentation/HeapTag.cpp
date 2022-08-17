@@ -21,6 +21,8 @@
 #include "fuzzalloc/Transforms/Utils.h"
 #include "fuzzalloc/fuzzalloc.h"
 
+#include "VariableTag.h"
+
 using namespace llvm;
 
 #define DEBUG_TYPE "fuzzalloc-tag-heap"
@@ -34,7 +36,6 @@ public:
   virtual bool runOnModule(Module &) override;
 
 private:
-  ConstantInt *generateTag() const;
   FunctionType *getTaggedFunctionType(const FunctionType *) const;
   Function *getTaggedFunction(const Function *) const;
   Function *tagFunction(const Function *) const;
@@ -51,11 +52,6 @@ private:
 };
 
 char HeapTag::ID = 0;
-
-ConstantInt *HeapTag::generateTag() const {
-  return ConstantInt::get(
-      TagTy, static_cast<uint64_t>(RAND(kFuzzallocTagMin, kFuzzallocTagMax)));
-}
 
 FunctionType *HeapTag::getTaggedFunctionType(const FunctionType *Ty) const {
   SmallVector<Type *, 4> TaggedFuncParams = {TagTy};
@@ -134,7 +130,7 @@ Instruction *HeapTag::tagCall(CallBase *CB, FunctionCallee TaggedF) const {
     if (TaggedFuncs.count(ParentF) > 0) {
       return ParentF->arg_begin();
     }
-    return generateTag();
+    return generateTag(TagTy);
   }();
 
   // Make the tag the first argument and copy the original call's arguments

@@ -31,9 +31,6 @@ extern const tag_t kFuzzallocTagMin;
 /// The default maximum tag value
 extern const tag_t kFuzzallocTagMax;
 
-// Adapted from http://c-faq.com/lib/randrange.html
-#define RAND(x, y) ((tag_t)((x) + random() / (RAND_MAX / ((y) - (x) + 1) + 1)))
-
 #if defined(__cplusplus)
 }
 #endif // __cplusplus
