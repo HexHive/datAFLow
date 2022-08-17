@@ -77,6 +77,15 @@ def main():
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libHeapTag.so',
     ])
 
+    # Def site function ignore list
+    if 'FUZZALLOC_FUNC_IGNORE' in env:
+        func_ignore = env['FUZZALLOC_FUNC_IGNORE']
+    else:
+        func_ignore = None
+
+    if func_ignore:
+        cmd.extend(['-mllvm', f'-fuzzalloc-def-ignore-funcs={func_ignore}'])
+
     # Def site dynamic memory allocation functions
     if 'FUZZALLOC_DEF_MEM_FUNCS' in env:
         def_mem_funcs = env['FUZZALLOC_DEF_MEM_FUNCS']
@@ -86,8 +95,7 @@ def main():
         def_mem_funcs = None
 
     if def_mem_funcs:
-        cmd.extend(['-mllvm',
-                    f'-fuzzalloc-custom-mem-funcs={def_mem_funcs}'])
+        cmd.extend(['-mllvm', f'-fuzzalloc-custom-mem-funcs={def_mem_funcs}'])
 
     # Def site sensitivity
     if 'FUZZALLOC_DEF_SENSITIVITY' in env:
