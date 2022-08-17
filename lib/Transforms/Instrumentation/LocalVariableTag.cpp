@@ -17,6 +17,7 @@
 #include "fuzzalloc/Analysis/DefSiteIdentify.h"
 #include "fuzzalloc/Metadata.h"
 #include "fuzzalloc/Runtime/BaggyBounds.h"
+#include "fuzzalloc/Streams.h"
 #include "fuzzalloc/Transforms/Utils.h"
 
 #include "VariableTag.h"
@@ -57,6 +58,12 @@ AllocaInst *LocalVarTag::tagAlloca(AllocaInst *OrigAlloca) {
   auto *OrigTy = OrigAlloca->getAllocatedType();
   auto OrigSize = DL->getTypeAllocSize(OrigTy);
   auto NewAllocSize = getTaggedVarSize(DL->getTypeAllocSize(OrigTy));
+  if (NewAllocSize > IntegerType::MAX_INT_BITS) {
+    warning_stream() << "Unable to tag alloca " << OrigAlloca->getName()
+                     << ": new allocation size " << NewAllocSize
+                     << " is greater than the max possible size\n";
+    return nullptr;
+  }
 
   auto PaddingSize = NewAllocSize - OrigSize - kMetaSize;
   auto *PaddingTy = ArrayType::get(Type::getInt8Ty(*Ctx), PaddingSize);
