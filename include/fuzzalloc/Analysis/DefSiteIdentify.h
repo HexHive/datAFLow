@@ -35,10 +35,6 @@ public:
 
   const DefSites &getDefSites() const { return ToTrack; }
 
-  static bool trackArrays();
-  static bool trackStructs();
-  static bool trackDynAllocs();
-
 private:
   DefSites ToTrack;
 };

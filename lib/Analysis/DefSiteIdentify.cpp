@@ -63,9 +63,10 @@ bool DefSiteIdentify::runOnModule(Module &M) {
     }
 
     // Save the variable's definition if it's one we want to track
-    if (trackArrays() && isa<ArrayType>(Ty)) {
+    if (ClDefSitesToTrack.isSet(DefSiteTypes::Array) && isa<ArrayType>(Ty)) {
       ToTrack.insert(V);
-    } else if (trackStructs() && isa<StructType>(Ty)) {
+    } else if (ClDefSitesToTrack.isSet(DefSiteTypes::Struct) &&
+               isa<StructType>(Ty)) {
       ToTrack.insert(V);
     }
   }
@@ -80,14 +81,6 @@ void DefSiteIdentify::print(raw_ostream &OS, const Module *M) const {
   for (const auto *Def : ToTrack) {
     OS << Vars.lookup(const_cast<Value *>(Def)) << " def: `" << *Def << "`\n";
   }
-}
-
-bool DefSiteIdentify::trackArrays() {
-  return ClDefSitesToTrack.isSet(DefSiteTypes::Array);
-}
-
-bool DefSiteIdentify::trackStructs() {
-  return ClDefSitesToTrack.isSet(DefSiteTypes::Struct);
 }
 
 //
