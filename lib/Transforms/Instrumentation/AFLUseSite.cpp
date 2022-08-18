@@ -86,7 +86,9 @@ void AFLUseSite::doInstrument(InterestingMemoryOperand *Op) {
   auto *Inst = Op->getInsn();
   auto *Ptr = Op->getPtr();
 
-  LLVM_DEBUG(dbgs() << "Instrumenting " << *Inst << " (ptr=" << *Ptr << ")\n");
+  LLVM_DEBUG(dbgs() << "Instrumenting " << *Inst << " in "
+                    << Inst->getFunction()->getName() << " (ptr=" << *Ptr
+                    << ")\n");
 
   // This metadata can be used by the static pointer analysis
   Inst->setMetadata(Mod->getMDKindID(kFuzzallocInstrumentedUseSiteMD),
@@ -140,12 +142,12 @@ bool AFLUseSite::runOnModule(Module &M) {
       continue;
     }
 
-    auto &UseSiteOps = getAnalysis<UseSiteIdentify>(F).getUseSites();
-    if (UseSiteOps.empty()) {
+    auto *UseSiteOps = getAnalysis<UseSiteIdentify>().getUseSites(F);
+    if (!UseSiteOps || UseSiteOps->empty()) {
       continue;
     }
 
-    for (auto &Op : UseSiteOps) {
+    for (auto &Op : *UseSiteOps) {
       doInstrument(&Op);
     }
     Changed = true;

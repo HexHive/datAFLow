@@ -210,10 +210,6 @@ void UseSiteIdentify::getInterestingMemoryOperands(
   }
 }
 
-void UseSiteIdentify::getAnalysisUsage(AnalysisUsage &AU) const {
-  AU.setPreservesAll();
-}
-
 bool UseSiteIdentify::runOnFunction(Function &F) {
   // Don't instrument our own functions
   if (F.getName().startswith("fuzzalloc.")) {
@@ -245,13 +241,36 @@ bool UseSiteIdentify::runOnFunction(Function &F) {
             }
           }
         }
-        ToTrack.push_back(Operand);
+        ToTrack[&F].push_back(Operand);
         NumUsesToTrack++;
       }
     }
   }
 
   return false;
+}
+
+UseSiteIdentify::UseSiteOperands *UseSiteIdentify::getUseSites(Function &F) {
+  auto It = ToTrack.find(&F);
+  if (It == ToTrack.end()) {
+    return nullptr;
+  }
+
+  return &It->second;
+}
+
+void UseSiteIdentify::getAnalysisUsage(AnalysisUsage &AU) const {
+  AU.setPreservesAll();
+}
+
+bool UseSiteIdentify::runOnModule(Module &M) {
+  bool Changed = false;
+
+  for (auto &F : M) {
+    Changed = runOnFunction(F);
+  }
+
+  return Changed;
 }
 
 //

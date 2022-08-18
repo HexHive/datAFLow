@@ -21,7 +21,7 @@ class Value;
 /// Identify use sites
 ///
 /// This is mostly based on how AddressSanitizer selects instrumentation sites
-class UseSiteIdentify : public llvm::FunctionPass {
+class UseSiteIdentify : public llvm::ModulePass {
 public:
   using UseSiteOperands = llvm::SmallVector<llvm::InterestingMemoryOperand, 32>;
 
@@ -32,19 +32,21 @@ public:
   };
 
   static char ID;
-  UseSiteIdentify() : llvm::FunctionPass(ID) {}
+  UseSiteIdentify() : llvm::ModulePass(ID) {}
 
   virtual void getAnalysisUsage(llvm::AnalysisUsage &) const override;
-  virtual bool runOnFunction(llvm::Function &) override;
+  virtual bool runOnModule(llvm::Module &) override;
 
-  UseSiteOperands &getUseSites() { return ToTrack; }
+  UseSiteOperands *getUseSites(llvm::Function &F);
 
 private:
   bool isInterestingAlloca(const llvm::AllocaInst *);
   bool ignoreAccess(const llvm::Value *);
   void getInterestingMemoryOperands(llvm::Instruction *, UseSiteOperands &);
 
-  UseSiteOperands ToTrack;
+  bool runOnFunction(llvm::Function &);
+
+  llvm::ValueMap<llvm::Function *, UseSiteOperands> ToTrack;
   llvm::ValueMap<const llvm::AllocaInst *, bool> ProcessedAllocas;
 };
 

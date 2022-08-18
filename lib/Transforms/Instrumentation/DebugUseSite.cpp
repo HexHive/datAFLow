@@ -98,12 +98,12 @@ bool DebugUseSite::runOnModule(Module &M) {
       continue;
     }
 
-    auto &UseSiteOps = getAnalysis<UseSiteIdentify>(F).getUseSites();
-    if (UseSiteOps.empty()) {
+    auto *UseSiteOps = getAnalysis<UseSiteIdentify>().getUseSites(F);
+    if (!UseSiteOps || UseSiteOps->empty()) {
       continue;
     }
 
-    for (auto &Op : UseSiteOps) {
+    for (auto &Op : *UseSiteOps) {
       doInstrument(&Op);
     }
     Changed = true;
