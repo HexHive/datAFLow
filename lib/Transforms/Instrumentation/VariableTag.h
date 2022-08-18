@@ -29,4 +29,8 @@ llvm::Instruction *insertMalloc(llvm::Type *, llvm::Value *, llvm::Instruction *
 /// Insert a call to `free`
 llvm::Instruction *insertFree(llvm::Type *, llvm::Value *, llvm::Instruction *);
 
+bool isLifetimeStart(const llvm::Instruction *);
+
+bool isLifetimeEnd(const llvm::Instruction *);
+
 #endif // VARIABLE_TAG_H

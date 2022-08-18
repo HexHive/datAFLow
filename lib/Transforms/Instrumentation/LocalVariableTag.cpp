@@ -79,45 +79,34 @@ AllocaInst *LocalVarTag::heapify(AllocaInst *OrigAlloca) {
   NewAlloca->takeName(OrigAlloca);
   NewAlloca->copyMetadata(*OrigAlloca);
 
-  // Helpers for finding lifetime intrinsics
-  const auto &LifetimePred = [](Intrinsic::ID ID) {
-    return [=](const User *U) {
-      if (const auto *II = dyn_cast<IntrinsicInst>(U)) {
-        return II->getIntrinsicID() == ID;
-      }
-      return false;
-    };
-  };
-  const auto &IsLifetimeStart = LifetimePred(Intrinsic::lifetime_start);
-  const auto &IsLifetimeEnd = LifetimePred(Intrinsic::lifetime_end);
-
   // Cache and update users
   SmallVector<Use *, 16> Uses(
       map_range(OrigAlloca->uses(), [](Use &U) { return &U; }));
   for (auto *U : Uses) {
     auto *User = U->getUser();
 
-    if (IsLifetimeStart(User)) {
-      // A lifetime.start intrinsic indicates the variable is now "live". So
-      // allocate it
-      insertMalloc(AllocaTy, NewAlloca, cast<Instruction>(User));
-      User->replaceUsesOfWith(OrigAlloca, NewAlloca);
-      NumMallocs++;
-    } else if (IsLifetimeEnd(User)) {
-      // A lifetime.end intrinsic indicates the variable is now "dead". So
-      // deallocate it
-      insertFree(NewAlloca->getAllocatedType(), NewAlloca,
-                 cast<Instruction>(User));
-      User->replaceUsesOfWith(OrigAlloca, NewAlloca);
-      NumFrees++;
-    } else if (isa<Instruction>(User)) {
-      // Load the new alloca from the heap before we can do anything with it
-      auto *InsertPt = phiSafeInsertPt(U);
-      auto *LoadNewAlloca =
-          new LoadInst(NewAlloca->getAllocatedType(), NewAlloca, "", InsertPt);
-      auto *BitCastNewAlloca = CastInst::CreatePointerCast(
-          LoadNewAlloca, OrigAlloca->getType(), "", InsertPt);
-      User->replaceUsesOfWith(OrigAlloca, BitCastNewAlloca);
+    if (auto *Inst = dyn_cast<Instruction>(User)) {
+      if (isLifetimeStart(Inst)) {
+        // A lifetime.start intrinsic indicates the variable is now "live". So
+        // allocate it
+        insertMalloc(AllocaTy, NewAlloca, Inst);
+        Inst->replaceUsesOfWith(OrigAlloca, NewAlloca);
+        NumMallocs++;
+      } else if (isLifetimeEnd(Inst)) {
+        // A lifetime.end intrinsic indicates the variable is now "dead". So
+        // deallocate it
+        insertFree(NewAlloca->getAllocatedType(), NewAlloca, Inst);
+        Inst->replaceUsesOfWith(OrigAlloca, NewAlloca);
+        NumFrees++;
+      } else {
+        // Load the new alloca from the heap before we can do anything with it
+        auto *InsertPt = phiSafeInsertPt(U);
+        auto *LoadNewAlloca = new LoadInst(NewAlloca->getAllocatedType(),
+                                           NewAlloca, "", InsertPt);
+        auto *BitCastNewAlloca = CastInst::CreatePointerCast(
+            LoadNewAlloca, OrigAlloca->getType(), "", InsertPt);
+        Inst->replaceUsesOfWith(OrigAlloca, BitCastNewAlloca);
+      }
     } else {
       llvm_unreachable("Unsupported alloca user");
     }

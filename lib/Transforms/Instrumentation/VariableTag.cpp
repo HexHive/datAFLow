@@ -8,6 +8,7 @@
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Instructions.h>
+#include <llvm/IR/IntrinsicInst.h>
 #include <llvm/IR/Module.h>
 
 #include "fuzzalloc/Metadata.h"
@@ -79,4 +80,18 @@ Instruction *insertFree(Type *Ty, Value *Ptr, Instruction *InsertPt) {
   Load->setMetadata(Mod->getMDKindID(kNoSanitizeMD), MDNode::get(Ctx, None));
 
   return CallInst::CreateFree(Load, InsertPt);
+}
+
+bool isLifetimeStart(const Instruction *I) {
+  if (const auto *II = dyn_cast<IntrinsicInst>(I)) {
+    return II->getIntrinsicID() == Intrinsic::lifetime_start;
+  }
+  return false;
+}
+
+bool isLifetimeEnd(const Instruction *I) {
+  if (const auto *II = dyn_cast<IntrinsicInst>(I)) {
+    return II->getIntrinsicID() == Intrinsic::lifetime_end;
+  }
+  return false;
 }
