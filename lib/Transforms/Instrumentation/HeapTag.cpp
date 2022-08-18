@@ -6,6 +6,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <llvm/ADT/Statistic.h>
+#include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/Module.h>
@@ -27,6 +28,10 @@ using namespace llvm;
 
 #define DEBUG_TYPE "fuzzalloc-tag-heap"
 
+namespace {
+static unsigned NumTrampolines = 0;
+} // anonymous namespace
+
 class HeapTag : public ModulePass {
 public:
   static char ID;
@@ -36,6 +41,8 @@ public:
   virtual bool runOnModule(Module &) override;
 
 private:
+  Function *createTrampoline(const Function *) const;
+
   FunctionType *getTaggedFunctionType(const FunctionType *) const;
   Function *getTaggedFunction(const Function *) const;
   Function *tagFunction(const Function *) const;
@@ -45,6 +52,9 @@ private:
   Module *Mod;
   LLVMContext *Ctx;
   IntegerType *TagTy;
+  IntegerType *IntPtrTy;
+
+  Function *ReturnAddrFn;
 
   SmallPtrSet<Function *, 8> TaggedFuncs;
   ValueMap</* Original function */ Function *, /* Tagged function */ Function *>
@@ -52,6 +62,42 @@ private:
 };
 
 char HeapTag::ID = 0;
+
+Function *HeapTag::createTrampoline(const Function *OrigF) const {
+  const auto &TrampolineName = "fuzzalloc.trampoline." + OrigF->getName().str();
+  auto *TrampolineFn = Mod->getFunction(TrampolineName);
+  if (TrampolineFn) {
+    return TrampolineFn;
+  }
+
+  // Create the trampoline function
+  TrampolineFn =
+      Function::Create(OrigF->getFunctionType(), GlobalValue::WeakAnyLinkage,
+                       TrampolineName, *Mod);
+  auto *EntryBB = BasicBlock::Create(*Ctx, "entry", TrampolineFn);
+
+  IRBuilder<> IRB(EntryBB);
+
+  // Use the trampoline's return address (modulo the max tag) as the allocation
+  // site tag
+  auto *MaxTag = ConstantInt::get(TagTy, kFuzzallocTagMax);
+  auto *RetAddr = IRB.CreateCall(ReturnAddrFn, IRB.getInt32(0));
+  auto *Tag = IRB.CreateURem(
+      IRB.CreateZExtOrTrunc(IRB.CreatePtrToInt(RetAddr, IntPtrTy), TagTy),
+      MaxTag);
+
+  // Call a tagged version of the dynamic memory allocation function and return
+  // its result
+  auto *TaggedFn = getTaggedFunction(OrigF);
+  SmallVector<Value *, 4> Args = {Tag};
+  for (auto &Arg : TrampolineFn->args()) {
+    Args.push_back(&Arg);
+  }
+  IRB.CreateRet(IRB.CreateCall(TaggedFn, Args));
+
+  NumTrampolines++;
+  return TrampolineFn;
+}
 
 FunctionType *HeapTag::getTaggedFunctionType(const FunctionType *Ty) const {
   SmallVector<Type *, 4> TaggedFuncParams = {TagTy};
@@ -202,7 +248,8 @@ void HeapTag::tagUser(User *U, Function *F) const {
     }
     BC->eraseFromParent();
   } else {
-    llvm_unreachable("User not supported");
+    auto *TrampolineFn = createTrampoline(F);
+    U->replaceUsesOfWith(F, TrampolineFn);
   }
 }
 
@@ -217,9 +264,12 @@ bool HeapTag::runOnModule(Module &M) {
     return false;
   }
 
+  // Initialize stuff
   this->Mod = &M;
   this->Ctx = &M.getContext();
   this->TagTy = Type::getIntNTy(*Ctx, kNumTagBits);
+  this->IntPtrTy = Mod->getDataLayout().getIntPtrType(*Ctx);
+  this->ReturnAddrFn = Intrinsic::getDeclaration(Mod, Intrinsic::returnaddress);
 
   // Create the tagged memory allocation functions. These functions take the
   // same arguments as the original dynamic memory allocation function, except

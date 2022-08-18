@@ -48,10 +48,9 @@ Instruction *insertMalloc(Type *Ty, Value *Ptr, Instruction *InsertPt) {
       auto *ElemTy = ArrayTy->getArrayElementType();
       auto TySize = DL.getTypeAllocSize(ElemTy);
       auto NumElems = ArrayTy->getNumElements();
-      return CallInst::CreateMalloc(InsertPt, IntPtrTy, ElemTy,
-                                    ConstantInt::get(IntPtrTy, TySize),
-                                    ConstantInt::get(IntPtrTy, NumElems),
-                                    nullptr, Name);
+      return CallInst::CreateMalloc(
+          InsertPt, IntPtrTy, ElemTy, ConstantInt::get(IntPtrTy, TySize),
+          ConstantInt::get(IntPtrTy, NumElems), nullptr, Name);
     } else {
       // Insert non-array malloc call
       return CallInst::CreateMalloc(InsertPt, IntPtrTy, Ty,
