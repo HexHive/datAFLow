@@ -1,4 +1,4 @@
-//===-- LowerAtomic.cpp - Lower atomic instructions -----------------------===//
+//===-- LowerAtomic.cpp - Lower atomic instructions -------------*- C++ -*-===//
 ///
 /// \file
 /// Wrapper around LLVM's LowerAtomic pass.

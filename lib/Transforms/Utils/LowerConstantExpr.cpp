@@ -1,7 +1,7 @@
-//===-- LowerConstantExpr.cpp - Lower atomic constant expressions ---------===//
+//===-- LowerConstantExpr.cpp - Lower constant expressions ------*- C++ -*-===//
 ///
 /// \file
-/// Lower constant expressions
+/// Lower constant expressions.
 ///
 //===----------------------------------------------------------------------===//
 

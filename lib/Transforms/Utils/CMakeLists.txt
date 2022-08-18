@@ -30,3 +30,8 @@ add_library(Mem2Reg SHARED
   Mem2Reg.cpp
 )
 install(TARGETS Mem2Reg LIBRARY DESTINATION lib)
+
+add_library(StripLifetime SHARED
+  StripLifetime.cpp
+)
+install(TARGETS StripLifetime LIBRARY DESTINATION lib)
