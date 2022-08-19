@@ -56,16 +56,11 @@ private:
   IntegerType *TagTy;
   IntegerType *IntPtrTy;
   FunctionCallee BBRegisterFn;
-
-  ValueMap<AllocaInst *, SmallVector<IntrinsicInst *, 4>> AllocaLifetimes;
 };
 
 char LocalVarTag::ID = 0;
 
 AllocaInst *LocalVarTag::heapify(AllocaInst *OrigAlloca) {
-  unsigned NumMallocs = 0;
-  unsigned NumFrees = 0;
-
   auto *AllocaTy = OrigAlloca->getAllocatedType();
   auto *NewAllocaTy = [&]() -> PointerType * {
     if (AllocaTy->isArrayTy()) {
@@ -91,47 +86,26 @@ AllocaInst *LocalVarTag::heapify(AllocaInst *OrigAlloca) {
     auto *User = U->getUser();
 
     if (auto *Inst = dyn_cast<Instruction>(User)) {
-      if (isLifetimeStart(Inst)) {
-        // A lifetime.start intrinsic indicates the variable is now "live". So
-        // allocate it
-        insertMalloc(AllocaTy, NewAlloca, Inst);
-        Inst->replaceUsesOfWith(OrigAlloca, NewAlloca);
-        NumMallocs++;
-      } else if (isLifetimeEnd(Inst)) {
-        // A lifetime.end intrinsic indicates the variable is now "dead". So
-        // deallocate it
-        insertFree(NewAlloca->getAllocatedType(), NewAlloca, Inst);
-        Inst->replaceUsesOfWith(OrigAlloca, NewAlloca);
-        NumFrees++;
-      } else {
-        // Load the new alloca from the heap before we can do anything with it
-        auto *InsertPt = phiSafeInsertPt(U);
-        auto *LoadNewAlloca = new LoadInst(NewAlloca->getAllocatedType(),
-                                           NewAlloca, "", InsertPt);
-        auto *BitCastNewAlloca = CastInst::CreatePointerCast(
-            LoadNewAlloca, OrigAlloca->getType(), "", InsertPt);
-        Inst->replaceUsesOfWith(OrigAlloca, BitCastNewAlloca);
-      }
+      // Load the new alloca from the heap before we can do anything with it
+      auto *InsertPt = phiSafeInsertPt(U);
+      auto *LoadNewAlloca =
+          new LoadInst(NewAlloca->getAllocatedType(), NewAlloca, "", InsertPt);
+      auto *BitCastNewAlloca = CastInst::CreatePointerCast(
+          LoadNewAlloca, OrigAlloca->getType(), "", InsertPt);
+      Inst->replaceUsesOfWith(OrigAlloca, BitCastNewAlloca);
     } else {
       llvm_unreachable("Unsupported alloca user");
     }
   }
 
-  // Place the malloc call after the new alloca if we did not encounter any
-  // lifetime.start intrinsics
-  if (NumMallocs == 0) {
-    insertMalloc(AllocaTy, NewAlloca, OrigAlloca);
-    NumMallocs++;
-  }
+  // Place the malloc call after the new alloca
+  insertMalloc(AllocaTy, NewAlloca, OrigAlloca);
 
-  // Insert free calls at function exit if we did not encounter any
-  // lifetime.end intrinsics
-  if (NumFrees == 0) {
-    EscapeEnumerator EE(*OrigAlloca->getFunction());
-    while (auto *AtExit = EE.Next()) {
-      insertFree(NewAlloca->getAllocatedType(), NewAlloca,
-                 &*AtExit->GetInsertPoint());
-    }
+  // Insert free calls at function exit points
+  EscapeEnumerator EE(*OrigAlloca->getFunction());
+  while (auto *AtExit = EE.Next()) {
+    insertFree(NewAlloca->getAllocatedType(), NewAlloca,
+               &*AtExit->GetInsertPoint());
   }
 
   // Update debug users
@@ -176,60 +150,31 @@ AllocaInst *LocalVarTag::tagAlloca(AllocaInst *OrigAlloca) {
   NewAlloca->setAlignment(Align(NewAllocSize));
   NewAlloca->takeName(OrigAlloca);
 
+  // Get the first non-alloca instruction
+  auto *InsertPt = [&]() -> Instruction * {
+    for (auto &I : *OrigAlloca->getParent()) {
+      if (!isa<AllocaInst>(&I)) {
+        return &I;
+      }
+    }
+    return nullptr;
+  }();
+  assert(InsertPt);
+
   // Store the tag
   auto *InitVal = ConstantStruct::get(
       NewAllocaTy, {UndefValue::get(OrigTy), UndefValue::get(PaddingTy), Tag});
-
-  const auto &InsertInitStore = [&](Instruction *InsertPt) -> StoreInst * {
-    auto *InitStore = new StoreInst(InitVal, NewAlloca, InsertPt);
-    InitStore->setMetadata(Mod->getMDKindID(kFuzzallocNoInstrumentMD),
-                           MDNode::get(*Ctx, None));
-    InitStore->setMetadata(Mod->getMDKindID(kNoSanitizeMD),
-                           MDNode::get(*Ctx, None));
-    return InitStore;
-  };
+  auto *InitStore = new StoreInst(InitVal, NewAlloca, InsertPt);
+  InitStore->setMetadata(Mod->getMDKindID(kFuzzallocNoInstrumentMD),
+                         MDNode::get(*Ctx, None));
+  InitStore->setMetadata(Mod->getMDKindID(kNoSanitizeMD),
+                         MDNode::get(*Ctx, None));
 
   // Register the allocation in the baggy bounds table
-  const auto &InsertRegisterAlloca = [&](Instruction *InsertPt) -> CallInst * {
-    auto *NewAllocaCasted = new BitCastInst(NewAlloca, Int8PtrTy, "", InsertPt);
-    return CallInst::Create(
-        BBRegisterFn,
-        {NewAllocaCasted, ConstantInt::get(IntPtrTy, NewAllocSize)}, "",
-        InsertPt);
-  };
-
-  const auto &LifetimeIt = AllocaLifetimes.find(OrigAlloca);
-
-  // Fix lifetime.{start, end} intrinsics
-  if (LifetimeIt == AllocaLifetimes.end()) {
-    InsertInitStore(OrigAlloca);
-    InsertRegisterAlloca(OrigAlloca);
-  } else {
-    for (auto *II : LifetimeIt->second) {
-      assert(II->getIntrinsicID() == Intrinsic::lifetime_start ||
-             II->getIntrinsicID() == Intrinsic::lifetime_end);
-      assert(II->getNumUses() == 0);
-
-      auto *Size = ConstantInt::get(Type::getInt64Ty(*Ctx), NewAllocSize);
-      auto *LifetimeFn =
-          Intrinsic::getDeclaration(Mod, II->getIntrinsicID(), Int8PtrTy);
-
-      auto *BCNewAlloca = new BitCastInst(NewAlloca, Int8PtrTy, "", II);
-      auto *NewLifetime =
-          CallInst::Create(LifetimeFn->getFunctionType(), LifetimeFn,
-                           {Size, BCNewAlloca}, "", II);
-      NewLifetime->takeName(II);
-
-      if (II->getIntrinsicID() == Intrinsic::lifetime_start) {
-        InsertInitStore(II);
-        InsertRegisterAlloca(II);
-      }
-
-      auto *Ptr = II->getArgOperand(II->getNumArgOperands() - 1);
-      II->eraseFromParent();
-      RecursivelyDeleteTriviallyDeadInstructions(Ptr);
-    }
-  }
+  auto *NewAllocaCasted = new BitCastInst(NewAlloca, Int8PtrTy, "", InsertPt);
+  CallInst::Create(BBRegisterFn,
+                   {NewAllocaCasted, ConstantInt::get(IntPtrTy, NewAllocSize)},
+                   "", InsertPt);
 
   // Now cache and update the other users
   SmallVector<Use *, 16> Uses(
@@ -283,22 +228,6 @@ bool LocalVarTag::runOnModule(Module &M) {
       [](Value *V) { return cast<AllocaInst>(V); });
   SmallPtrSet<AllocaInst *, 32> AllocaDefSet(AllocaDefs.begin(),
                                              AllocaDefs.end());
-
-  // Collect any lifetime.{start, end} intrinsic instructions used by the
-  // allocas we intend to tag. These intrinsic instructions must be adjusted
-  // after tagging
-  for (auto &F : M) {
-    for (auto &I : instructions(F)) {
-      if (isLifetimeStart(&I) || isLifetimeEnd(&I)) {
-        auto *II = cast<IntrinsicInst>(&I);
-        auto *Addr = II->getArgOperand(II->getNumArgOperands() - 1);
-        auto *Alloca = findAllocaForValue(Addr);
-        if (Alloca && AllocaDefSet.count(Alloca) > 0) {
-          AllocaLifetimes[Alloca].push_back(II);
-        }
-      }
-    }
-  }
 
   for (auto *Alloca : AllocaDefs) {
     tagAlloca(Alloca);

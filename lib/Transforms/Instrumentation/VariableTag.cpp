@@ -81,17 +81,3 @@ Instruction *insertFree(Type *Ty, Value *Ptr, Instruction *InsertPt) {
 
   return CallInst::CreateFree(Load, InsertPt);
 }
-
-bool isLifetimeStart(const Instruction *I) {
-  if (const auto *II = dyn_cast<IntrinsicInst>(I)) {
-    return II->getIntrinsicID() == Intrinsic::lifetime_start;
-  }
-  return false;
-}
-
-bool isLifetimeEnd(const Instruction *I) {
-  if (const auto *II = dyn_cast<IntrinsicInst>(I)) {
-    return II->getIntrinsicID() == Intrinsic::lifetime_end;
-  }
-  return false;
-}
