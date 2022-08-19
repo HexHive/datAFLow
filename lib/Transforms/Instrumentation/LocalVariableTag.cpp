@@ -150,31 +150,20 @@ AllocaInst *LocalVarTag::tagAlloca(AllocaInst *OrigAlloca) {
   NewAlloca->setAlignment(Align(NewAllocSize));
   NewAlloca->takeName(OrigAlloca);
 
-  // Get the first non-alloca instruction
-  auto *InsertPt = [&]() -> Instruction * {
-    for (auto &I : *OrigAlloca->getParent()) {
-      if (!isa<AllocaInst>(&I)) {
-        return &I;
-      }
-    }
-    return nullptr;
-  }();
-  assert(InsertPt);
-
   // Store the tag
   auto *InitVal = ConstantStruct::get(
       NewAllocaTy, {UndefValue::get(OrigTy), UndefValue::get(PaddingTy), Tag});
-  auto *InitStore = new StoreInst(InitVal, NewAlloca, InsertPt);
+  auto *InitStore = new StoreInst(InitVal, NewAlloca, OrigAlloca);
   InitStore->setMetadata(Mod->getMDKindID(kFuzzallocNoInstrumentMD),
                          MDNode::get(*Ctx, None));
   InitStore->setMetadata(Mod->getMDKindID(kNoSanitizeMD),
                          MDNode::get(*Ctx, None));
 
   // Register the allocation in the baggy bounds table
-  auto *NewAllocaCasted = new BitCastInst(NewAlloca, Int8PtrTy, "", InsertPt);
+  auto *NewAllocaCasted = new BitCastInst(NewAlloca, Int8PtrTy, "", OrigAlloca);
   CallInst::Create(BBRegisterFn,
                    {NewAllocaCasted, ConstantInt::get(IntPtrTy, NewAllocSize)},
-                   "", InsertPt);
+                   "", OrigAlloca);
 
   // Now cache and update the other users
   SmallVector<Use *, 16> Uses(
