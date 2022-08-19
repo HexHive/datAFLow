@@ -5,12 +5,15 @@
 ///
 //===----------------------------------------------------------------------===//
 
+#include <llvm/Analysis/ValueTracking.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DIBuilder.h>
+#include <llvm/IR/InstIterator.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/IntrinsicInst.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/Module.h>
+#include <llvm/IR/ValueMap.h>
 #include <llvm/Pass.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/Utils/EscapeEnumerator.h>
@@ -53,6 +56,8 @@ private:
   IntegerType *TagTy;
   IntegerType *IntPtrTy;
   FunctionCallee BBRegisterFn;
+
+  ValueMap<AllocaInst *, SmallVector<IntrinsicInst *, 4>> AllocaLifetimes;
 };
 
 char LocalVarTag::ID = 0;
@@ -178,17 +183,35 @@ AllocaInst *LocalVarTag::tagAlloca(AllocaInst *OrigAlloca) {
   InitStore->setMetadata(Mod->getMDKindID(kNoSanitizeMD),
                          MDNode::get(*Ctx, None));
 
-  // Cache and update users
+  // Fix lifetime.{start, end} intrinsics first
+  for (auto *II : AllocaLifetimes[OrigAlloca]) {
+    assert(II->getIntrinsicID() == Intrinsic::lifetime_start ||
+           II->getIntrinsicID() == Intrinsic::lifetime_end);
+    assert(II->getNumUses() == 0);
+
+    auto *Size = ConstantInt::get(Type::getInt64Ty(*Ctx), NewAllocSize);
+    auto *Int8PtrTy = Type::getInt8PtrTy(*Ctx);
+    auto *LifetimeFn =
+        Intrinsic::getDeclaration(Mod, II->getIntrinsicID(), Int8PtrTy);
+    auto *BCNewAlloca = new BitCastInst(NewAlloca, Int8PtrTy, "", II);
+    auto *NewLifetime = CallInst::Create(
+        LifetimeFn->getFunctionType(), LifetimeFn, {Size, BCNewAlloca}, "", II);
+
+    NewLifetime->takeName(II);
+    II->eraseFromParent();
+  }
+
+  // Now cache and update the other users
   SmallVector<Use *, 16> Uses(
       map_range(OrigAlloca->uses(), [](Use &U) { return &U; }));
   for (auto *U : Uses) {
     auto *User = U->getUser();
 
-    if (isa<Instruction>(User)) {
+    if (auto *Inst = dyn_cast<Instruction>(User)) {
       auto *InsertPt = phiSafeInsertPt(U);
       auto *GEP = GetElementPtrInst::CreateInBounds(NewAllocaTy, NewAlloca,
                                                     {Zero, Zero}, "", InsertPt);
-      User->replaceUsesOfWith(OrigAlloca, GEP);
+      Inst->replaceUsesOfWith(OrigAlloca, GEP);
     } else {
       llvm_unreachable("Unsupported alloca user");
     }
@@ -232,11 +255,31 @@ bool LocalVarTag::runOnModule(Module &M) {
     return false;
   }
 
-  for (auto *Def : DefSites) {
-    if (auto *Alloca = dyn_cast<AllocaInst>(Def)) {
-      tagAlloca(Alloca);
-      NumTaggedLocals++;
+  const auto &AllocaDefs = map_range(
+      make_filter_range(DefSites, [](Value *V) { return isa<AllocaInst>(V); }),
+      [](Value *V) { return cast<AllocaInst>(V); });
+  SmallPtrSet<AllocaInst *, 32> AllocaDefSet(AllocaDefs.begin(),
+                                             AllocaDefs.end());
+
+  // Collect any lifetime.{start, end} intrinsic instructions used by the
+  // allocas we intend to tag. These intrinsic instructions must be adjusted
+  // after tagging
+  for (auto &F : M) {
+    for (auto &I : instructions(F)) {
+      if (isLifetimeStart(&I) || isLifetimeEnd(&I)) {
+        auto *II = cast<IntrinsicInst>(&I);
+        auto *Addr = II->getArgOperand(II->getNumArgOperands() - 1);
+        auto *Alloca = findAllocaForValue(Addr);
+        if (Alloca && AllocaDefSet.count(Alloca) > 0) {
+          AllocaLifetimes[Alloca].push_back(II);
+        }
+      }
     }
+  }
+
+  for (auto *Alloca : AllocaDefs) {
+    tagAlloca(Alloca);
+    NumTaggedLocals++;
   }
 
   return true;
