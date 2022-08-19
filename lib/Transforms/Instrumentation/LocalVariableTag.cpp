@@ -146,9 +146,11 @@ AllocaInst *LocalVarTag::heapify(AllocaInst *OrigAlloca) {
 }
 
 AllocaInst *LocalVarTag::tagAlloca(AllocaInst *OrigAlloca) {
+  auto *Int8PtrTy = Type::getInt8PtrTy(*Ctx);
   auto *Zero = ConstantInt::getNullValue(IntegerType::getInt32Ty(*Ctx));
   auto *OrigTy = OrigAlloca->getAllocatedType();
   auto OrigSize = DL->getTypeAllocSize(OrigTy);
+
   auto NewAllocSize = getTaggedVarSize(DL->getTypeAllocSize(OrigTy));
   if (NewAllocSize > IntegerType::MAX_INT_BITS) {
     warning_stream()
@@ -177,28 +179,56 @@ AllocaInst *LocalVarTag::tagAlloca(AllocaInst *OrigAlloca) {
   // Store the tag
   auto *InitVal = ConstantStruct::get(
       NewAllocaTy, {UndefValue::get(OrigTy), UndefValue::get(PaddingTy), Tag});
-  auto *InitStore = new StoreInst(InitVal, NewAlloca, OrigAlloca);
-  InitStore->setMetadata(Mod->getMDKindID(kFuzzallocNoInstrumentMD),
-                         MDNode::get(*Ctx, None));
-  InitStore->setMetadata(Mod->getMDKindID(kNoSanitizeMD),
-                         MDNode::get(*Ctx, None));
 
-  // Fix lifetime.{start, end} intrinsics first
-  for (auto *II : AllocaLifetimes[OrigAlloca]) {
-    assert(II->getIntrinsicID() == Intrinsic::lifetime_start ||
-           II->getIntrinsicID() == Intrinsic::lifetime_end);
-    assert(II->getNumUses() == 0);
+  const auto &InsertInitStore = [&](Instruction *InsertPt) -> StoreInst * {
+    auto *InitStore = new StoreInst(InitVal, NewAlloca, InsertPt);
+    InitStore->setMetadata(Mod->getMDKindID(kFuzzallocNoInstrumentMD),
+                           MDNode::get(*Ctx, None));
+    InitStore->setMetadata(Mod->getMDKindID(kNoSanitizeMD),
+                           MDNode::get(*Ctx, None));
+    return InitStore;
+  };
 
-    auto *Size = ConstantInt::get(Type::getInt64Ty(*Ctx), NewAllocSize);
-    auto *Int8PtrTy = Type::getInt8PtrTy(*Ctx);
-    auto *LifetimeFn =
-        Intrinsic::getDeclaration(Mod, II->getIntrinsicID(), Int8PtrTy);
-    auto *BCNewAlloca = new BitCastInst(NewAlloca, Int8PtrTy, "", II);
-    auto *NewLifetime = CallInst::Create(
-        LifetimeFn->getFunctionType(), LifetimeFn, {Size, BCNewAlloca}, "", II);
+  // Register the allocation in the baggy bounds table
+  const auto &InsertRegisterAlloca = [&](Instruction *InsertPt) -> CallInst * {
+    auto *NewAllocaCasted = new BitCastInst(NewAlloca, Int8PtrTy, "", InsertPt);
+    return CallInst::Create(
+        BBRegisterFn,
+        {NewAllocaCasted, ConstantInt::get(IntPtrTy, NewAllocSize)}, "",
+        InsertPt);
+  };
 
-    NewLifetime->takeName(II);
-    II->eraseFromParent();
+  const auto &LifetimeIt = AllocaLifetimes.find(OrigAlloca);
+
+  // Fix lifetime.{start, end} intrinsics
+  if (LifetimeIt == AllocaLifetimes.end()) {
+    InsertInitStore(OrigAlloca);
+    InsertRegisterAlloca(OrigAlloca);
+  } else {
+    for (auto *II : LifetimeIt->second) {
+      assert(II->getIntrinsicID() == Intrinsic::lifetime_start ||
+             II->getIntrinsicID() == Intrinsic::lifetime_end);
+      assert(II->getNumUses() == 0);
+
+      auto *Size = ConstantInt::get(Type::getInt64Ty(*Ctx), NewAllocSize);
+      auto *LifetimeFn =
+          Intrinsic::getDeclaration(Mod, II->getIntrinsicID(), Int8PtrTy);
+
+      auto *BCNewAlloca = new BitCastInst(NewAlloca, Int8PtrTy, "", II);
+      auto *NewLifetime =
+          CallInst::Create(LifetimeFn->getFunctionType(), LifetimeFn,
+                           {Size, BCNewAlloca}, "", II);
+      NewLifetime->takeName(II);
+
+      if (II->getIntrinsicID() == Intrinsic::lifetime_start) {
+        InsertInitStore(II);
+        InsertRegisterAlloca(II);
+      }
+
+      auto *Ptr = II->getArgOperand(II->getNumArgOperands() - 1);
+      II->eraseFromParent();
+      RecursivelyDeleteTriviallyDeadInstructions(Ptr);
+    }
   }
 
   // Now cache and update the other users
@@ -216,13 +246,6 @@ AllocaInst *LocalVarTag::tagAlloca(AllocaInst *OrigAlloca) {
       llvm_unreachable("Unsupported alloca user");
     }
   }
-
-  // Register the allocation in the baggy bounds table
-  auto *Int8PtrTy = Type::getInt8PtrTy(*Ctx);
-  auto *NewAllocaCasted = new BitCastInst(NewAlloca, Int8PtrTy, "", OrigAlloca);
-  CallInst::Create(BBRegisterFn,
-                   {NewAllocaCasted, ConstantInt::get(IntPtrTy, NewAllocSize)},
-                   "", OrigAlloca);
 
   // Update debug users
   replaceDbgDeclare(OrigAlloca, NewAlloca, *DbgBuilder,
