@@ -314,6 +314,13 @@ GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
                                                     {Zero, Zero}, "", InsertPt);
       User->replaceUsesOfWith(OrigGV, GEP);
     } else if (auto *C = dyn_cast<Constant>(User)) {
+      assert(isa<ConstantExpr>(U->get()) && "only constexpr uses are supported");
+      outs() << "constant user " << *C << '\n';
+      outs() << "    type ID " << C->getValueID() << '\n';
+      outs() << "    isa global variable? " << isa<GlobalVariable>(C) << '\n';
+      outs() << "    use -> " << *U->get() << '\n';
+      outs() << "    use isa global? " << isa<GlobalValue>(U->get()) << '\n';
+      outs().flush();
       auto *GEP = ConstantExpr::getInBoundsGetElementPtr(
           NewGVTy, NewGV, ArrayRef<Constant *>({Zero, Zero}));
       C->handleOperandChange(OrigGV, GEP);
