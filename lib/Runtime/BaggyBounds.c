@@ -141,6 +141,19 @@ void *__bb_realloc(tag_t Tag, void *Ptr, size_t Size) {
   return NewPtr;
 }
 
+char *__bb_strdup(tag_t Tag, const char *S) {
+  if (!S) {
+    return NULL;
+  }
+
+  const size_t Len = strlen(S) + 1;
+  void *Ptr = __bb_malloc(Tag, Len);
+  if (Ptr) {
+    memcpy(Ptr, S, Len);
+  }
+  return Ptr;
+}
+
 tag_t __bb_lookup(void *Ptr, uintptr_t *Base) {
   if (!Ptr) {
     *Base = 0;
