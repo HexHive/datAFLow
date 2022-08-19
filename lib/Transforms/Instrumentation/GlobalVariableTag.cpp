@@ -313,8 +313,10 @@ GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
       auto *GEP = GetElementPtrInst::CreateInBounds(NewGVTy, NewGV,
                                                     {Zero, Zero}, "", InsertPt);
       User->replaceUsesOfWith(OrigGV, GEP);
-    } else if (auto *C = dyn_cast<Constant>(User)) {
+    } else if (auto *GV = dyn_cast<GlobalValue>(User)) {
+      assert(false && "GlobalValue not yet supported");
       assert(isa<ConstantExpr>(U->get()) && "only constexpr uses are supported");
+    } else if (auto *C = dyn_cast<Constant>(User)) {
       outs() << "constant user " << *C << '\n';
       outs() << "    type ID " << C->getValueID() << '\n';
       outs() << "    isa global variable? " << isa<GlobalVariable>(C) << '\n';
