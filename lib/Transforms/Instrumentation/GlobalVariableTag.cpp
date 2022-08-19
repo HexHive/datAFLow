@@ -313,10 +313,10 @@ GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
       auto *GEP = GetElementPtrInst::CreateInBounds(NewGVTy, NewGV,
                                                     {Zero, Zero}, "", InsertPt);
       User->replaceUsesOfWith(OrigGV, GEP);
-    } else if (auto *CE = dyn_cast<ConstantExpr>(User)) {
+    } else if (auto *C = dyn_cast<Constant>(User)) {
       auto *GEP = ConstantExpr::getInBoundsGetElementPtr(
           NewGVTy, NewGV, ArrayRef<Constant *>({Zero, Zero}));
-      CE->handleOperandChange(OrigGV, GEP);
+      C->handleOperandChange(OrigGV, GEP);
     } else {
       llvm_unreachable("Unsupported global variable user");
     }

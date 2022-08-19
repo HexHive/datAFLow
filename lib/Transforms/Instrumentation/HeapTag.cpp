@@ -196,9 +196,17 @@ Instruction *HeapTag::tagCall(CallBase *CB, FunctionCallee TaggedF) const {
     }
     llvm_unreachable("Unsupported call instruction");
   }();
+
+  // Copy parameter attributes
+  const auto &AL = CB->getAttributes();
+  for (unsigned I = 0; I < CB->arg_size(); ++I) {
+    for (auto &Attr : AL.getAttributes(AttributeList::FirstArgIndex + I)) {
+      TaggedCall->addParamAttr(I + 1, Attr);
+    }
+  }
+
   TaggedCall->takeName(CB);
   TaggedCall->setCallingConv(CB->getCallingConv());
-  TaggedCall->setAttributes(CB->getAttributes());
   TaggedCall->setDebugLoc(CB->getDebugLoc());
   TaggedCall->copyMetadata(*CB);
   TaggedCall->setMetadata(Mod->getMDKindID(kFuzzallocTaggVarMD),
