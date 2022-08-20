@@ -47,13 +47,13 @@ def parse_args():
 
 
 def check_if_assembler(args):
+    """Return `True` if the input file is an assembly file."""
     for arg in args:
         p = Path(arg)
-        if not p.exists():
-            return False
-        ext = p.suffix.lower()
-        if ext == '.s':
-            return True
+        if p.exists():
+            ext = p.suffix.lower()
+            if ext == '.s':
+                return True
 
     return False
 
@@ -86,11 +86,12 @@ def get_llvm_args(args):
     # Def site sensitivity
     if 'FUZZALLOC_DEF_SENSITIVITY' in env:
         def_iter = (['-mllvm', f'-fuzzalloc-def-{def_sensitivity}'] for
-                def_sensitivity in env['FUZZALLOC_DEF_SENSITIVITY'].split(':'))
+                    def_sensitivity in
+                    env['FUZZALLOC_DEF_SENSITIVITY'].split(':'))
         def_sensitivities = chain.from_iterable(def_iter)
     elif args.def_sensitivity:
         def_iter = (['-mllvm', f'-fuzzalloc-def-{def_sensitivity}'] for
-                def_sensitivity in args.def_sensitivity)
+                    def_sensitivity in args.def_sensitivity)
         def_sensitivities = chain.from_iterable(def_iter)
     else:
         def_sensitivities = []
