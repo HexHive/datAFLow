@@ -46,6 +46,85 @@ def parse_args():
     return parser.parse_known_args()
 
 
+def check_if_assembler(args):
+    for arg in args:
+        p = Path(arg)
+        if not p.exists():
+            return False
+        ext = p.suffix.lower()
+        if ext == '.s':
+            return True
+
+    return False
+
+def get_llvm_args(args):
+    env = os.environ.copy()
+    llvm_args = []
+
+    # Def site function ignore list
+    if 'FUZZALLOC_DEF_FUNC_IGNORE' in env:
+        func_ignore = env['FUZZALLOC_DEF_FUNC_IGNORE']
+    else:
+        func_ignore = None
+
+    if func_ignore:
+        llvm_args.extend(['-mllvm',
+                          f'-fuzzalloc-def-ignore-funcs={func_ignore}'])
+
+    # Def site dynamic memory allocation functions
+    if 'FUZZALLOC_DEF_MEM_FUNCS' in env:
+        def_mem_funcs = env['FUZZALLOC_DEF_MEM_FUNCS']
+    elif args.def_mem_funcs:
+        def_mem_funcs = args.def_mem_funcs
+    else:
+        def_mem_funcs = None
+
+    if def_mem_funcs:
+        llvm_args.extend(['-mllvm',
+                          f'-fuzzalloc-custom-mem-funcs={def_mem_funcs}'])
+
+    # Def site sensitivity
+    if 'FUZZALLOC_DEF_SENSITIVITY' in env:
+        def_iter = (['-mllvm', f'-fuzzalloc-def-{def_sensitivity}'] for
+                def_sensitivity in env['FUZZALLOC_DEF_SENSITIVITY'].split(':'))
+        def_sensitivities = chain.from_iterable(def_iter)
+    elif args.def_sensitivity:
+        def_iter = (['-mllvm', f'-fuzzalloc-def-{def_sensitivity}'] for
+                def_sensitivity in args.def_sensitivity)
+        def_sensitivities = chain.from_iterable(def_iter)
+    else:
+        def_sensitivities = []
+
+    llvm_args.extend(def_sensitivities)
+
+    # Use site sensitivity
+    if 'FUZZALLOC_USE_SENSITIVITY' in env:
+        use_iter = (['-mllvm', f'-fuzzalloc-use-{use_sensitivity}'] for
+                use_sensitivity in env['FUZZALLOC_USE_SENSITIVITY'].split(':'))
+        use_sensitivities = chain.from_iterable(use_iter)
+    elif args.use_sensitivity:
+        use_iter = (['-mllvm', f'-fuzzalloc-use-{use_sensitivity}'] for
+                use_sensitivity in args.use_sensitivity)
+        use_sensitivities = chain.from_iterable(use_iter)
+    else:
+        use_sensitivities = []
+
+    llvm_args.extend(use_sensitivities)
+
+    # Use site capture
+    if 'FUZZALLOC_USE_CAPTURE' in env:
+        use_capture = env['FUZZALLOC_USE_CAPTURE']
+    elif args.use_capture:
+        use_capture = args.use_capture
+    else:
+        use_capture = None
+
+    if use_capture:
+        llvm_args.extend(['-mllvm', f'-fuzzalloc-capture-{use_capture}'])
+
+    return llvm_args
+
+
 def main():
     """The main function."""
     args, clang_args = parse_args()
@@ -76,67 +155,11 @@ def main():
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libGlobalVariableTag.so',
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libLocalVariableTag.so',
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libHeapTag.so',
-        '-Wno-unused-command-line-argument',
     ])
 
-    # Def site function ignore list
-    if 'FUZZALLOC_DEF_FUNC_IGNORE' in env:
-        func_ignore = env['FUZZALLOC_DEF_FUNC_IGNORE']
-    else:
-        func_ignore = None
-
-    if func_ignore:
-        cmd.extend(['-mllvm', f'-fuzzalloc-def-ignore-funcs={func_ignore}'])
-
-    # Def site dynamic memory allocation functions
-    if 'FUZZALLOC_DEF_MEM_FUNCS' in env:
-        def_mem_funcs = env['FUZZALLOC_DEF_MEM_FUNCS']
-    elif args.def_mem_funcs:
-        def_mem_funcs = args.def_mem_funcs
-    else:
-        def_mem_funcs = None
-
-    if def_mem_funcs:
-        cmd.extend(['-mllvm', f'-fuzzalloc-custom-mem-funcs={def_mem_funcs}'])
-
-    # Def site sensitivity
-    if 'FUZZALLOC_DEF_SENSITIVITY' in env:
-        def_iter = (['-mllvm', f'-fuzzalloc-def-{def_sensitivity}'] for
-                def_sensitivity in env['FUZZALLOC_DEF_SENSITIVITY'].split(':'))
-        def_sensitivities = chain.from_iterable(def_iter)
-    elif args.def_sensitivity:
-        def_iter = (['-mllvm', f'-fuzzalloc-def-{def_sensitivity}'] for
-                def_sensitivity in args.def_sensitivity)
-        def_sensitivities = chain.from_iterable(def_iter)
-    else:
-        def_sensitivities = []
-
-    cmd.extend(def_sensitivities)
-
-    # Use site sensitivity
-    if 'FUZZALLOC_USE_SENSITIVITY' in env:
-        use_iter = (['-mllvm', f'-fuzzalloc-use-{use_sensitivity}'] for
-                use_sensitivity in env['FUZZALLOC_USE_SENSITIVITY'].split(':'))
-        use_sensitivities = chain.from_iterable(use_iter)
-    elif args.use_sensitivity:
-        use_iter = (['-mllvm', f'-fuzzalloc-use-{use_sensitivity}'] for
-                use_sensitivity in args.use_sensitivity)
-        use_sensitivities = chain.from_iterable(use_iter)
-    else:
-        use_sensitivities = []
-
-    cmd.extend(use_sensitivities)
-
-    # Use site capture
-    if 'FUZZALLOC_USE_CAPTURE' in env:
-        use_capture = env['FUZZALLOC_USE_CAPTURE']
-    elif args.use_capture:
-        use_capture = args.use_capture
-    else:
-        use_capture = None
-
-    if use_capture:
-        cmd.extend(['-mllvm', f'-fuzzalloc-capture-{use_capture}'])
+    if not check_if_assembler(clang_args):
+        llvm_args = get_llvm_args(args)
+        cmd.extend(llvm_args)
 
     # Use site instrumentation
     if 'FUZZALLOC_USE_INST' in env:
@@ -164,6 +187,8 @@ def main():
     cmd.extend([f'-L{LIB_DIR}', '-lFuzzallocRuntime'])
     if use_inst == 'afl':
         cmd.extend([f'-L{LIB_DIR}', '-lAFLRuntime'])
+
+    cmd.append('-Qunused-arguments')
 
     proc = run(cmd, check=False)
     return proc.returncode
