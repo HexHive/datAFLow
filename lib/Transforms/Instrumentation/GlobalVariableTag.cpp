@@ -264,11 +264,11 @@ GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
   auto *OrigTy = OrigGV->getValueType();
   auto OrigSize = DL->getTypeAllocSize(OrigTy);
   auto NewAllocSize = getTaggedVarSize(DL->getTypeAllocSize(OrigTy));
-  if (NewAllocSize > IntegerType::MAX_INT_BITS) {
+  if (NewAllocSize > kMaxTaggedVarSize) {
     warning_stream()
-        << "Unable to tag global variable " << OrigGV->getName()
-        << ": new allocation size " << NewAllocSize
-        << " is greater than the max possible size. Heapifying instead\n";
+        << "Unable to tag global variable `" << OrigGV->getName()
+        << "`: new allocation size " << NewAllocSize
+        << " is greater than the max possible size. Heapifying instead.\n";
     return heapify(OrigGV);
   }
 

@@ -15,7 +15,12 @@ class Instruction;
 class Type;
 class TypeSize;
 class Value;
-} // llvm namespace
+} // namespace llvm
+
+/// Maximum tagged variable size.
+///
+/// If a tagged variable is larger than this, it must be heapified.
+constexpr size_t kMaxTaggedVarSize = 0xFFFF;
 
 /// Randomly generate a def site tag
 llvm::ConstantInt *generateTag(llvm::IntegerType *);
@@ -24,7 +29,8 @@ llvm::ConstantInt *generateTag(llvm::IntegerType *);
 size_t getTaggedVarSize(const llvm::TypeSize &);
 
 /// Insert a call to `malloc`
-llvm::Instruction *insertMalloc(llvm::Type *, llvm::Value *, llvm::Instruction *);
+llvm::Instruction *insertMalloc(llvm::Type *, llvm::Value *,
+                                llvm::Instruction *);
 
 /// Insert a call to `free`
 llvm::Instruction *insertFree(llvm::Type *, llvm::Value *, llvm::Instruction *);
