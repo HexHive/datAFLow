@@ -76,7 +76,7 @@ def main():
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libGlobalVariableTag.so',
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libLocalVariableTag.so',
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libHeapTag.so',
-        '-Qunused-arguments'
+        '-Wno-unused-command-line-argument',
     ])
 
     # Def site function ignore list
