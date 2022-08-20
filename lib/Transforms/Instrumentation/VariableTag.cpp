@@ -42,7 +42,7 @@ Instruction *insertMalloc(Type *Ty, Value *Ptr, Instruction *InsertPt) {
 
   auto *IntPtrTy = DL.getIntPtrType(Ctx);
   auto *MallocCall = [&]() -> Instruction * {
-    const auto &Name = Ptr->hasName() ? Ptr->getName() + ".malloc" : "";
+    const auto &Name = Ptr->hasName() ? Ptr->getName().str() + ".malloc" : "";
 
     if (auto *ArrayTy = dyn_cast<ArrayType>(Ty)) {
       // Insert array malloc call

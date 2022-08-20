@@ -287,7 +287,7 @@ GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
   // module)
   auto *NewGV = new GlobalVariable(
       *Mod, NewGVTy, OrigGV->isConstant(), GlobalValue::PrivateLinkage, NewInit,
-      OrigGV->hasName() ? OrigGV->getName() + ".tagged" : "", OrigGV,
+      OrigGV->hasName() ? OrigGV->getName().str() + ".tagged" : "", OrigGV,
       OrigGV->getThreadLocalMode(), OrigGV->getType()->getPointerAddressSpace(),
       OrigGV->isExternallyInitialized());
   NewGV->copyAttributesFrom(OrigGV);

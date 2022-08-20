@@ -142,7 +142,7 @@ AllocaInst *LocalVarTag::tagAlloca(AllocaInst *OrigAlloca) {
       StructType::get(*Ctx, {OrigTy, PaddingTy, TagTy}, /*isPacked=*/true);
   auto *NewAlloca = new AllocaInst(
       NewAllocaTy, OrigAlloca->getType()->getPointerAddressSpace(),
-      OrigAlloca->hasName() ? OrigAlloca->getName() + ".tagged" : "",
+      OrigAlloca->hasName() ? OrigAlloca->getName().str() + ".tagged" : "",
       OrigAlloca);
   NewAlloca->setMetadata(Mod->getMDKindID(kFuzzallocTaggVarMD),
                          MDNode::get(*Ctx, None));

@@ -189,7 +189,7 @@ Instruction *HeapTag::tagCall(CallBase *CB, FunctionCallee TaggedF) const {
 
   // Create the tagged call
   auto *TaggedCall = [&]() -> CallBase * {
-    const auto &Name = CB->getName() + ".tagged";
+    const auto &Name = CB->getName().str() + ".tagged";
     if (isa<CallInst>(CB)) {
       return CallInst::Create(TaggedF, TaggedCallArgs, Name, CB);
     } else if (auto *Invoke = dyn_cast<InvokeInst>(CB)) {
