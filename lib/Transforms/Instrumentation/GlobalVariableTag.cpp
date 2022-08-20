@@ -264,15 +264,21 @@ GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
   auto *OrigTy = OrigGV->getValueType();
   auto OrigSize = DL->getTypeAllocSize(OrigTy);
   auto NewAllocSize = getTaggedVarSize(DL->getTypeAllocSize(OrigTy));
-  if (NewAllocSize > kMaxTaggedVarSize) {
-    warning_stream()
-        << "Unable to tag global variable `" << OrigGV->getName()
-        << "`: new allocation size " << NewAllocSize
-        << " is greater than the max possible size. Heapifying instead.\n";
+  if (NewAllocSize > IntegerType::MAX_INT_BITS) {
+    warning_stream() << "Unable to tag global variable `" << OrigGV->getName()
+                     << "`: new allocation size " << NewAllocSize
+                     << " is greater than the max. Heapifying instead.\n";
     return heapify(OrigGV);
   }
 
   auto PaddingSize = NewAllocSize - OrigSize - kMetaSize;
+  if (PaddingSize > kMaxPaddingSize) {
+    warning_stream() << "Unable to tag globa variable `" << OrigGV->getName()
+                     << "`: padding size " << PaddingSize
+                     << " is greater than the max. Heapifying instead.\n";
+    return heapify(OrigGV);
+  }
+
   auto *PaddingTy = ArrayType::get(Type::getInt8Ty(*Ctx), PaddingSize);
   auto *Tag = generateTag(TagTy);
 

@@ -126,15 +126,22 @@ AllocaInst *LocalVarTag::tagAlloca(AllocaInst *OrigAlloca) {
   auto OrigSize = DL->getTypeAllocSize(OrigTy);
 
   auto NewAllocSize = getTaggedVarSize(DL->getTypeAllocSize(OrigTy));
-  if (NewAllocSize > kMaxTaggedVarSize) {
-    warning_stream()
-        << "Unable to tag alloca `" << OrigAlloca->getName()
-        << "`: new allocation size " << NewAllocSize
-        << " is greater than the max possible size. Heapifying instead.\n";
+  if (NewAllocSize > IntegerType::MAX_INT_BITS) {
+    warning_stream() << "Unable to tag alloca `" << OrigAlloca->getName()
+                     << "`: new allocation size " << NewAllocSize
+                     << " is greater than the max. Heapifying instead.\n";
     return heapify(OrigAlloca);
   }
 
   auto PaddingSize = NewAllocSize - OrigSize - kMetaSize;
+  if (PaddingSize > kMaxPaddingSize) {
+    warning_stream() << "Unable to tag globa variable `"
+                     << OrigAlloca->getName() << "`: padding size "
+                     << PaddingSize
+                     << " is greater than the max. Heapifying instead.\n";
+    return heapify(OrigAlloca);
+  }
+
   auto *PaddingTy = ArrayType::get(Type::getInt8Ty(*Ctx), PaddingSize);
   auto *Tag = generateTag(TagTy);
 
