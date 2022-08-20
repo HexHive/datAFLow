@@ -29,6 +29,8 @@ using namespace llvm;
 #define DEBUG_TYPE "fuzzalloc-tag-heap"
 
 namespace {
+static unsigned NumTaggedFuncs = 0;
+static unsigned NumTaggedFuncUsers = 0;
 static unsigned NumTrampolines = 0;
 } // anonymous namespace
 
@@ -160,6 +162,7 @@ Function *HeapTag::tagFunction(const Function *OrigF) const {
         TaggedF->getContext(), Args.first, Args.second));
   }
 
+  NumTaggedFuncs++;
   return TaggedF;
 }
 
@@ -259,6 +262,8 @@ void HeapTag::tagUser(User *U, Function *F) const {
     auto *TrampolineFn = createTrampoline(F);
     U->replaceUsesOfWith(F, TrampolineFn);
   }
+
+  NumTaggedFuncUsers++;
 }
 
 void HeapTag::getAnalysisUsage(AnalysisUsage &AU) const {
@@ -325,6 +330,9 @@ bool HeapTag::runOnModule(Module &M) {
     }
   }
 
+  success_stream() << "Num. tagged memory funcs.: " << NumTaggedFuncs << '\n';
+  success_stream() << "Num. tagged memory func. users: " << NumTaggedFuncUsers
+                   << '\n';
   success_stream() << "Num. memory func. trampolines: " << NumTrampolines
                    << '\n';
 
