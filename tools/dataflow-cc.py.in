@@ -76,6 +76,7 @@ def main():
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libGlobalVariableTag.so',
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libLocalVariableTag.so',
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libHeapTag.so',
+        '-Qunused-arguments'
     ])
 
     # Def site function ignore list
@@ -163,8 +164,6 @@ def main():
     cmd.extend([f'-L{LIB_DIR}', '-lFuzzallocRuntime'])
     if use_inst == 'afl':
         cmd.extend([f'-L{LIB_DIR}', '-lAFLRuntime'])
-
-    cmd.append('-Qunused-arguments')
 
     proc = run(cmd, check=False)
     return proc.returncode
