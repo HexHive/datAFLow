@@ -394,6 +394,10 @@ bool GlobalVarTag::runOnModule(Module &M) {
 
   ReturnInst::Create(*Ctx, CtorEntryBB);
 
+  success_stream() << "Num. tagged global variables: " << NumTaggedGVs << '\n';
+  success_stream() << "Num. heapified global variables: " << NumHeapifiedGVs
+                   << '\n';
+
   return true;
 }
 

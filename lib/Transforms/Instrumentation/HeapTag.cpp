@@ -325,6 +325,9 @@ bool HeapTag::runOnModule(Module &M) {
     }
   }
 
+  success_stream() << "Num. memory func. trampolines: " << NumTrampolines
+                   << '\n';
+
   return true;
 }
 
