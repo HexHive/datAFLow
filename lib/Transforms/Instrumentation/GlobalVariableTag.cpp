@@ -313,16 +313,16 @@ GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
       auto *GEP = GetElementPtrInst::CreateInBounds(NewGVTy, NewGV,
                                                     {Zero, Zero}, "", InsertPt);
       User->replaceUsesOfWith(OrigGV, GEP);
-    } else if (auto *GV = dyn_cast<GlobalValue>(User)) {
-      assert(false && "GlobalValue not yet supported");
-      assert(isa<ConstantExpr>(U->get()) && "only constexpr uses are supported");
+    } else if (auto *GV = dyn_cast<GlobalVariable>(User)) {
+      // If the user is another global variable then the use must be an
+      // assignment initializer. Here, we need to replace the initializer rather
+      // then call `handleOperandChange`
+      assert(GV->hasInitializer());
+      assert(GV->getInitializer() == OrigGV);
+      auto *NewInit = ConstantExpr::getInBoundsGetElementPtr(
+          NewGVTy, NewGV, ArrayRef<Constant *>({Zero, Zero}));
+      GV->setInitializer(NewInit);
     } else if (auto *C = dyn_cast<Constant>(User)) {
-      outs() << "constant user " << *C << '\n';
-      outs() << "    type ID " << C->getValueID() << '\n';
-      outs() << "    isa global variable? " << isa<GlobalVariable>(C) << '\n';
-      outs() << "    use -> " << *U->get() << '\n';
-      outs() << "    use isa global? " << isa<GlobalValue>(U->get()) << '\n';
-      outs().flush();
       auto *GEP = ConstantExpr::getInBoundsGetElementPtr(
           NewGVTy, NewGV, ArrayRef<Constant *>({Zero, Zero}));
       C->handleOperandChange(OrigGV, GEP);
