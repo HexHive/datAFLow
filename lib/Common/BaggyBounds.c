@@ -9,7 +9,7 @@
 
 #include "fuzzalloc/Runtime/BaggyBounds.h"
 
-const unsigned kNumTagBits = 16;
+const unsigned kNumTagBits = UINT16_WIDTH;
 const tag_t kFuzzallocDefaultTag = 1;
 const tag_t kFuzzallocTagMin = kFuzzallocDefaultTag + 1;
 const tag_t kFuzzallocTagMax = (tag_t)((~0) - 1);
