@@ -27,23 +27,23 @@ static const unsigned kSlotSizeLog2 = 4;
 static const size_t kTableSize = 1UL << 43; ///< Baggy bounds table size
 
 static uint8_t *__baggy_bounds_table;
+static bool Initialized = false;
 
 /// Initialize the baggy bounds table
 static void initBaggyBounds() {
-  static bool Initialized = false;
-  if (likely(Initialized)) {
-    return;
-  } else {
-    Initialized = true;
-  }
+#ifdef _DEBUG
+  fprintf(stderr, "[datAFLow] Initializing baggy-bounds table\n");
+#endif
 
   __baggy_bounds_table =
       (uint8_t *)mmap(0, kTableSize, PROT_READ | PROT_WRITE,
                       MAP_PRIVATE | MAP_ANON | MAP_NORESERVE, -1, 0);
   if (__baggy_bounds_table == MAP_FAILED) {
-    fprintf(stderr, "mmap failed: %s\n", strerror(errno));
+    fprintf(stderr, "[datAFLow] mmap failed: %s\n", strerror(errno));
     abort();
   }
+
+  Initialized = true;
 }
 
 /// Calculate an allocation size
@@ -59,7 +59,9 @@ static uint64_t calculateAllocSize(size_t Size) {
 ///
 /// Based on Algorithm 1 on the PAMD paper.
 void __bb_register(void *Obj, size_t AllocSize) {
-  initBaggyBounds();
+  if (unlikely(!Initialized)) {
+    initBaggyBounds();
+  }
 
   if (!Obj || !AllocSize) {
     return;
@@ -74,7 +76,9 @@ void __bb_register(void *Obj, size_t AllocSize) {
 }
 
 static void unregisterMemoryObject(void *Obj) {
-  initBaggyBounds();
+  if (unlikely(!Initialized)) {
+    initBaggyBounds();
+  }
 
   const uintptr_t P = (uintptr_t)Obj;
   const uintptr_t Index = P >> kSlotSizeLog2;
@@ -158,6 +162,10 @@ tag_t __bb_lookup(void *Ptr, uintptr_t *Base) {
   if (!Ptr) {
     *Base = 0;
     return kFuzzallocDefaultTag;
+  }
+
+  if (unlikely(!Initialized)) {
+    initBaggyBounds();
   }
 
   const uintptr_t P = (uintptr_t)Ptr;
