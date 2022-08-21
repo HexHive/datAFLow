@@ -133,10 +133,14 @@ AllocaInst *LocalVarTag::tagAlloca(AllocaInst *OrigAlloca) {
   auto OrigSize = DL->getTypeAllocSize(OrigTy);
   auto PaddingSize = NewAllocSize - OrigSize - kMetaSize;
 
-  if (PaddingSize > kMaxObjectSize) {
-    warning_stream() << "Unable to tag global variable `"
-                     << OrigAlloca->getName() << "`: padding size "
-                     << PaddingSize
+  if (OrigSize > kMaxObjectSize) {
+    warning_stream() << "Unable to tag alloca `" << OrigAlloca->getName()
+                     << "`: orig size " << OrigSize
+                     << " is greater than the max. Heapifying instead.\n";
+    return heapify(OrigAlloca);
+  } else if (PaddingSize > kMaxObjectSize) {
+    warning_stream() << "Unable to tag alloca `" << OrigAlloca->getName()
+                     << "`: padding size " << PaddingSize
                      << " is greater than the max. Heapifying instead.\n";
     return heapify(OrigAlloca);
   }

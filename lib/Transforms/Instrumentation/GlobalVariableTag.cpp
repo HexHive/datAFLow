@@ -283,7 +283,12 @@ GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
   auto OrigSize = DL->getTypeAllocSize(OrigTy);
   auto PaddingSize = NewAllocSize - OrigSize - kMetaSize;
 
-  if (PaddingSize > kMaxObjectSize) {
+  if (OrigSize > kMaxObjectSize) {
+    warning_stream() << "Unable to tag global variable `" << OrigGV->getName()
+                     << "`: orig size " << OrigSize
+                     << " is greater than the max. Heapifying instead.\n";
+    return heapify(OrigGV);
+  } else if (PaddingSize > kMaxObjectSize) {
     warning_stream() << "Unable to tag globa variable `" << OrigGV->getName()
                      << "`: padding size " << PaddingSize
                      << " is greater than the max. Heapifying instead.\n";
