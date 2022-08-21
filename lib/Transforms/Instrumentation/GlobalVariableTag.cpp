@@ -270,10 +270,9 @@ GlobalVariable *GlobalVarTag::heapify(GlobalVariable *OrigGV) {
 
 GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
                                                 BasicBlock *CtorBB) {
-  auto *Zero = ConstantInt::getNullValue(IntegerType::getInt32Ty(*Ctx));
   auto *OrigTy = OrigGV->getValueType();
-  auto OrigSize = DL->getTypeAllocSize(OrigTy);
   auto NewAllocSize = getTaggedVarSize(DL->getTypeAllocSize(OrigTy));
+
   if (NewAllocSize > IntegerType::MAX_INT_BITS) {
     warning_stream() << "Unable to tag global variable `" << OrigGV->getName()
                      << "`: new allocation size " << NewAllocSize
@@ -281,8 +280,10 @@ GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
     return heapify(OrigGV);
   }
 
+  auto OrigSize = DL->getTypeAllocSize(OrigTy);
   auto PaddingSize = NewAllocSize - OrigSize - kMetaSize;
-  if (PaddingSize > kMaxPaddingSize) {
+
+  if (PaddingSize > kMaxObjectSize) {
     warning_stream() << "Unable to tag globa variable `" << OrigGV->getName()
                      << "`: padding size " << PaddingSize
                      << " is greater than the max. Heapifying instead.\n";
@@ -322,6 +323,7 @@ GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
   }
 
   // Cache and update users
+  auto *Zero = ConstantInt::getNullValue(IntegerType::getInt32Ty(*Ctx));
   SmallVector<Use *, 16> Uses(
       map_range(OrigGV->uses(), [](Use &U) { return &U; }));
   for (auto *U : Uses) {

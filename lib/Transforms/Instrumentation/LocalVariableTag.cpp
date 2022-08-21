@@ -120,12 +120,9 @@ AllocaInst *LocalVarTag::heapify(AllocaInst *OrigAlloca) {
 }
 
 AllocaInst *LocalVarTag::tagAlloca(AllocaInst *OrigAlloca) {
-  auto *Int8PtrTy = Type::getInt8PtrTy(*Ctx);
-  auto *Zero = ConstantInt::getNullValue(IntegerType::getInt32Ty(*Ctx));
   auto *OrigTy = OrigAlloca->getAllocatedType();
-  auto OrigSize = DL->getTypeAllocSize(OrigTy);
-
   auto NewAllocSize = getTaggedVarSize(DL->getTypeAllocSize(OrigTy));
+
   if (NewAllocSize > IntegerType::MAX_INT_BITS) {
     warning_stream() << "Unable to tag alloca `" << OrigAlloca->getName()
                      << "`: new allocation size " << NewAllocSize
@@ -133,9 +130,11 @@ AllocaInst *LocalVarTag::tagAlloca(AllocaInst *OrigAlloca) {
     return heapify(OrigAlloca);
   }
 
+  auto OrigSize = DL->getTypeAllocSize(OrigTy);
   auto PaddingSize = NewAllocSize - OrigSize - kMetaSize;
-  if (PaddingSize > kMaxPaddingSize) {
-    warning_stream() << "Unable to tag globa variable `"
+
+  if (PaddingSize > kMaxObjectSize) {
+    warning_stream() << "Unable to tag global variable `"
                      << OrigAlloca->getName() << "`: padding size "
                      << PaddingSize
                      << " is greater than the max. Heapifying instead.\n";
@@ -167,12 +166,14 @@ AllocaInst *LocalVarTag::tagAlloca(AllocaInst *OrigAlloca) {
                          MDNode::get(*Ctx, None));
 
   // Register the allocation in the baggy bounds table
+  auto *Int8PtrTy = Type::getInt8PtrTy(*Ctx);
   auto *NewAllocaCasted = new BitCastInst(NewAlloca, Int8PtrTy, "", OrigAlloca);
   CallInst::Create(BBRegisterFn,
                    {NewAllocaCasted, ConstantInt::get(IntPtrTy, NewAllocSize)},
                    "", OrigAlloca);
 
   // Now cache and update the other users
+  auto *Zero = ConstantInt::getNullValue(IntegerType::getInt32Ty(*Ctx));
   SmallVector<Use *, 16> Uses(
       map_range(OrigAlloca->uses(), [](Use &U) { return &U; }));
   for (auto *U : Uses) {
