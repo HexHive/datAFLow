@@ -39,6 +39,10 @@ static Instruction *expandCExpr(ConstantExpr *CE, Instruction *InsertPt) {
 }
 
 static bool expandInstruction(Instruction *Inst) {
+  if (isa<LandingPadInst>(Inst)) {
+    return false;
+  }
+
   bool Changed = false;
 
   for (unsigned Op = 0; Op < Inst->getNumOperands(); ++Op) {
