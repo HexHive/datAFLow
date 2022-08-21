@@ -258,6 +258,9 @@ void HeapTag::tagUser(User *U, Function *F) const {
       }
     }
     BC->eraseFromParent();
+  } else if (auto *C = dyn_cast<Constant>(U)) {
+    auto *TrampolineFn = createTrampoline(F);
+    C->handleOperandChange(F, TrampolineFn);
   } else {
     auto *TrampolineFn = createTrampoline(F);
     U->replaceUsesOfWith(F, TrampolineFn);
