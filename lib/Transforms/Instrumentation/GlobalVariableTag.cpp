@@ -240,8 +240,18 @@ GlobalVariable *GlobalVarTag::heapify(GlobalVariable *OrigGV) {
       auto *BitCastNewGV = CastInst::CreatePointerCast(
           LoadNewGV, OrigGV->getType(), "", InsertPt);
       User->replaceUsesOfWith(OrigGV, BitCastNewGV);
+    } else if (auto *GV = dyn_cast<GlobalVariable>(User)) {
+      // If the user is another global variable then the `use` must be an
+      // assignment initializer. Here, we need to replace the initializer rather
+      // then call `handleOperandChange`
+      assert(GV->hasInitializer());
+      assert(GV->getInitializer() == OrigGV);
+      auto *NewInit = ConstantExpr::getPointerCast(NewGV, OrigGV->getType());
+      GV->setInitializer(NewInit);
+    } else if (auto *C = dyn_cast<Constant>(User)) {
+      auto *BitCast = ConstantExpr::getPointerCast(NewGV, OrigGV->getType());
+      C->handleOperandChange(OrigGV, BitCast);
     } else {
-      // Constant expressions should have been lowered
       llvm_unreachable("Unsupported global variable user");
     }
   }
@@ -320,7 +330,7 @@ GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
                                                     {Zero, Zero}, "", InsertPt);
       User->replaceUsesOfWith(OrigGV, GEP);
     } else if (auto *GV = dyn_cast<GlobalVariable>(User)) {
-      // If the user is another global variable then the use must be an
+      // If the user is another global variable then the `use` must be an
       // assignment initializer. Here, we need to replace the initializer rather
       // then call `handleOperandChange`
       assert(GV->hasInitializer());
