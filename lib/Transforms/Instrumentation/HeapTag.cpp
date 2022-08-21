@@ -258,6 +258,14 @@ void HeapTag::tagUser(User *U, Function *F) const {
       }
     }
     BC->eraseFromParent();
+  } else if (auto *GV = dyn_cast<GlobalVariable>(U)) {
+    // If the user is another global variable then the `use` must be an
+    // assignment initializer. Here, we need to replace the initializer rather
+    // then call `handleOperandChange`
+    assert(GV->hasInitializer());
+    assert(GV->getInitializer() == F);
+    auto *NewInit = createTrampoline(F);
+    GV->setInitializer(NewInit);
   } else if (auto *C = dyn_cast<Constant>(U)) {
     auto *TrampolineFn = createTrampoline(F);
     C->handleOperandChange(F, TrampolineFn);
