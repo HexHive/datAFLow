@@ -282,28 +282,15 @@ GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
 
   auto OrigSize = DL->getTypeAllocSize(OrigTy);
   auto PaddingSize = NewAllocSize - OrigSize - kMetaSize;
-
-  if (OrigSize > kMaxObjectSize) {
-    warning_stream() << "Unable to tag global variable `" << OrigGV->getName()
-                     << "`: orig size " << OrigSize
-                     << " is greater than the max. Heapifying instead.\n";
-    return heapify(OrigGV);
-  } else if (PaddingSize > kMaxObjectSize) {
-    warning_stream() << "Unable to tag globa variable `" << OrigGV->getName()
-                     << "`: padding size " << PaddingSize
-                     << " is greater than the max. Heapifying instead.\n";
-    return heapify(OrigGV);
-  }
-
   auto *PaddingTy = ArrayType::get(Type::getInt8Ty(*Ctx), PaddingSize);
-  auto *Tag = generateTag(TagTy);
 
   auto *NewGVTy =
       StructType::get(*Ctx, {OrigTy, PaddingTy, TagTy}, /*isPacked=*/true);
+  auto *Tag = generateTag(TagTy);
   auto *NewInit = ConstantStruct::get(
       NewGVTy, {OrigGV->hasInitializer() ? OrigGV->getInitializer()
-                                         : UndefValue::get(OrigTy),
-                UndefValue::get(PaddingTy), Tag});
+                                         : ConstantAggregateZero::get(OrigTy),
+                ConstantAggregateZero::get(PaddingTy), Tag});
 
   // Create a tagged version of the global variable (only visible in this
   // module)

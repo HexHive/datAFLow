@@ -132,21 +132,7 @@ AllocaInst *LocalVarTag::tagAlloca(AllocaInst *OrigAlloca) {
 
   auto OrigSize = DL->getTypeAllocSize(OrigTy);
   auto PaddingSize = NewAllocSize - OrigSize - kMetaSize;
-
-  if (OrigSize > kMaxObjectSize) {
-    warning_stream() << "Unable to tag alloca `" << OrigAlloca->getName()
-                     << "`: orig size " << OrigSize
-                     << " is greater than the max. Heapifying instead.\n";
-    return heapify(OrigAlloca);
-  } else if (PaddingSize > kMaxObjectSize) {
-    warning_stream() << "Unable to tag alloca `" << OrigAlloca->getName()
-                     << "`: padding size " << PaddingSize
-                     << " is greater than the max. Heapifying instead.\n";
-    return heapify(OrigAlloca);
-  }
-
   auto *PaddingTy = ArrayType::get(Type::getInt8Ty(*Ctx), PaddingSize);
-  auto *Tag = generateTag(TagTy);
 
   auto *NewAllocaTy =
       StructType::get(*Ctx, {OrigTy, PaddingTy, TagTy}, /*isPacked=*/true);
@@ -160,10 +146,15 @@ AllocaInst *LocalVarTag::tagAlloca(AllocaInst *OrigAlloca) {
   NewAlloca->setAlignment(Align(NewAllocSize));
   NewAlloca->takeName(OrigAlloca);
 
+  auto *Int32Ty = IntegerType::getInt32Ty(*Ctx);
+  auto *Zero = ConstantInt::getNullValue(Int32Ty);
+
   // Store the tag
-  auto *InitVal = ConstantStruct::get(
-      NewAllocaTy, {UndefValue::get(OrigTy), UndefValue::get(PaddingTy), Tag});
-  auto *InitStore = new StoreInst(InitVal, NewAlloca, OrigAlloca);
+  auto *Tag = generateTag(TagTy);
+  auto *InitGEP = GetElementPtrInst::CreateInBounds(
+      NewAllocaTy, NewAlloca, {Zero, ConstantInt::get(Int32Ty, 2)}, "",
+      OrigAlloca);
+  auto *InitStore = new StoreInst(Tag, InitGEP, OrigAlloca);
   InitStore->setMetadata(Mod->getMDKindID(kFuzzallocNoInstrumentMD),
                          MDNode::get(*Ctx, None));
   InitStore->setMetadata(Mod->getMDKindID(kNoSanitizeMD),
@@ -177,7 +168,6 @@ AllocaInst *LocalVarTag::tagAlloca(AllocaInst *OrigAlloca) {
                    "", OrigAlloca);
 
   // Now cache and update the other users
-  auto *Zero = ConstantInt::getNullValue(IntegerType::getInt32Ty(*Ctx));
   SmallVector<Use *, 16> Uses(
       map_range(OrigAlloca->uses(), [](Use &U) { return &U; }));
   for (auto *U : Uses) {

@@ -17,11 +17,6 @@ class TypeSize;
 class Value;
 } // namespace llvm
 
-/// Maximum amount of padding in a tagged variable.
-///
-/// If padding is larger than this, the variable must be heapified.
-constexpr size_t kMaxObjectSize = UINT16_MAX;
-
 /// Randomly generate a def site tag
 llvm::ConstantInt *generateTag(llvm::IntegerType *);
 
