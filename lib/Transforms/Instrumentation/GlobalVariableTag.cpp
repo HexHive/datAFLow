@@ -310,6 +310,9 @@ GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
   NewGV->setMetadata(Mod->getMDKindID(kFuzzallocTaggVarMD),
                      MDNode::get(*Ctx, None));
   NewGV->setAlignment(MaybeAlign(NewAllocSize));
+  if (NewGV->isImplicitDSOLocal()) {
+    NewGV->setDSOLocal(true);
+  }
 
   // Copy debug info
   SmallVector<DIGlobalVariableExpression *, 2> GVEs;
