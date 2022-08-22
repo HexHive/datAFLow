@@ -29,7 +29,7 @@ static unsigned NumLoweredCExprs = 0;
 // Helper functions
 //
 
-bool expandInstruction(Instruction *);
+static bool expandInstruction(Instruction *);
 
 static Instruction *expandCExpr(ConstantExpr *CE, Instruction *InsertPt) {
   auto *NewInst = CE->getAsInstruction();

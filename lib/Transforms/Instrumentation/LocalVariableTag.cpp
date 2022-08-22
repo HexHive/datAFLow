@@ -92,7 +92,7 @@ AllocaInst *LocalVarTag::heapify(AllocaInst *OrigAlloca) {
           new LoadInst(NewAlloca->getAllocatedType(), NewAlloca, "", InsertPt);
       auto *BitCastNewAlloca = CastInst::CreatePointerCast(
           LoadNewAlloca, OrigAlloca->getType(), "", InsertPt);
-      Inst->replaceUsesOfWith(OrigAlloca, BitCastNewAlloca);
+      phiSafeReplaceUses(U, BitCastNewAlloca);
     } else {
       llvm_unreachable("Unsupported alloca user");
     }
@@ -177,7 +177,7 @@ AllocaInst *LocalVarTag::tagAlloca(AllocaInst *OrigAlloca) {
       auto *InsertPt = phiSafeInsertPt(U);
       auto *GEP = GetElementPtrInst::CreateInBounds(NewAllocaTy, NewAlloca,
                                                     {Zero, Zero}, "", InsertPt);
-      Inst->replaceUsesOfWith(OrigAlloca, GEP);
+      phiSafeReplaceUses(U, GEP);
     } else {
       llvm_unreachable("Unsupported alloca user");
     }

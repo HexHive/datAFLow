@@ -17,6 +17,7 @@
 #include "fuzzalloc/Analysis/UseSiteIdentify.h"
 #include "fuzzalloc/Metadata.h"
 #include "fuzzalloc/Runtime/BaggyBounds.h"
+#include "fuzzalloc/Streams.h"
 
 using namespace llvm;
 
@@ -108,6 +109,11 @@ bool DebugUseSite::runOnModule(Module &M) {
     }
     Changed = true;
   }
+
+  success_stream() << "Num. instrumented reads: " << NumInstrumentedReads
+                   << '\n';
+  success_stream() << "Num. instrumented writes: " << NumInstrumentedWrites
+                   << '\n';
 
   return Changed;
 }

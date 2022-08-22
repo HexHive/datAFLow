@@ -49,7 +49,7 @@ private:
   Function *getTaggedFunction(const Function *) const;
   Function *tagFunction(const Function *) const;
   Instruction *tagCall(CallBase *, FunctionCallee) const;
-  void tagUser(User *, Function *) const;
+  void tagUse(Use *) const;
 
   Module *Mod;
   LLVMContext *Ctx;
@@ -223,41 +223,49 @@ Instruction *HeapTag::tagCall(CallBase *CB, FunctionCallee TaggedF) const {
 }
 
 /// Replace the use of a memory allocation function with the tagged version
-void HeapTag::tagUser(User *U, Function *F) const {
-  LLVM_DEBUG(dbgs() << "replacing user " << *U << " of function "
+void HeapTag::tagUse(Use *U) const {
+  auto *F = cast<Function>(U->get());
+  auto *User = U->getUser();
+
+  LLVM_DEBUG(dbgs() << "replacing user " << *User << " of function "
                     << F->getName() << '\n');
 
   auto *TaggedF = TaggedFuncMap.lookup(F);
 
-  if (auto *CB = dyn_cast<CallBase>(U)) {
+  if (auto *CB = dyn_cast<CallBase>(User)) {
     tagCall(CB, FunctionCallee(TaggedF));
-  } else if (auto *BC = dyn_cast<BitCastInst>(U)) {
-    // The underlying type (i.e., behind the bitcast) must be a `FunctionType`
-    // (because the use is a function)
+  } else if (auto *BC = dyn_cast<BitCastInst>(User)) {
+    // Get the underlying type behind the bitcast. If it is a function type,
+    // adjust the function signature to accept the tag argument. Otherwise, we
+    // create a trampoline
     auto *SrcBitCastTy = BC->getDestTy()->getPointerElementType();
-    assert(isa<FunctionType>(SrcBitCastTy) && "Requires a function bitcast");
 
-    // (a) Add the tag (i.e., the call site identifier) as the first argument
-    // to the cast function type and (b) cast the tagged function so that the
-    // type includes the tag argument
-    auto *DstBitCastTy =
-        getTaggedFunctionType(cast<FunctionType>(SrcBitCastTy));
-    auto *NewBC =
-        new BitCastInst(TaggedF, DstBitCastTy->getPointerTo(), "", BC);
-    NewBC->takeName(BC);
-    NewBC->setDebugLoc(BC->getDebugLoc());
-    NewBC->copyMetadata(*BC);
+    if (isa<FunctionType>(SrcBitCastTy)) {
+      // (a) Add the tag (i.e., the call site identifier) as the first argument
+      // to the cast function type and (b) cast the tagged function so that the
+      // type includes the tag argument
+      auto *DstBitCastTy =
+          getTaggedFunctionType(cast<FunctionType>(SrcBitCastTy));
+      auto *NewBC =
+          new BitCastInst(TaggedF, DstBitCastTy->getPointerTo(), "", BC);
+      NewBC->takeName(BC);
+      NewBC->setDebugLoc(BC->getDebugLoc());
+      NewBC->copyMetadata(*BC);
 
-    // All the bitcast users should be calls. So tag the calls
-    SmallVector<User *, 16> BCUsers(BC->users());
-    for (auto *BCU : BCUsers) {
-      if (auto *CB = dyn_cast<CallBase>(BCU)) {
-        tagCall(CB, FunctionCallee(DstBitCastTy, NewBC));
-      } else {
-        llvm_unreachable("All bitcast users must be calls");
+      // All the bitcast users should be calls. So tag the calls
+      SmallVector<llvm::User *, 16> BCUsers(BC->users());
+      for (auto *BCU : BCUsers) {
+        if (auto *CB = dyn_cast<CallBase>(BCU)) {
+          tagCall(CB, FunctionCallee(DstBitCastTy, NewBC));
+        } else {
+          llvm_unreachable("All bitcast users must be calls");
+        }
       }
+      BC->eraseFromParent();
+    } else {
+      auto *TrampolineFn = createTrampoline(F);
+      phiSafeReplaceUses(U, TrampolineFn);
     }
-    BC->eraseFromParent();
   } else if (auto *GV = dyn_cast<GlobalVariable>(U)) {
     // If the user is another global variable then the `use` must be an
     // assignment initializer. Here, we need to replace the initializer rather
@@ -271,7 +279,7 @@ void HeapTag::tagUser(User *U, Function *F) const {
     C->handleOperandChange(F, TrampolineFn);
   } else {
     auto *TrampolineFn = createTrampoline(F);
-    U->replaceUsesOfWith(F, TrampolineFn);
+    phiSafeReplaceUses(U, TrampolineFn);
   }
 
   NumTaggedFuncUsers++;
@@ -307,9 +315,10 @@ bool HeapTag::runOnModule(Module &M) {
 
   // Tag the users of these functions
   for (auto [F, _] : TaggedFuncMap) {
-    SmallVector<User *, 16> Users(F->users());
-    for (auto *U : Users) {
-      tagUser(U, F);
+    SmallVector<Use *, 16> Uses(
+        map_range(F->uses(), [](Use &U) { return &U; }));
+    for (auto *U : Uses) {
+      tagUse(U);
     }
   }
 

@@ -239,7 +239,7 @@ GlobalVariable *GlobalVarTag::heapify(GlobalVariable *OrigGV) {
           new LoadInst(NewGV->getValueType(), NewGV, "", InsertPt);
       auto *BitCastNewGV = CastInst::CreatePointerCast(
           LoadNewGV, OrigGV->getType(), "", InsertPt);
-      User->replaceUsesOfWith(OrigGV, BitCastNewGV);
+      phiSafeReplaceUses(U, BitCastNewGV);
     } else if (auto *GV = dyn_cast<GlobalVariable>(User)) {
       // If the user is another global variable then the `use` must be an
       // assignment initializer. Here, we need to replace the initializer rather
@@ -325,7 +325,7 @@ GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
       auto *InsertPt = phiSafeInsertPt(U);
       auto *GEP = GetElementPtrInst::CreateInBounds(NewGVTy, NewGV,
                                                     {Zero, Zero}, "", InsertPt);
-      User->replaceUsesOfWith(OrigGV, GEP);
+      phiSafeReplaceUses(U, GEP);
     } else if (auto *GV = dyn_cast<GlobalVariable>(User)) {
       // If the user is another global variable then the `use` must be an
       // assignment initializer. Here, we need to replace the initializer rather
