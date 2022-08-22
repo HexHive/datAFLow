@@ -224,16 +224,22 @@ Instruction *HeapTag::tagCall(CallBase *CB, FunctionCallee TaggedF) const {
 
 /// Replace the use of a memory allocation function with the tagged version
 void HeapTag::tagUse(Use *U) const {
-  auto *F = cast<Function>(U->get());
   auto *User = U->getUser();
+  auto *Fn = dyn_cast<Function>(U->get());
+  assert(Fn && "Use must be a function");
 
   LLVM_DEBUG(dbgs() << "replacing user " << *User << " of function "
-                    << F->getName() << '\n');
+                    << Fn->getName() << '\n');
 
-  auto *TaggedF = TaggedFuncMap.lookup(F);
+  auto *TaggedFn = TaggedFuncMap.lookup(Fn);
+  auto *TrampolineFn = createTrampoline(Fn);
 
   if (auto *CB = dyn_cast<CallBase>(User)) {
-    tagCall(CB, FunctionCallee(TaggedF));
+    if (CB->isArgOperand(U)) {
+      phiSafeReplaceUses(U, TrampolineFn);
+    } else {
+      tagCall(CB, FunctionCallee(TaggedFn));
+    }
   } else if (auto *BC = dyn_cast<BitCastInst>(User)) {
     // Get the underlying type behind the bitcast. If it is a function type,
     // adjust the function signature to accept the tag argument. Otherwise, we
@@ -247,23 +253,29 @@ void HeapTag::tagUse(Use *U) const {
       auto *DstBitCastTy =
           getTaggedFunctionType(cast<FunctionType>(SrcBitCastTy));
       auto *NewBC =
-          new BitCastInst(TaggedF, DstBitCastTy->getPointerTo(), "", BC);
+          new BitCastInst(TaggedFn, DstBitCastTy->getPointerTo(), "", BC);
       NewBC->takeName(BC);
       NewBC->setDebugLoc(BC->getDebugLoc());
       NewBC->copyMetadata(*BC);
 
-      // All the bitcast users should be calls. So tag the calls
-      SmallVector<llvm::User *, 16> BCUsers(BC->users());
-      for (auto *BCU : BCUsers) {
-        if (auto *CB = dyn_cast<CallBase>(BCU)) {
-          tagCall(CB, FunctionCallee(DstBitCastTy, NewBC));
+      // All the bitcast users should be calls. So tag the calls (or insert
+      // trampolines if the calls use the bitcast as an argument)
+      SmallVector<llvm::Use *, 16> BCUses(
+          map_range(BC->uses(), [](Use &U) { return &U; }));
+      for (auto *BCU : BCUses) {
+        auto *BCUser = BCU->getUser();
+        if (auto *CB = dyn_cast<CallBase>(BCUser)) {
+          if (CB->isArgOperand(BCU)) {
+            phiSafeReplaceUses(BCU, TrampolineFn);
+          } else {
+            tagCall(CB, FunctionCallee(DstBitCastTy, NewBC));
+          }
         } else {
           llvm_unreachable("All bitcast users must be calls");
         }
       }
       BC->eraseFromParent();
     } else {
-      auto *TrampolineFn = createTrampoline(F);
       phiSafeReplaceUses(U, TrampolineFn);
     }
   } else if (auto *GV = dyn_cast<GlobalVariable>(U)) {
@@ -271,14 +283,11 @@ void HeapTag::tagUse(Use *U) const {
     // assignment initializer. Here, we need to replace the initializer rather
     // then call `handleOperandChange`
     assert(GV->hasInitializer());
-    assert(GV->getInitializer() == F);
-    auto *NewInit = createTrampoline(F);
-    GV->setInitializer(NewInit);
+    assert(GV->getInitializer() == Fn);
+    GV->setInitializer(TrampolineFn);
   } else if (auto *C = dyn_cast<Constant>(U)) {
-    auto *TrampolineFn = createTrampoline(F);
-    C->handleOperandChange(F, TrampolineFn);
+    C->handleOperandChange(Fn, TrampolineFn);
   } else {
-    auto *TrampolineFn = createTrampoline(F);
     phiSafeReplaceUses(U, TrampolineFn);
   }
 
