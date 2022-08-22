@@ -31,21 +31,9 @@
 static const XXH64_hash_t kSeed = 0;
 extern uint8_t *__afl_area_ptr;
 
-/// Hash def-use chain
-static inline XXH64_hash_t __hash_def_use_common(tag_t Tag, uintptr_t Use) {
-  uint64_t Data[] = {Tag, Use};
-  XXH64_hash_t Hash = XXH64(Data, sizeof(Data), kSeed);
-#ifdef _DEBUG
-  fprintf(stderr,
-          "[datAFLow] hash(tag=0x%" PRIx16 ", use=%" PRIx64 ") -> %zu\n", Tag,
-          Use, Hash);
-#endif
-  return Hash;
-}
-
 /// Update AFL coverage bitmap
-static inline void __afl_update_cov(XXH64_hash_t Hash) {
-  uint8_t *P = &__afl_area_ptr[Hash & HASH_MASK];
+static inline void __afl_update_cov(XXH64_hash_t Idx) {
+  uint8_t *P = &__afl_area_ptr[Idx & HASH_MASK];
 #if __GNUC__
   uint8_t C = __builtin_add_overflow(*P, 1, P);
   *P += C;
@@ -61,25 +49,33 @@ static inline void __afl_update_cov(XXH64_hash_t Hash) {
 void __afl_hash_def_use(void *Ptr, size_t Size) {
   uintptr_t Base;
   tag_t Tag = __bb_lookup(Ptr, &Base);
-  uintptr_t Use = (uintptr_t)__builtin_return_address(0);
+  XXH64_hash_t Hash = 0;
 
-  XXH64_hash_t Hash = __hash_def_use_common(Tag, Use);
+  if (likely(Tag != kFuzzallocDefaultTag)) {
+    // Only compute the hash if not the default tag
+
+    uintptr_t Use = (uintptr_t)__builtin_return_address(0);
+    uint64_t Data[] = {Tag, Use};
+    Hash = XXH64(Data, sizeof(Data), kSeed);
+#ifdef _DEBUG
+    fprintf(stderr,
+            "[datAFLow] hash(tag=0x%" PRIx16 ", use=%" PRIx64 ") -> %zu\n", Tag,
+            Use, Hash);
+#endif
+  }
+
   __afl_update_cov(Hash);
 }
 
 void __afl_hash_def_use_offset(void *Ptr, size_t Size) {
   uintptr_t Base;
   tag_t Tag = __bb_lookup(Ptr, &Base);
-  uintptr_t Use = (uintptr_t)__builtin_return_address(0);
-  XXH64_hash_t Hash;
+  XXH64_hash_t Hash = 0;
 
-  if (unlikely(Tag == kFuzzallocDefaultTag)) {
-    // If this is an untagged variable, all we can do is hash the def-use chain
-    // itself
-    Hash = __hash_def_use_common(Tag, Use);
-  } else {
-    // Otherwise, we can compute the baggy bound's offset and integrate it into
-    // the hash
+  if (likely(Tag != kFuzzallocDefaultTag)) {
+    // Only compute the hash if not the default tag
+
+    uintptr_t Use = (uintptr_t)__builtin_return_address(0);
     ptrdiff_t Offset = (uintptr_t)Ptr - Base;
     uint64_t Data[] = {Tag, Use, Offset};
     Hash = XXH64(Data, sizeof(Data), kSeed);
@@ -98,16 +94,10 @@ void __afl_hash_def_use_offset(void *Ptr, size_t Size) {
 void __afl_hash_def_use_value(void *Ptr, size_t Size) {
   uintptr_t Base;
   tag_t Tag = __bb_lookup(Ptr, &Base);
-  uintptr_t Use = (uintptr_t)__builtin_return_address(0);
-  XXH64_hash_t Hash;
+  XXH64_hash_t Hash = 0;
 
-  if (unlikely(Tag == kFuzzallocDefaultTag)) {
-    // If this is an untagged variable, all we can do is hash the def-use chain
-    // itself
-    Hash = __hash_def_use_common(Tag, Use);
-  } else {
-    // Otherwise, we setup a rolling hash for hashing the (variable-lengthed)
-    // variable value
+  if (likely(Tag != kFuzzallocDefaultTag)) {
+    // Setup a rolling hash for hashing the (variable-lengthed) variable value
 
     // Initialize the hash state
     static XXH64_state_t *State = NULL;
@@ -123,6 +113,7 @@ void __afl_hash_def_use_value(void *Ptr, size_t Size) {
       abort();
     }
 
+    uintptr_t Use = (uintptr_t)__builtin_return_address(0);
     ptrdiff_t Offset = (uintptr_t)Ptr - Base;
     uint64_t Data[] = {Tag, Use, Offset};
 
