@@ -57,6 +57,11 @@ def check_if_assembler(args):
 
     return False
 
+
+def check_lto():
+    return Path('@LLVM_TOOLS_BINARY_DIR', 'lld').exists()
+
+
 def get_llvm_args(args):
     env = os.environ.copy()
     llvm_args = []
@@ -175,6 +180,8 @@ def main():
             '-O3',
             '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libAFLUseSite.so',
         ])
+        if check_lto():
+            cmd.append('-flto')
     elif use_inst == 'debug':
         cmd.extend([
             '-O0',
