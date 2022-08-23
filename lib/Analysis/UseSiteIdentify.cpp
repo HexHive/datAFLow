@@ -17,6 +17,7 @@
 
 #include "fuzzalloc/Analysis/UseSiteIdentify.h"
 #include "fuzzalloc/Metadata.h"
+#include "fuzzalloc/Streams.h"
 
 using namespace llvm;
 
@@ -265,6 +266,13 @@ void UseSiteIdentify::getAnalysisUsage(AnalysisUsage &AU) const {
 
 bool UseSiteIdentify::runOnModule(Module &M) {
   bool Changed = false;
+
+  if (ClUseSitesToTrack.isSet(UseSiteIdentify::Read)) {
+    status_stream() << "[" << M.getName() << "] tracking read use sites\n";
+  }
+  if (ClUseSitesToTrack.isSet(UseSiteIdentify::Write)) {
+    status_stream() << "[" << M.getName() << "] tracking write use sites\n";
+  }
 
   for (auto &F : M) {
     Changed = runOnFunction(F);

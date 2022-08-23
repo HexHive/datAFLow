@@ -16,6 +16,7 @@
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 
 #include "fuzzalloc/Analysis/MemFuncIdentify.h"
+#include "fuzzalloc/Streams.h"
 
 using namespace llvm;
 
@@ -102,6 +103,9 @@ void MemFuncIdentify::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 bool MemFuncIdentify::runOnModule(Module &M) {
+  status_stream() << "[" << M.getName()
+                  << "] Using custom memory functions from " << ClMemFuncs
+                  << '\n';
   const auto &CustomMemFuncs = getMemFuncList();
 
   for (auto &F : M) {

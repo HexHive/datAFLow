@@ -225,9 +225,11 @@ bool LocalVarTag::runOnModule(Module &M) {
     NumTaggedLocals++;
   }
 
-  success_stream() << "Num. tagged local variables: " << NumTaggedLocals
+  success_stream() << "[" << M.getName()
+                   << "] Num. tagged local variables: " << NumTaggedLocals
                    << '\n';
-  success_stream() << "Num. heapified local variables: " << NumHeapifiedLocals
+  success_stream() << "[" << M.getName()
+                   << "] Num. heapified local variables: " << NumHeapifiedLocals
                    << '\n';
 
   return true;

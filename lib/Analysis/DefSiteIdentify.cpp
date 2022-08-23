@@ -16,6 +16,7 @@
 
 #include "fuzzalloc/Analysis/DefSiteIdentify.h"
 #include "fuzzalloc/Analysis/VariableRecovery.h"
+#include "fuzzalloc/Streams.h"
 
 using namespace llvm;
 
@@ -53,6 +54,13 @@ void DefSiteIdentify::getAnalysisUsage(AnalysisUsage &AU) const {
 
 bool DefSiteIdentify::runOnModule(Module &M) {
   const auto &Vars = getAnalysis<VariableRecovery>().getVariables();
+
+  if (ClDefSitesToTrack.isSet(DefSiteTypes::Array)) {
+    status_stream() << "[" << M.getName() << "] Tracking array def sites\n";
+  }
+  if (ClDefSitesToTrack.isSet(DefSiteTypes::Struct)) {
+    status_stream() << "[" << M.getName() << "] Tracking struct def sites\n";
+  }
 
   for (const auto &[V, VI] : Vars) {
     const auto *Ty = VI.getType();

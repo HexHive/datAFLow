@@ -154,9 +154,21 @@ bool AFLUseSite::runOnModule(Module &M) {
     Changed = true;
   }
 
-  success_stream() << "Num. instrumented reads: " << NumInstrumentedReads
+  status_stream() << "[" << M.getName() << "] Use site capture: " << [&]() {
+    switch (ClUseCapture) {
+    case UseSiteCapture::UseOnly:
+      return "use";
+    case UseSiteCapture::UseWithOffset:
+      return "offset";
+    case UseSiteCapture::UseWithValue:
+      return "value";
+    }
+  }() << '\n';
+  success_stream() << "[" << M.getName()
+                   << "] Num. instrumented reads: " << NumInstrumentedReads
                    << '\n';
-  success_stream() << "Num. instrumented writes: " << NumInstrumentedWrites
+  success_stream() << "[" << M.getName()
+                   << "] Num. instrumented writes: " << NumInstrumentedWrites
                    << '\n';
 
   return Changed;

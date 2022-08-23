@@ -359,10 +359,13 @@ bool HeapTag::runOnModule(Module &M) {
     }
   }
 
-  success_stream() << "Num. tagged memory funcs.: " << NumTaggedFuncs << '\n';
-  success_stream() << "Num. tagged memory func. users: " << NumTaggedFuncUsers
+  success_stream() << "[" << M.getName()
+                   << "] Num. tagged memory funcs.: " << NumTaggedFuncs << '\n';
+  success_stream() << "[" << M.getName()
+                   << "] Num. tagged memory func. users: " << NumTaggedFuncUsers
                    << '\n';
-  success_stream() << "Num. memory func. trampolines: " << NumTrampolines
+  success_stream() << "[" << M.getName()
+                   << "] Num. memory func. trampolines: " << NumTrampolines
                    << '\n';
 
   return true;
