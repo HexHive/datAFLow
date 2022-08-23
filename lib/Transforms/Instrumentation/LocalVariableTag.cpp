@@ -56,6 +56,7 @@ private:
   IntegerType *TagTy;
   IntegerType *IntPtrTy;
   FunctionCallee BBRegisterFn;
+  FunctionCallee BBDeregisterFn;
 };
 
 char LocalVarTag::ID = 0;
@@ -188,6 +189,14 @@ AllocaInst *LocalVarTag::tagAlloca(AllocaInst *OrigAlloca) {
                     DIExpression::ApplyOffset, 0);
   replaceDbgValueForAlloca(OrigAlloca, NewAlloca, *DbgBuilder);
 
+  // Deregister the allocation in the baggy bounds table at function exit
+  EscapeEnumerator EE(*OrigAlloca->getFunction());
+  while (auto *AtExit = EE.Next()) {
+    auto *InsertPt = &*AtExit->GetInsertPoint();
+    auto *NewAllocaCasted = new BitCastInst(NewAlloca, Int8PtrTy, "", InsertPt);
+    CallInst::Create(BBDeregisterFn, {NewAllocaCasted}, "", InsertPt);
+  }
+
   OrigAlloca->eraseFromParent();
   return NewAlloca;
 }
@@ -204,9 +213,15 @@ bool LocalVarTag::runOnModule(Module &M) {
 
   this->TagTy = Type::getIntNTy(*Ctx, kNumTagBits);
   this->IntPtrTy = DL->getIntPtrType(*Ctx);
-  this->BBRegisterFn =
-      M.getOrInsertFunction("__bb_register", Type::getVoidTy(*Ctx),
-                            Type::getInt8PtrTy(*Ctx), IntPtrTy);
+
+  {
+    auto *VoidTy = Type::getVoidTy(*Ctx);
+    auto *Int8PtrTy = Type::getInt8PtrTy(*Ctx);
+    this->BBRegisterFn =
+        M.getOrInsertFunction("__bb_register", VoidTy, Int8PtrTy, IntPtrTy);
+    this->BBDeregisterFn =
+        M.getOrInsertFunction("__bb_deregister", VoidTy, Int8PtrTy);
+  }
 
   const auto &DefSites = getAnalysis<DefSiteIdentify>().getDefSites();
 

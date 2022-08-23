@@ -43,7 +43,8 @@ private:
   void createHeapifyDtor(GlobalVariable *, IRBuilder<> &);
 
   GlobalVariable *heapify(GlobalVariable *);
-  GlobalVariable *tagGlobalVariable(GlobalVariable *, BasicBlock *);
+  GlobalVariable *tagGlobalVariable(GlobalVariable *, BasicBlock *,
+                                    BasicBlock *);
 
   Module *Mod;
   LLVMContext *Ctx;
@@ -52,6 +53,7 @@ private:
   IntegerType *TagTy;
   IntegerType *IntPtrTy;
   FunctionCallee BBRegisterFn;
+  FunctionCallee BBDeregisterFn;
 };
 
 char GlobalVarTag::ID = 0;
@@ -269,7 +271,9 @@ GlobalVariable *GlobalVarTag::heapify(GlobalVariable *OrigGV) {
 }
 
 GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
-                                                BasicBlock *CtorBB) {
+                                                BasicBlock *CtorBB,
+                                                BasicBlock *DtorBB) {
+  auto *Int8PtrTy = Type::getInt8PtrTy(*Ctx);
   auto *OrigTy = OrigGV->getValueType();
   auto NewAllocSize = getTaggedVarSize(DL->getTypeAllocSize(OrigTy));
 
@@ -345,11 +349,18 @@ GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
   }
 
   // Register the allocation in the baggy bounds table
-  auto *Int8PtrTy = Type::getInt8PtrTy(*Ctx);
-  auto *NewGVCasted = new BitCastInst(NewGV, Int8PtrTy, "", CtorBB);
-  CallInst::Create(BBRegisterFn,
-                   {NewGVCasted, ConstantInt::get(IntPtrTy, NewAllocSize)}, "",
-                   CtorBB);
+  {
+    auto *NewGVCasted = new BitCastInst(NewGV, Int8PtrTy, "", CtorBB);
+    CallInst::Create(BBRegisterFn,
+                     {NewGVCasted, ConstantInt::get(IntPtrTy, NewAllocSize)},
+                     "", CtorBB);
+  }
+
+  // Deregister the allocation in the baggy bounds table
+  {
+    auto *NewGVCasted = new BitCastInst(NewGV, Int8PtrTy, "", DtorBB);
+    CallInst::Create(BBDeregisterFn, {NewGVCasted}, "", DtorBB);
+  }
 
   // If the original global variable is externally visible, replace it with an
   // alias that points to the original data in the new global variable
@@ -378,9 +389,15 @@ bool GlobalVarTag::runOnModule(Module &M) {
 
   this->TagTy = Type::getIntNTy(*Ctx, kNumTagBits);
   this->IntPtrTy = DL->getIntPtrType(*Ctx);
-  this->BBRegisterFn =
-      M.getOrInsertFunction("__bb_register", Type::getVoidTy(*Ctx),
-                            Type::getInt8PtrTy(*Ctx), IntPtrTy);
+
+  {
+    auto *VoidTy = Type::getVoidTy(*Ctx);
+    auto *Int8PtrTy = Type::getInt8PtrTy(*Ctx);
+    this->BBRegisterFn =
+        M.getOrInsertFunction("__bb_register", VoidTy, Int8PtrTy, IntPtrTy);
+    this->BBDeregisterFn =
+        M.getOrInsertFunction("__bb_deregister", VoidTy, Int8PtrTy);
+  }
 
   const auto &DefSites = getAnalysis<DefSiteIdentify>().getDefSites();
 
@@ -394,18 +411,25 @@ bool GlobalVarTag::runOnModule(Module &M) {
       FunctionType::get(Type::getVoidTy(*Ctx), /*isVarArg=*/false);
   auto *GlobalCtorF = Function::Create(
       GlobalCtorTy, GlobalValue::InternalLinkage, "fuzzalloc.ctor", *Mod);
+  auto *CtorEntryBB = BasicBlock::Create(*Ctx, "entry", GlobalCtorF);
   appendToGlobalCtors(*Mod, GlobalCtorF, /*Priority=*/0);
 
-  auto *CtorEntryBB = BasicBlock::Create(*Ctx, "entry", GlobalCtorF);
+  // Create a destructor to deregister the tagged globals in the baggy bounds
+  // table
+  auto *GlobalDtorF = Function::Create(
+      GlobalCtorTy, GlobalValue::InternalLinkage, "fuzzalloc.dtor", *Mod);
+  auto *DtorEntryBB = BasicBlock::Create(*Ctx, "entry", GlobalDtorF);
+  appendToGlobalDtors(*Mod, GlobalDtorF, /*Priority=*/0);
 
   for (auto *Def : DefSites) {
     if (auto *GV = dyn_cast<GlobalVariable>(Def)) {
-      tagGlobalVariable(GV, CtorEntryBB);
+      tagGlobalVariable(GV, CtorEntryBB, DtorEntryBB);
       NumTaggedGVs++;
     }
   }
 
   ReturnInst::Create(*Ctx, CtorEntryBB);
+  ReturnInst::Create(*Ctx, DtorEntryBB);
 
   success_stream() << "[" << M.getName()
                    << "] Num. tagged global variables: " << NumTaggedGVs

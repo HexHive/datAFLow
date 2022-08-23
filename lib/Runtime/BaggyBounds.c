@@ -75,7 +75,7 @@ void __bb_register(void *Obj, size_t AllocSize) {
   memset(__baggy_bounds_table + Index, E, Range);
 }
 
-static void unregisterMemoryObject(void *Obj) {
+void __bb_deregister(void *Obj) {
   if (unlikely(!Initialized)) {
     initBaggyBounds();
   }
@@ -94,7 +94,7 @@ static void unregisterMemoryObject(void *Obj) {
 //
 
 void __bb_free(void *Ptr) {
-  unregisterMemoryObject(Ptr);
+  __bb_deregister(Ptr);
   free(Ptr);
 }
 

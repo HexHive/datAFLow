@@ -268,10 +268,10 @@ bool UseSiteIdentify::runOnModule(Module &M) {
   bool Changed = false;
 
   if (ClUseSitesToTrack.isSet(UseSiteIdentify::Read)) {
-    status_stream() << "[" << M.getName() << "] tracking read use sites\n";
+    status_stream() << "[" << M.getName() << "] Tracking read use sites\n";
   }
   if (ClUseSitesToTrack.isSet(UseSiteIdentify::Write)) {
-    status_stream() << "[" << M.getName() << "] tracking write use sites\n";
+    status_stream() << "[" << M.getName() << "] Tracking write use sites\n";
   }
 
   for (auto &F : M) {
