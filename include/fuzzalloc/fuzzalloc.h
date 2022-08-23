@@ -8,28 +8,45 @@
 #ifndef FUZZALLOC_H
 #define FUZZALLOC_H
 
+#include <limits.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
+
+#include "config.h" // AFL++
 
 #if defined(__cplusplus)
 extern "C" {
 #endif // __cplusplus
 
-/// Tag type
-typedef uint16_t tag_t;
+#if (MAP_SIZE_POW2 <= 16)
 
-/// Number of bits in a tag
-extern const unsigned kNumTagBits;
+typedef uint16_t tag_t;             ///< Tag type
+#define kNumTagBits UINT16_WIDTH    ///< Number of bits in a tag
+#define kFuzzallocTagMax UINT16_MAX ///< The maximum tag value
+#define PRIxTag PRIx16              ///< Print format specifier for tags (hex)
+#define PRIuTag PRIu16              ///< Print format specifier for tags (int)
 
-/// The default def site tag. Used by default for non-instrumented code
-extern const tag_t kFuzzallocDefaultTag;
+#elif (MAP_SIZE_POW2 <= 32)
 
-/// The default minimum tag value
-extern const tag_t kFuzzallocTagMin;
+typedef uint32_t tag_t; ///< Tag type
+#define kNumTagBits UINT32_WIDTH    ///< Number of bits in a tag
+#define kFuzzallocTagMax UINT32_MAX ///< The maximum tag value
+#define PRIxTag PRIx32              ///< Print format specifier for tags (hex)
+#define PRIuTag PRIu32              ///< Print format specifier for tags (int)
 
-/// The default maximum tag value
-extern const tag_t kFuzzallocTagMax;
+#else
+
+typedef uint64_t tag_t; ///< Tag type
+#define kNumTagBits UINT64_WIDTH    ///< Number of bits in a tag
+#define kFuzzallocTagMax UINT64_MAX ///< The maximum tag value
+#define PRIxTag PRIx64              ///< Print format specifier for tags (hex)
+#define PRIuTag PRIu64              ///< Print format specifier for tags (int)
+
+#endif
+
+#define kFuzzallocDefaultTag (0) ///< The default tag (for uninstrumented code)
+#define kFuzzallocTagMin (kFuzzallocDefaultTag + 1) ///< The minimum tag value
 
 #if defined(__cplusplus)
 }

@@ -10,6 +10,7 @@
 #include <stdio.h>
 
 #include "fuzzalloc/Runtime/BaggyBounds.h"
+#include "fuzzalloc/fuzzalloc.h"
 
 // AFL++ headers
 #include "config.h"
@@ -17,21 +18,10 @@
 #define likely(x) __builtin_expect((x), 1)
 #define unlikely(x) __builtin_expect((x), 0)
 
-#if (MAP_SIZE_POW2 <= 16)
-typedef uint16_t cov_idx_t;
-#define PRIxHash PRIx16
-#elif (MAP_SIZE_POW2 <= 32)
-typedef uint32_t cov_idx_t;
-#define PRIxHash PRIx32
-#else
-typedef uint64_t cov_idx_t;
-#define PRIxHash PRIx64
-#endif
-
 extern uint8_t *__afl_area_ptr;
 
 /// Update AFL coverage bitmap
-static inline void __afl_update_cov(cov_idx_t Idx) {
+static inline void __afl_update_cov(tag_t Idx) {
   uint8_t *P = &__afl_area_ptr[Idx];
 #if __GNUC__
   const uint8_t C = __builtin_add_overflow(*P, 1, P);
@@ -48,7 +38,7 @@ static inline void __afl_update_cov(cov_idx_t Idx) {
 void __afl_hash_def_use(void *Ptr, size_t Size) {
   uintptr_t Base;
   tag_t Tag = __bb_lookup(Ptr, &Base);
-  cov_idx_t Hash = 0;
+  tag_t Hash = 0;
 
   if (likely(Tag != kFuzzallocDefaultTag)) {
     // Compute the hash
@@ -57,7 +47,7 @@ void __afl_hash_def_use(void *Ptr, size_t Size) {
 
 #ifdef _DEBUG
     fprintf(stderr,
-            "[datAFLow] hash(tag=0x%" PRIx16 ", use=%" PRIx64 ") -> %" PRIxHash
+            "[datAFLow] hash(tag=0x%" PRIx16 ", use=%" PRIx64 ") -> %" PRIuTag
             "\n",
             Tag, Use, Hash);
 #endif
@@ -69,7 +59,7 @@ void __afl_hash_def_use(void *Ptr, size_t Size) {
 void __afl_hash_def_use_offset(void *Ptr, size_t Size) {
   uintptr_t Base;
   tag_t Tag = __bb_lookup(Ptr, &Base);
-  cov_idx_t Hash = 0;
+  tag_t Hash = 0;
 
   if (likely(Tag != kFuzzallocDefaultTag)) {
     // Compute the hash
@@ -80,7 +70,7 @@ void __afl_hash_def_use_offset(void *Ptr, size_t Size) {
 #ifdef _DEBUG
     fprintf(stderr,
             "[datAFLow] hash(tag=0x%" PRIx16 ", use=%" PRIx64
-            ", offset=0x%" PRIu64 ") -> %" PRIxHash "\n",
+            ", offset=0x%" PRIu64 ") -> %" PRIuTag "\n",
             Tag, Use, Offset, Hash);
 #endif
   }
@@ -91,7 +81,7 @@ void __afl_hash_def_use_offset(void *Ptr, size_t Size) {
 void __afl_hash_def_use_value(void *Ptr, size_t Size) {
   uintptr_t Base;
   tag_t Tag = __bb_lookup(Ptr, &Base);
-  cov_idx_t Hash = 0;
+  tag_t Hash = 0;
 
   if (likely(Tag != kFuzzallocDefaultTag)) {
     // Compute the hash
@@ -106,7 +96,7 @@ void __afl_hash_def_use_value(void *Ptr, size_t Size) {
 #ifdef _DEBUG
     fprintf(stderr,
             "[datAFLow] hash(tag=0x%" PRIx16 ", use=%" PRIx64
-            ", offset=0x%" PRIu64 ", obj=%p, size=%zu) -> %" PRIxHash "\n",
+            ", offset=0x%" PRIu64 ", obj=%p, size=%zu) -> %" PRIuTag "\n",
             Tag, Use, Offset, Ptr, Size, Hash);
 #endif
   }

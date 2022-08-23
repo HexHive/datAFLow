@@ -17,10 +17,10 @@ extern "C" {
 #endif // __cplusplus
 
 /// Slot size (in bytes)
-extern const unsigned kSlotSize;
+#define kSlotSize (16)
 
 /// Size of metadata
-extern const size_t kMetaSize;
+#define kMetaSize (sizeof(tag_t))
 
 /// Efficiently calculate the next power-of-2 of `X`
 uint64_t bb_nextPow2(uint64_t X);
