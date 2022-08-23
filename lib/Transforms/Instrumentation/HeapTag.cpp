@@ -278,14 +278,14 @@ void HeapTag::tagUse(Use *U) const {
     } else {
       phiSafeReplaceUses(U, TrampolineFn);
     }
-  } else if (auto *GV = dyn_cast<GlobalVariable>(U)) {
+  } else if (auto *GV = dyn_cast<GlobalVariable>(User)) {
     // If the user is another global variable then the `use` must be an
     // assignment initializer. Here, we need to replace the initializer rather
     // then call `handleOperandChange`
     assert(GV->hasInitializer());
     assert(GV->getInitializer() == Fn);
     GV->setInitializer(TrampolineFn);
-  } else if (auto *C = dyn_cast<Constant>(U)) {
+  } else if (auto *C = dyn_cast<Constant>(User)) {
     C->handleOperandChange(Fn, TrampolineFn);
   } else {
     phiSafeReplaceUses(U, TrampolineFn);
