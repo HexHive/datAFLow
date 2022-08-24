@@ -217,10 +217,16 @@ bool LocalVarTag::runOnModule(Module &M) {
   {
     auto *VoidTy = Type::getVoidTy(*Ctx);
     auto *Int8PtrTy = Type::getInt8PtrTy(*Ctx);
+
     this->BBRegisterFn =
         M.getOrInsertFunction("__bb_register", VoidTy, Int8PtrTy, IntPtrTy);
+    assert(isa_and_nonnull<Function>(BBRegisterFn.getCallee()));
+    cast<Function>(BBRegisterFn.getCallee())->setDoesNotThrow();
+
     this->BBDeregisterFn =
         M.getOrInsertFunction("__bb_deregister", VoidTy, Int8PtrTy);
+    assert(isa_and_nonnull<Function>(BBDeregisterFn.getCallee()));
+    cast<Function>(BBDeregisterFn.getCallee())->setDoesNotThrow();
   }
 
   const auto &DefSites = getAnalysis<DefSiteIdentify>().getDefSites();
