@@ -299,7 +299,7 @@ GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
   // Create a tagged version of the global variable (only visible in this
   // module)
   auto *NewGV = new GlobalVariable(
-      *Mod, NewGVTy, OrigGV->isConstant(), GlobalValue::PrivateLinkage, NewInit,
+      *Mod, NewGVTy, OrigGV->isConstant(), OrigGV->getLinkage(), NewInit,
       OrigGV->hasName() ? OrigGV->getName().str() + ".tagged" : "", OrigGV,
       OrigGV->getThreadLocalMode(), OrigGV->getType()->getPointerAddressSpace(),
       OrigGV->isExternallyInitialized());
@@ -307,6 +307,7 @@ GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
   NewGV->setMetadata(Mod->getMDKindID(kFuzzallocTaggVarMD),
                      MDNode::get(*Ctx, None));
   NewGV->setAlignment(MaybeAlign(NewAllocSize));
+  NewGV->setLinkage(GlobalValue::PrivateLinkage);
   if (NewGV->isImplicitDSOLocal()) {
     NewGV->setDSOLocal(true);
   }
