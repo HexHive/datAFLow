@@ -35,7 +35,8 @@ size_t getTaggedVarSize(const TypeSize &Size) {
   return bb_nextPow2(AdjustedSize);
 }
 
-Instruction *insertMalloc(Type *Ty, Value *Ptr, Instruction *InsertPt) {
+Instruction *insertMalloc(Type *Ty, Value *Ptr, Instruction *InsertPt,
+                          bool StoreResult) {
   auto *Mod = InsertPt->getFunction()->getParent();
   auto &Ctx = Mod->getContext();
   auto &DL = Mod->getDataLayout();
@@ -60,11 +61,13 @@ Instruction *insertMalloc(Type *Ty, Value *Ptr, Instruction *InsertPt) {
     }
   }();
 
-  auto *MallocStore = new StoreInst(MallocCall, Ptr, InsertPt);
-  MallocStore->setMetadata(Mod->getMDKindID(kFuzzallocNoInstrumentMD),
-                           MDNode::get(Ctx, None));
-  MallocStore->setMetadata(Mod->getMDKindID(kNoSanitizeMD),
-                           MDNode::get(Ctx, None));
+  if (StoreResult) {
+    auto *MallocStore = new StoreInst(MallocCall, Ptr, InsertPt);
+    MallocStore->setMetadata(Mod->getMDKindID(kFuzzallocNoInstrumentMD),
+                             MDNode::get(Ctx, None));
+    MallocStore->setMetadata(Mod->getMDKindID(kNoSanitizeMD),
+                             MDNode::get(Ctx, None));
+  }
 
   return MallocCall;
 }

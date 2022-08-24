@@ -25,7 +25,7 @@ size_t getTaggedVarSize(const llvm::TypeSize &);
 
 /// Insert a call to `malloc`
 llvm::Instruction *insertMalloc(llvm::Type *, llvm::Value *,
-                                llvm::Instruction *);
+                                llvm::Instruction *, bool = true);
 
 /// Insert a call to `free`
 llvm::Instruction *insertFree(llvm::Type *, llvm::Value *, llvm::Instruction *);
