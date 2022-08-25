@@ -35,60 +35,57 @@ static inline void __afl_update_cov(tag_t Idx) {
 // "External" interface
 //
 
-void __afl_hash_def_use(void *Ptr, size_t Size) {
+void __afl_hash_def_use(tag_t UseTag, void *Ptr, size_t Size) {
   uintptr_t Base;
-  tag_t Tag = __bb_lookup(Ptr, &Base);
+  tag_t DefTag = __bb_lookup(Ptr, &Base);
   tag_t Hash = 0;
 
-  if (likely(Tag != kFuzzallocDefaultTag)) {
+  if (likely(DefTag != kFuzzallocDefaultTag)) {
     // Compute the hash
-    const uintptr_t Use = (uintptr_t)__builtin_return_address(0);
-    Hash = (Tag - kFuzzallocDefaultTag) ^ Use;
+    Hash = (DefTag - kFuzzallocDefaultTag) ^ UseTag;
 
 #ifdef _DEBUG
     fprintf(stderr,
             "[datAFLow] hash(tag=0x%" PRIx16 ", use=%" PRIx64 ") -> %" PRIuTag
             "\n",
-            Tag, Use, Hash);
+            DefTag, UseTag, Hash);
 #endif
   }
 
   __afl_update_cov(Hash);
 }
 
-void __afl_hash_def_use_offset(void *Ptr, size_t Size) {
+void __afl_hash_def_use_offset(tag_t UseTag, void *Ptr, size_t Size) {
   uintptr_t Base;
-  tag_t Tag = __bb_lookup(Ptr, &Base);
+  tag_t DefTag = __bb_lookup(Ptr, &Base);
   tag_t Hash = 0;
 
-  if (likely(Tag != kFuzzallocDefaultTag)) {
+  if (likely(DefTag != kFuzzallocDefaultTag)) {
     // Compute the hash
-    const uintptr_t Use = (uintptr_t)__builtin_return_address(0);
     const ptrdiff_t Offset = (uintptr_t)Ptr - Base;
-    Hash = (Tag - kFuzzallocDefaultTag) ^ (Use + Offset);
+    Hash = (DefTag - kFuzzallocDefaultTag) ^ (UseTag + Offset);
 
 #ifdef _DEBUG
     fprintf(stderr,
             "[datAFLow] hash(tag=0x%" PRIx16 ", use=%" PRIx64
             ", offset=0x%" PRIu64 ") -> %" PRIuTag "\n",
-            Tag, Use, Offset, Hash);
+            DefTag, UseTag, Offset, Hash);
 #endif
   }
 
   __afl_update_cov(Hash);
 }
 
-void __afl_hash_def_use_value(void *Ptr, size_t Size) {
+void __afl_hash_def_use_value(tag_t UseTag, void *Ptr, size_t Size) {
   uintptr_t Base;
-  tag_t Tag = __bb_lookup(Ptr, &Base);
+  tag_t DefTag = __bb_lookup(Ptr, &Base);
   tag_t Hash = 0;
 
-  if (likely(Tag != kFuzzallocDefaultTag)) {
+  if (likely(DefTag != kFuzzallocDefaultTag)) {
     // Compute the hash
-    const uintptr_t Use = (uintptr_t)__builtin_return_address(0);
     const ptrdiff_t Offset = (uintptr_t)Ptr - Base;
 
-    Hash = (Tag - kFuzzallocDefaultTag) ^ (Use + Offset);
+    Hash = (DefTag - kFuzzallocDefaultTag) ^ (UseTag + Offset);
     for (uint8_t *I = Ptr, *End = Ptr + Size; I < End; ++I) {
       Hash ^= *I;
     }
@@ -97,7 +94,7 @@ void __afl_hash_def_use_value(void *Ptr, size_t Size) {
     fprintf(stderr,
             "[datAFLow] hash(tag=0x%" PRIx16 ", use=%" PRIx64
             ", offset=0x%" PRIu64 ", obj=%p, size=%zu) -> %" PRIuTag "\n",
-            Tag, Use, Offset, Ptr, Size, Hash);
+            DefTag, UseTag, Offset, Ptr, Size, Hash);
 #endif
   }
 

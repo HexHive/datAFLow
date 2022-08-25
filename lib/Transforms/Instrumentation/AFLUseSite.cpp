@@ -19,6 +19,8 @@
 #include "fuzzalloc/Runtime/BaggyBounds.h"
 #include "fuzzalloc/Streams.h"
 
+#include "VariableTag.h"
+
 using namespace llvm;
 
 #define DEBUG_TYPE "fuzzalloc-afl-use-site"
@@ -44,6 +46,10 @@ static cl::opt<UseSiteCapture> ClUseCapture(
                clEnumValN(UseSiteCapture::UseWithValue,
                           "fuzzalloc-capture-value",
                           "Record the value of the def")));
+static cl::opt<bool>
+    ClUsePCAddr("fuzzalloc-use-pc",
+                cl::desc("Use the program counter to identify a use site"),
+                cl::Hidden, cl::init(true));
 
 //
 // Global variables
@@ -70,7 +76,9 @@ private:
   const DataLayout *DL;
 
   FunctionCallee HashFn;
+  FunctionCallee ReadPCAsm;
 
+  IntegerType *TagTy;
   PointerType *Int8PtrTy;
   IntegerType *IntPtrTy;
 };
@@ -99,10 +107,19 @@ void AFLUseSite::doInstrument(InterestingMemoryOperand *Op) {
 
   // Compute the AFL coverage bitmap index based on the def-use chain and update
   // the AFL coverage bitmap (done inside the hash function)
+  auto *UseSite = [&]() -> Value * {
+    if (ClUsePCAddr) {
+      return IRB.CreateIntCast(IRB.CreateCall(ReadPCAsm), TagTy,
+                               /*isSigned=*/false);
+    } else {
+      return generateTag(TagTy);
+    }
+  }();
+
   auto *PtrCast = IRB.CreatePointerCast(Ptr, Int8PtrTy);
   auto *PtrElemTy = Ptr->getType()->getPointerElementType();
   auto *Size = ConstantInt::get(IntPtrTy, DL->getTypeStoreSize(PtrElemTy));
-  IRB.CreateCall(HashFn, {PtrCast, Size});
+  IRB.CreateCall(HashFn, {UseSite, PtrCast, Size});
 }
 
 void AFLUseSite::getAnalysisUsage(AnalysisUsage &AU) const {
@@ -117,6 +134,7 @@ bool AFLUseSite::runOnModule(Module &M) {
   this->Ctx = &M.getContext();
   this->DL = &M.getDataLayout();
 
+  this->TagTy = Type::getIntNTy(*Ctx, kNumTagBits);
   this->IntPtrTy = DL->getIntPtrType(*Ctx);
   this->Int8PtrTy = Type::getInt8PtrTy(*Ctx);
 
@@ -133,8 +151,18 @@ bool AFLUseSite::runOnModule(Module &M) {
       }
       llvm_unreachable("Invalid use capture option");
     }();
-    this->HashFn =
-        Mod->getOrInsertFunction(HashFnName, VoidTy, Int8PtrTy, IntPtrTy);
+    this->HashFn = Mod->getOrInsertFunction(HashFnName, VoidTy, TagTy,
+                                            Int8PtrTy, IntPtrTy);
+  }
+
+  // Configure the assembly to read the PC
+  {
+    auto *ReadAsmPCTy =
+        FunctionType::get(Type::getInt64Ty(*Ctx), /*isVarArg=*/false);
+    this->ReadPCAsm = FunctionCallee(
+        ReadAsmPCTy,
+        InlineAsm::get(ReadAsmPCTy, "leaq (%rip), $0", /*Constraints=*/"=r",
+                       /*hasSideEffects=*/false));
   }
 
   // Instrument all the things
