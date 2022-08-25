@@ -107,6 +107,9 @@ void AFLUseSite::doInstrument(InterestingMemoryOperand *Op) {
 
   // Compute the AFL coverage bitmap index based on the def-use chain and update
   // the AFL coverage bitmap (done inside the hash function)
+  auto *PtrCast = IRB.CreatePointerCast(Ptr, Int8PtrTy);
+  auto *PtrElemTy = Ptr->getType()->getPointerElementType();
+  auto *Size = ConstantInt::get(IntPtrTy, DL->getTypeStoreSize(PtrElemTy));
   auto *UseSite = [&]() -> Value * {
     if (ClUsePCAddr) {
       return IRB.CreateIntCast(IRB.CreateCall(ReadPCAsm), TagTy,
@@ -116,9 +119,6 @@ void AFLUseSite::doInstrument(InterestingMemoryOperand *Op) {
     }
   }();
 
-  auto *PtrCast = IRB.CreatePointerCast(Ptr, Int8PtrTy);
-  auto *PtrElemTy = Ptr->getType()->getPointerElementType();
-  auto *Size = ConstantInt::get(IntPtrTy, DL->getTypeStoreSize(PtrElemTy));
   IRB.CreateCall(HashFn, {UseSite, PtrCast, Size});
 }
 

@@ -46,7 +46,7 @@ void __afl_hash_def_use(tag_t UseTag, void *Ptr, size_t Size) {
 
 #ifdef _DEBUG
     fprintf(stderr,
-            "[datAFLow] hash(tag=0x%" PRIx16 ", use=%" PRIx64 ") -> %" PRIuTag
+            "[datAFLow] hash(def=0x%" PRIx16 ", use=0x%" PRIx64 ") -> %" PRIuTag
             "\n",
             DefTag, UseTag, Hash);
 #endif
@@ -67,8 +67,8 @@ void __afl_hash_def_use_offset(tag_t UseTag, void *Ptr, size_t Size) {
 
 #ifdef _DEBUG
     fprintf(stderr,
-            "[datAFLow] hash(tag=0x%" PRIx16 ", use=%" PRIx64
-            ", offset=0x%" PRIu64 ") -> %" PRIuTag "\n",
+            "[datAFLow] hash(def=0x%" PRIx16 ", use=0x%" PRIx64
+            ", offset=%" PRIu64 ") -> %" PRIuTag "\n",
             DefTag, UseTag, Offset, Hash);
 #endif
   }
@@ -86,14 +86,17 @@ void __afl_hash_def_use_value(tag_t UseTag, void *Ptr, size_t Size) {
     const ptrdiff_t Offset = (uintptr_t)Ptr - Base;
 
     Hash = (DefTag - kFuzzallocDefaultTag) ^ (UseTag + Offset);
+    if (MAP_SIZE_POW2 > 16) {
+      Hash <<= 4;
+    }
     for (uint8_t *I = Ptr, *End = Ptr + Size; I < End; ++I) {
       Hash ^= *I;
     }
 
 #ifdef _DEBUG
     fprintf(stderr,
-            "[datAFLow] hash(tag=0x%" PRIx16 ", use=%" PRIx64
-            ", offset=0x%" PRIu64 ", obj=%p, size=%zu) -> %" PRIuTag "\n",
+            "[datAFLow] hash(def=0x%" PRIx16 ", use=0x%" PRIx64
+            ", offset=%" PRIu64 ", obj=%p, size=%zu) -> %" PRIuTag "\n",
             DefTag, UseTag, Offset, Ptr, Size, Hash);
 #endif
   }
