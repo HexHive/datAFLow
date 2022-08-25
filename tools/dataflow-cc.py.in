@@ -34,6 +34,8 @@ def parse_args():
 
     # Use site options
     use_arg_group = parser.add_argument_group('use sites', 'Use site options')
+    use_arg_group.add_argument('--use-pc', action='store_true',
+                               help='Use the PC to tag uses')
     use_arg_group.add_argument('--use-sensitivity', default=[], action='append',
                                choices=('read', 'write'),
                                help='use site sensitivity')
@@ -102,6 +104,11 @@ def get_llvm_args(args):
         def_sensitivities = []
 
     llvm_args.extend(def_sensitivities)
+
+    # Use site PC tag
+    use_pc = 'FUZZALLOC_USE_PC' in env or args.use_pc
+    if use_pc:
+        llvm_args.extend(['-mllvm', '-fuzzalloc-use-pc=1'])
 
     # Use site sensitivity
     if 'FUZZALLOC_USE_SENSITIVITY' in env:

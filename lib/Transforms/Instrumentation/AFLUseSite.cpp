@@ -49,7 +49,7 @@ static cl::opt<UseSiteCapture> ClUseCapture(
 static cl::opt<bool>
     ClUsePCAddr("fuzzalloc-use-pc",
                 cl::desc("Use the program counter to identify a use site"),
-                cl::Hidden, cl::init(true));
+                cl::Hidden, cl::init(false));
 
 //
 // Global variables
