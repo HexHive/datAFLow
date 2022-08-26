@@ -65,7 +65,23 @@ make -j
 ### Instrumenting a Target
 
 The `dataflow-cc` (and `dataflow-cc++`) tools can be used as dropin replacements
-for `clang` (and `clang++`).
+for `clang` (and `clang++`).  These wrappers provide a number of environment
+variables to configure the target:
+
+* `FUZZALLOC_DEF_MEM_FUNCS`: Path to a special case list (see below) listing
+custom memory allocation routines
+
+* `FUZZALLOC_DEF_SENSITIVITY`: The def sites to instrument. One of `array`,
+`struct`, or `array:struct`.
+
+* `FUZZALLOC_USE_SENSITIVITY`: The use sites to instrument. One of `read`,
+`write`, or `read:write`.
+
+* `FUZZALLOC_USE_CAPTURE`: What to capture at each use site. One of `use`,
+`offset`, or `value`.
+
+* `FUZZALLOC_USE_INST`: Use site instrumentation. Either `debug` for printing
+def-use chains or `afl` for fuzzing.
 
 ### Custom memory allocators
 
