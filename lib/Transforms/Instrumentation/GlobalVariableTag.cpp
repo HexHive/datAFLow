@@ -142,7 +142,7 @@ GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
 
   // If the original global variable is externally visible, replace it with an
   // alias that points to the original data in the new global variable
-  if (!OrigGV->hasPrivateLinkage()) {
+  if (!OrigGV->isDeclaration() && !OrigGV->hasPrivateLinkage()) {
     auto *Aliasee = ConstantExpr::getInBoundsGetElementPtr(
         NewGVTy, NewGV, ArrayRef<Constant *>({Zero, Zero}));
     auto *GVAlias = GlobalAlias::create(
