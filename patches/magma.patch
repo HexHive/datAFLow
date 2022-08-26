@@ -1,0 +1,503 @@
+diff --git a/docker/Dockerfile b/docker/Dockerfile
+index e3dd49ab..7ff3dd6b 100644
+--- a/docker/Dockerfile
++++ b/docker/Dockerfile
+@@ -1,8 +1,9 @@
+-FROM ubuntu:18.04
++FROM ubuntu:20.04
+ 
+ # TODO remove sudo for user "magma" to avoid unwanted priv escalation from
+ # other attack vectors.
+ 
++ENV DEBIAN_FRONTEND=noninteractive
+ RUN apt-get update && apt-get install -y sudo
+ 
+ ## Magma directory hierarchy
+@@ -39,9 +40,15 @@ ARG magma_path=magma
+ ENV MAGMA 	${MAGMA_R}/${magma_path}
+ USER root:root
+ RUN mkdir -p ${MAGMA} && chown magma:magma ${MAGMA}
+-COPY --chown=magma:magma ${magma_root}/${magma_path} ${MAGMA}/
++
++# Install Magma dependencies
++COPY --chown=magma:magma ${magma_root}/${magma_path}/preinstall.sh ${MAGMA}
+ RUN ${MAGMA}/preinstall.sh
++
+ USER magma:magma
++
++COPY --chown=magma:magma ${magma_root}/${magma_path}/prebuild.sh ${MAGMA}
++COPY --chown=magma:magma ${magma_root}/${magma_path}/src ${MAGMA}/src
+ RUN ${MAGMA}/prebuild.sh
+ 
+ ARG fuzzer_name
+@@ -49,21 +56,44 @@ ARG fuzzer_path=fuzzers/${fuzzer_name}
+ ENV FUZZER 	${MAGMA_R}/${fuzzer_path}
+ USER root:root
+ RUN mkdir -p ${FUZZER} && chown magma:magma ${FUZZER}
+-COPY --chown=magma:magma ${magma_root}/${fuzzer_path} ${FUZZER}/
++
++# Install fuzzer dependencies
++COPY --chown=magma:magma ${magma_root}/${fuzzer_path}/preinstall.sh ${FUZZER}
+ RUN ${FUZZER}/preinstall.sh
++
+ USER magma:magma
++
++# Fetch fuzzer
++COPY --chown=magma:magma ${magma_root}/${fuzzer_path}/fetch.sh ${FUZZER}
++COPY --chown=magma:magma ${magma_root}/${fuzzer_path}/src ${FUZZER}/src
+ RUN ${FUZZER}/fetch.sh
++
++# Build fuzzer
++COPY --chown=magma:magma ${magma_root}/${fuzzer_path}/build.sh ${FUZZER}
+ RUN ${FUZZER}/build.sh
+ 
+ ARG target_name
+ ARG target_path=targets/${target_name}
+-ENV TARGET 	${MAGMA_R}/${target_path}
++ENV TARGET ${MAGMA_R}/${target_path}
+ USER root:root
+ RUN mkdir -p ${TARGET} && chown magma:magma ${TARGET}
+-COPY --chown=magma:magma ${magma_root}/${target_path} ${TARGET}/
++
++# Install target dependencies
++COPY --chown=magma:magma ${magma_root}/${target_path}/preinstall.sh ${TARGET}
+ RUN ${TARGET}/preinstall.sh
++
+ USER magma:magma
++
++# Get the target
++COPY --chown=magma:magma ${magma_root}/${target_path}/fetch.sh ${TARGET}
++COPY --chown=magma:magma ${magma_root}/${target_path}/src ${TARGET}/src
+ RUN ${TARGET}/fetch.sh
++
++# Forward-port bugs
++COPY --chown=magma:magma ${magma_root}/${target_path}/patches ${TARGET}/patches
++COPY --chown=magma:magma ${magma_root}/${target_path}/src ${TARGET}/src
++COPY --chown=magma:magma ${magma_root}/${target_path}/configrc ${TARGET}
++COPY --chown=magma:magma ${magma_root}/${magma_path}/apply_patches.sh ${MAGMA}
+ RUN ${MAGMA}/apply_patches.sh
+ 
+ ## Configuration parameters
+@@ -83,6 +113,17 @@ ENV CXXFLAGS ${BUILD_FLAGS}
+ ENV LIBS -l:magma.o -lrt
+ ENV LDFLAGS -L"${OUT}" -g
+ 
++# Instrument and build the target program
++COPY --chown=magma:magma ${magma_root}/${fuzzer_path}/instrument.sh ${FUZZER}
++COPY --chown=magma:magma ${magma_root}/${magma_path}/build.sh ${MAGMA}
++COPY --chown=magma:magma ${magma_root}/${target_path}/build.sh ${TARGET}
+ RUN ${FUZZER}/instrument.sh
+ 
++COPY --chown=magma:magma ${magma_root}/${magma_path}/run.sh ${MAGMA}
++COPY --chown=magma:magma ${magma_root}/${magma_path}/runonce.sh ${MAGMA}
++COPY --chown=magma:magma ${magma_root}/${fuzzer_path}/run.sh ${FUZZER}
++COPY --chown=magma:magma ${magma_root}/${fuzzer_path}/runonce.sh ${FUZZER}
++COPY --chown=magma:magma ${magma_root}/${fuzzer_path}/findings.sh ${FUZZER}
++COPY --chown=magma:magma ${magma_root}/${target_path}/corpus ${TARGET}/corpus
++
+ ENTRYPOINT "${MAGMA}/run.sh"
+diff --git a/fuzzers/aflplusplus_lto/fetch.sh b/fuzzers/aflplusplus_lto/fetch.sh
+index 4caa9d48..45cdb2bf 100755
+--- a/fuzzers/aflplusplus_lto/fetch.sh
++++ b/fuzzers/aflplusplus_lto/fetch.sh
+@@ -10,37 +10,55 @@ git clone --no-checkout https://github.com/AFLplusplus/AFLplusplus "$FUZZER/repo
+ git -C "$FUZZER/repo" checkout 458eb0813a6f7d63eed97f18696bca8274533123
+ 
+ # Fix: CMake-based build systems fail with duplicate (of main) or undefined references (of LLVMFuzzerTestOneInput)
+-sed -i '{s/^int main/__attribute__((weak)) &/}' $FUZZER/repo/utils/aflpp_driver/aflpp_driver.c
+-sed -i '{s/^int LLVMFuzzerTestOneInput/__attribute__((weak)) &/}' $FUZZER/repo/utils/aflpp_driver/aflpp_driver.c
+-cat >> $FUZZER/repo/utils/aflpp_driver/aflpp_driver.c << EOF
+-__attribute__((weak))
+-int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
+-{
+-  // assert(0 && "LLVMFuzzerTestOneInput should not be implemented in afl_driver");
+-  return 0;
+-}
+-EOF
+-
+ patch -p1 -d "$FUZZER/repo" << EOF
+ --- a/utils/aflpp_driver/aflpp_driver.c
+ +++ b/utils/aflpp_driver/aflpp_driver.c
+-@@ -53,7 +53,7 @@
++@@ -54,16 +54,17 @@ $AFL_HOME/afl-fuzz -i IN -o OUT ./a.out
+    #include "hash.h"
+  #endif
+- 
++
+ -int                   __afl_sharedmem_fuzzing = 1;
+ +int                   __afl_sharedmem_fuzzing = 0;
+  extern unsigned int * __afl_fuzz_len;
+  extern unsigned char *__afl_fuzz_ptr;
+- 
+-@@ -111,7 +111,8 @@ extern unsigned int * __afl_fuzz_len;
++
++ // libFuzzer interface is thin, so we don't include any libFuzzer headers.
++-int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size);
+++__attribute__((weak)) int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size);
+  __attribute__((weak)) int LLVMFuzzerInitialize(int *argc, char ***argv);
+- 
++
+  // Notify AFL about persistent mode.
+ -static volatile char AFL_PERSISTENT[] = "##SIG_AFL_PERSISTENT##";
+ +// DISABLED to avoid afl-showmap misbehavior
+ +static volatile char AFL_PERSISTENT[] = "##SIG_AFL_NOT_PERSISTENT##";
+  int                  __afl_persistent_loop(unsigned int);
+- 
++
+  // Notify AFL about deferred forkserver.
++@@ -202,7 +203,7 @@ static int ExecuteFilesOnyByOne(int argc, char **argv) {
++
++ }
++
++-int main(int argc, char **argv) {
+++__attribute__((weak)) int main(int argc, char **argv) {
++
++   if (argc < 2 || strncmp(argv[1], "-h", 2) == 0)
++     printf(
++@@ -276,6 +277,7 @@ int main(int argc, char **argv) {
++
++   }
++
+++  N = 1;
++   assert(N > 0);
++
++   __afl_manual_init();
++@@ -310,3 +312,9 @@ int main(int argc, char **argv) {
++
++ }
++
+++__attribute__((weak))
+++int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
+++{
+++  // assert(0 && "LLVMFuzzerTestOneInput should not be implemented in afl_driver");
+++  return 0;
+++}
+ EOF
+diff --git a/fuzzers/aflplusplus_lto/instrument.sh b/fuzzers/aflplusplus_lto/instrument.sh
+index c4ac5e87..a83f88ca 100755
+--- a/fuzzers/aflplusplus_lto/instrument.sh
++++ b/fuzzers/aflplusplus_lto/instrument.sh
+@@ -12,7 +12,7 @@ set -e
+ 
+ export CC="$FUZZER/repo/afl-clang-lto"
+ export CXX="$FUZZER/repo/afl-clang-lto++"
+-LLVM_PATH=/usr/lib/llvm-11/bin
++LLVM_PATH=/usr/lib/llvm-12/bin
+ export AS="${LLVM_PATH}/llvm-as"
+ export RANLIB="${LLVM_PATH}/llvm-ranlib"
+ export AR="${LLVM_PATH}/llvm-ar"
+diff --git a/fuzzers/aflplusplus_lto/preinstall.sh b/fuzzers/aflplusplus_lto/preinstall.sh
+index 4e9b10d3..ec73fe6f 100755
+--- a/fuzzers/aflplusplus_lto/preinstall.sh
++++ b/fuzzers/aflplusplus_lto/preinstall.sh
+@@ -6,41 +6,38 @@ apt-get update && \
+ 
+ apt-get install -y apt-utils apt-transport-https ca-certificates gnupg
+ 
+-echo deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-11 main >> /etc/apt/sources.list
+-wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
+-
+ apt-get update && \
+-    apt-get install -y clang-11 clangd-11 clang-tools-11 libc++1-11 libc++-11-dev \
+-      libc++abi1-11 libc++abi-11-dev libclang1-11 libclang-11-dev libclang-common-11-dev \
+-      libclang-cpp11 libclang-cpp11-dev liblld-11 liblld-11-dev liblldb-11 \
+-      liblldb-11-dev libllvm11 libomp-11-dev libomp5-11 lld-11 lldb-11 \
+-      llvm-11 llvm-11-dev llvm-11-runtime llvm-11-tools
++    apt-get install -y clang-12 clangd-12 clang-tools-12 libc++1-12 libc++-12-dev \
++      libc++abi1-12 libc++abi-12-dev libclang1-12 libclang-12-dev libclang-common-12-dev \
++      libclang-cpp12 libclang-cpp12-dev liblld-12 liblld-12-dev liblldb-12 \
++      liblldb-12-dev libllvm12 libomp-12-dev libomp5-12 lld-12 lldb-12 \
++      llvm-12 llvm-12-dev llvm-12-runtime llvm-12-tools
+ 
+ update-alternatives \
+-  --install /usr/lib/llvm              llvm             /usr/lib/llvm-11  20 \
+-  --slave   /usr/bin/llvm-config       llvm-config      /usr/bin/llvm-config-11  \
+-    --slave   /usr/bin/llvm-ar           llvm-ar          /usr/bin/llvm-ar-11 \
+-    --slave   /usr/bin/llvm-as           llvm-as          /usr/bin/llvm-as-11 \
+-    --slave   /usr/bin/llvm-bcanalyzer   llvm-bcanalyzer  /usr/bin/llvm-bcanalyzer-11 \
+-    --slave   /usr/bin/llvm-c-test       llvm-c-test      /usr/bin/llvm-c-test-11 \
+-    --slave   /usr/bin/llvm-cov          llvm-cov         /usr/bin/llvm-cov-11 \
+-    --slave   /usr/bin/llvm-diff         llvm-diff        /usr/bin/llvm-diff-11 \
+-    --slave   /usr/bin/llvm-dis          llvm-dis         /usr/bin/llvm-dis-11 \
+-    --slave   /usr/bin/llvm-dwarfdump    llvm-dwarfdump   /usr/bin/llvm-dwarfdump-11 \
+-    --slave   /usr/bin/llvm-extract      llvm-extract     /usr/bin/llvm-extract-11 \
+-    --slave   /usr/bin/llvm-link         llvm-link        /usr/bin/llvm-link-11 \
+-    --slave   /usr/bin/llvm-mc           llvm-mc          /usr/bin/llvm-mc-11 \
+-    --slave   /usr/bin/llvm-nm           llvm-nm          /usr/bin/llvm-nm-11 \
+-    --slave   /usr/bin/llvm-objdump      llvm-objdump     /usr/bin/llvm-objdump-11 \
+-    --slave   /usr/bin/llvm-ranlib       llvm-ranlib      /usr/bin/llvm-ranlib-11 \
+-    --slave   /usr/bin/llvm-readobj      llvm-readobj     /usr/bin/llvm-readobj-11 \
+-    --slave   /usr/bin/llvm-rtdyld       llvm-rtdyld      /usr/bin/llvm-rtdyld-11 \
+-    --slave   /usr/bin/llvm-size         llvm-size        /usr/bin/llvm-size-11 \
+-    --slave   /usr/bin/llvm-stress       llvm-stress      /usr/bin/llvm-stress-11 \
+-    --slave   /usr/bin/llvm-symbolizer   llvm-symbolizer  /usr/bin/llvm-symbolizer-11 \
+-    --slave   /usr/bin/llvm-tblgen       llvm-tblgen      /usr/bin/llvm-tblgen-11
++  --install /usr/lib/llvm              llvm             /usr/lib/llvm-12  20 \
++  --slave   /usr/bin/llvm-config       llvm-config      /usr/bin/llvm-config-12  \
++    --slave   /usr/bin/llvm-ar           llvm-ar          /usr/bin/llvm-ar-12 \
++    --slave   /usr/bin/llvm-as           llvm-as          /usr/bin/llvm-as-12 \
++    --slave   /usr/bin/llvm-bcanalyzer   llvm-bcanalyzer  /usr/bin/llvm-bcanalyzer-12 \
++    --slave   /usr/bin/llvm-c-test       llvm-c-test      /usr/bin/llvm-c-test-12 \
++    --slave   /usr/bin/llvm-cov          llvm-cov         /usr/bin/llvm-cov-12 \
++    --slave   /usr/bin/llvm-diff         llvm-diff        /usr/bin/llvm-diff-12 \
++    --slave   /usr/bin/llvm-dis          llvm-dis         /usr/bin/llvm-dis-12 \
++    --slave   /usr/bin/llvm-dwarfdump    llvm-dwarfdump   /usr/bin/llvm-dwarfdump-12 \
++    --slave   /usr/bin/llvm-extract      llvm-extract     /usr/bin/llvm-extract-12 \
++    --slave   /usr/bin/llvm-link         llvm-link        /usr/bin/llvm-link-12 \
++    --slave   /usr/bin/llvm-mc           llvm-mc          /usr/bin/llvm-mc-12 \
++    --slave   /usr/bin/llvm-nm           llvm-nm          /usr/bin/llvm-nm-12 \
++    --slave   /usr/bin/llvm-objdump      llvm-objdump     /usr/bin/llvm-objdump-12 \
++    --slave   /usr/bin/llvm-ranlib       llvm-ranlib      /usr/bin/llvm-ranlib-12 \
++    --slave   /usr/bin/llvm-readobj      llvm-readobj     /usr/bin/llvm-readobj-12 \
++    --slave   /usr/bin/llvm-rtdyld       llvm-rtdyld      /usr/bin/llvm-rtdyld-12 \
++    --slave   /usr/bin/llvm-size         llvm-size        /usr/bin/llvm-size-12 \
++    --slave   /usr/bin/llvm-stress       llvm-stress      /usr/bin/llvm-stress-12 \
++    --slave   /usr/bin/llvm-symbolizer   llvm-symbolizer  /usr/bin/llvm-symbolizer-12 \
++    --slave   /usr/bin/llvm-tblgen       llvm-tblgen      /usr/bin/llvm-tblgen-12
+ 
+ update-alternatives \
+-  --install /usr/bin/clang                 clang                  /usr/bin/clang-11     20 \
+-  --slave   /usr/bin/clang++               clang++                /usr/bin/clang++-11 \
+-  --slave   /usr/bin/clang-cpp             clang-cpp              /usr/bin/clang-cpp-11
++  --install /usr/bin/clang                 clang                  /usr/bin/clang-12     20 \
++  --slave   /usr/bin/clang++               clang++                /usr/bin/clang++-12 \
++  --slave   /usr/bin/clang-cpp             clang-cpp              /usr/bin/clang-cpp-12
+diff --git a/fuzzers/aflplusplus_lto/run.sh b/fuzzers/aflplusplus_lto/run.sh
+index 8a369e3a..d7b72eec 100755
+--- a/fuzzers/aflplusplus_lto/run.sh
++++ b/fuzzers/aflplusplus_lto/run.sh
+@@ -22,9 +22,8 @@ flag_cmplog=(-m none -c "$OUT/cmplog/$PROGRAM")
+ export AFL_SKIP_CPUFREQ=1
+ export AFL_NO_AFFINITY=1
+ export AFL_NO_UI=1
+-export AFL_MAP_SIZE=256000
+-export AFL_DRIVER_DONT_DEFER=1
++export AFL_NO_FORKSRV=1
+ 
+ "$FUZZER/repo/afl-fuzz" -i "$TARGET/corpus/$PROGRAM" -o "$SHARED/findings" \
+-    "${flag_cmplog[@]}" -d \
++    -t 1000+ "${flag_cmplog[@]}" -d \
+     $FUZZARGS -- "$OUT/afl/$PROGRAM" $ARGS 2>&1
+diff --git a/fuzzers/angora/build.sh b/fuzzers/angora/build.sh
+index 8d810c26..79c0edb2 100755
+--- a/fuzzers/angora/build.sh
++++ b/fuzzers/angora/build.sh
+@@ -21,7 +21,7 @@ export PATH="$CARGO_HOME/bin:$PATH"
+ 
+ # Install LLVM
+ mkdir -p "$FUZZER/repo/llvm_install"
+-LINUX_VER="ubuntu-18.04" LLVM_VER="7.0.1" PREFIX="$FUZZER/repo/llvm_install" ./build/install_llvm.sh
++LINUX_VER="ubuntu-16.04" LLVM_VER="12.0.1" PREFIX="$FUZZER/repo/llvm_install" ./build/install_llvm.sh
+ 
+ # Build Angora
+ export PATH="$FUZZER/repo/llvm_install/clang+llvm/bin:$PATH"
+diff --git a/fuzzers/angora/fetch.sh b/fuzzers/angora/fetch.sh
+index e30d1af8..9e745196 100755
+--- a/fuzzers/angora/fetch.sh
++++ b/fuzzers/angora/fetch.sh
+@@ -1,5 +1,5 @@
+ #!/bin/bash
+-set -e
++set -ex
+ 
+ ##
+ # Pre-requirements:
+@@ -7,6 +7,19 @@ set -e
+ ##
+ 
+ git clone --no-checkout https://github.com/AngoraFuzzer/Angora "$FUZZER/repo"
+-git -C "$FUZZER/repo" checkout 3cedcac8e65595cd2cdd950b60f654c93cf8cc2e
++git -C "$FUZZER/repo" checkout 80e81c8590077bc0ac069dbd367da8ce405ff618
+ 
++patch -p1 -d "$FUZZER/repo" << 'EOF'
++--- a/build/install_llvm.sh
+++++ b/build/install_llvm.sh
++@@ -11,7 +11,7 @@ TAR_NAME=clang+llvm-${LLVM_VER}-x86_64-linux-gnu-${LINUX_VER}
++ wget -q ${LLVM_DEP_URL}/download/llvmorg-${LLVM_VER}/${TAR_NAME}.tar.xz
++ tar -C ${PREFIX} -xf ${TAR_NAME}.tar.xz
++ rm ${TAR_NAME}.tar.xz
++-mv ${PREFIX}/${TAR_NAME} ${PREFIX}/clang+llvm
+++mv ${PREFIX}/clang+llvm-${LLVM_VER}-x86_64-linux-gnu-* ${PREFIX}/clang+llvm
++
++ set +x
++ echo "Please set:"
++EOF
+ cp "$FUZZER/src/angora_driver.c" "$FUZZER/repo/angora_driver.c"
+diff --git a/fuzzers/angora/preinstall.sh b/fuzzers/angora/preinstall.sh
+index 844b5fc3..dcf6ed18 100755
+--- a/fuzzers/angora/preinstall.sh
++++ b/fuzzers/angora/preinstall.sh
+@@ -3,7 +3,9 @@ set -e
+ 
+ apt-get update && \
+     apt-get install -y make build-essential git golang-go \
+-    python-pip python-dev wget zlib1g-dev
++    python3-pip python3-dev wget zlib1g-dev
++
++update-alternatives --install /usr/bin/python python /usr/bin/python3 1
+ 
+ # Installl CMake from Kitware apt repository
+ wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | \
+diff --git a/fuzzers/angora/run.sh b/fuzzers/angora/run.sh
+index dc839b77..c4a0aba6 100755
+--- a/fuzzers/angora/run.sh
++++ b/fuzzers/angora/run.sh
+@@ -15,5 +15,5 @@
+ export PATH="$FUZZER/repo/llvm_install/clang+llvm/bin:$PATH"
+ export ANGORA_DISABLE_CPU_BINDING=1
+ 
+-"$FUZZER/repo/angora_fuzzer" -M 100 -i "$TARGET/corpus/$PROGRAM" -o "$SHARED/findings" \
++"$FUZZER/repo/angora_fuzzer" -M 0 -i "$TARGET/corpus/$PROGRAM" -o "$SHARED/findings" \
+     -t "$OUT/angora-track/$PROGRAM" $FUZZARGS -- "$OUT/angora-fast/$PROGRAM" $ARGS 2>&1
+diff --git a/fuzzers/ddfuzz/preinstall.sh b/fuzzers/ddfuzz/preinstall.sh
+index e15163fe..8c7ff328 100755
+--- a/fuzzers/ddfuzz/preinstall.sh
++++ b/fuzzers/ddfuzz/preinstall.sh
+@@ -2,34 +2,34 @@
+ set -e
+ 
+ apt-get update && \
+-    apt-get install -y make clang-9 llvm-9-dev libc++-9-dev libc++abi-9-dev \
++    apt-get install -y make clang-12 llvm-12-dev libc++-12-dev libc++abi-12-dev \
+         build-essential git wget gcc-7-plugin-dev
+ 
+ update-alternatives \
+-  --install /usr/lib/llvm              llvm             /usr/lib/llvm-9  20 \
+-  --slave   /usr/bin/llvm-config       llvm-config      /usr/bin/llvm-config-9  \
+-    --slave   /usr/bin/llvm-ar           llvm-ar          /usr/bin/llvm-ar-9 \
+-    --slave   /usr/bin/llvm-as           llvm-as          /usr/bin/llvm-as-9 \
+-    --slave   /usr/bin/llvm-bcanalyzer   llvm-bcanalyzer  /usr/bin/llvm-bcanalyzer-9 \
+-    --slave   /usr/bin/llvm-c-test       llvm-c-test      /usr/bin/llvm-c-test-9 \
+-    --slave   /usr/bin/llvm-cov          llvm-cov         /usr/bin/llvm-cov-9 \
+-    --slave   /usr/bin/llvm-diff         llvm-diff        /usr/bin/llvm-diff-9 \
+-    --slave   /usr/bin/llvm-dis          llvm-dis         /usr/bin/llvm-dis-9 \
+-    --slave   /usr/bin/llvm-dwarfdump    llvm-dwarfdump   /usr/bin/llvm-dwarfdump-9 \
+-    --slave   /usr/bin/llvm-extract      llvm-extract     /usr/bin/llvm-extract-9 \
+-    --slave   /usr/bin/llvm-link         llvm-link        /usr/bin/llvm-link-9 \
+-    --slave   /usr/bin/llvm-mc           llvm-mc          /usr/bin/llvm-mc-9 \
+-    --slave   /usr/bin/llvm-nm           llvm-nm          /usr/bin/llvm-nm-9 \
+-    --slave   /usr/bin/llvm-objdump      llvm-objdump     /usr/bin/llvm-objdump-9 \
+-    --slave   /usr/bin/llvm-ranlib       llvm-ranlib      /usr/bin/llvm-ranlib-9 \
+-    --slave   /usr/bin/llvm-readobj      llvm-readobj     /usr/bin/llvm-readobj-9 \
+-    --slave   /usr/bin/llvm-rtdyld       llvm-rtdyld      /usr/bin/llvm-rtdyld-9 \
+-    --slave   /usr/bin/llvm-size         llvm-size        /usr/bin/llvm-size-9 \
+-    --slave   /usr/bin/llvm-stress       llvm-stress      /usr/bin/llvm-stress-9 \
+-    --slave   /usr/bin/llvm-symbolizer   llvm-symbolizer  /usr/bin/llvm-symbolizer-9 \
+-    --slave   /usr/bin/llvm-tblgen       llvm-tblgen      /usr/bin/llvm-tblgen-9
++  --install /usr/lib/llvm              llvm             /usr/lib/llvm-12  20 \
++  --slave   /usr/bin/llvm-config       llvm-config      /usr/bin/llvm-config-12  \
++    --slave   /usr/bin/llvm-ar           llvm-ar          /usr/bin/llvm-ar-12 \
++    --slave   /usr/bin/llvm-as           llvm-as          /usr/bin/llvm-as-12 \
++    --slave   /usr/bin/llvm-bcanalyzer   llvm-bcanalyzer  /usr/bin/llvm-bcanalyzer-12 \
++    --slave   /usr/bin/llvm-c-test       llvm-c-test      /usr/bin/llvm-c-test-12 \
++    --slave   /usr/bin/llvm-cov          llvm-cov         /usr/bin/llvm-cov-12 \
++    --slave   /usr/bin/llvm-diff         llvm-diff        /usr/bin/llvm-diff-12 \
++    --slave   /usr/bin/llvm-dis          llvm-dis         /usr/bin/llvm-dis-12 \
++    --slave   /usr/bin/llvm-dwarfdump    llvm-dwarfdump   /usr/bin/llvm-dwarfdump-12 \
++    --slave   /usr/bin/llvm-extract      llvm-extract     /usr/bin/llvm-extract-12 \
++    --slave   /usr/bin/llvm-link         llvm-link        /usr/bin/llvm-link-12 \
++    --slave   /usr/bin/llvm-mc           llvm-mc          /usr/bin/llvm-mc-12 \
++    --slave   /usr/bin/llvm-nm           llvm-nm          /usr/bin/llvm-nm-12 \
++    --slave   /usr/bin/llvm-objdump      llvm-objdump     /usr/bin/llvm-objdump-12 \
++    --slave   /usr/bin/llvm-ranlib       llvm-ranlib      /usr/bin/llvm-ranlib-12 \
++    --slave   /usr/bin/llvm-readobj      llvm-readobj     /usr/bin/llvm-readobj-12 \
++    --slave   /usr/bin/llvm-rtdyld       llvm-rtdyld      /usr/bin/llvm-rtdyld-12 \
++    --slave   /usr/bin/llvm-size         llvm-size        /usr/bin/llvm-size-12 \
++    --slave   /usr/bin/llvm-stress       llvm-stress      /usr/bin/llvm-stress-12 \
++    --slave   /usr/bin/llvm-symbolizer   llvm-symbolizer  /usr/bin/llvm-symbolizer-12 \
++    --slave   /usr/bin/llvm-tblgen       llvm-tblgen      /usr/bin/llvm-tblgen-12
+ 
+ update-alternatives \
+-  --install /usr/bin/clang                 clang                  /usr/bin/clang-9     20 \
+-  --slave   /usr/bin/clang++               clang++                /usr/bin/clang++-9 \
+-  --slave   /usr/bin/clang-cpp             clang-cpp              /usr/bin/clang-cpp-9
++  --install /usr/bin/clang                 clang                  /usr/bin/clang-12     20 \
++  --slave   /usr/bin/clang++               clang++                /usr/bin/clang++-12 \
++  --slave   /usr/bin/clang-cpp             clang-cpp              /usr/bin/clang-cpp-12
+diff --git a/fuzzers/ddfuzz/run.sh b/fuzzers/ddfuzz/run.sh
+index 8a369e3a..27b70526 100755
+--- a/fuzzers/ddfuzz/run.sh
++++ b/fuzzers/ddfuzz/run.sh
+@@ -17,14 +17,11 @@ fi
+ 
+ mkdir -p "$SHARED/findings"
+ 
+-flag_cmplog=(-m none -c "$OUT/cmplog/$PROGRAM")
+-
+ export AFL_SKIP_CPUFREQ=1
+ export AFL_NO_AFFINITY=1
+ export AFL_NO_UI=1
+-export AFL_MAP_SIZE=256000
+-export AFL_DRIVER_DONT_DEFER=1
++export AFL_NO_FORKSRV=1
+ 
+ "$FUZZER/repo/afl-fuzz" -i "$TARGET/corpus/$PROGRAM" -o "$SHARED/findings" \
+-    "${flag_cmplog[@]}" -d \
++    -t 1000+ -m none \
+     $FUZZARGS -- "$OUT/afl/$PROGRAM" $ARGS 2>&1
+diff --git a/magma/run.sh b/magma/run.sh
+index d6fcdd53..818eae72 100755
+--- a/magma/run.sh
++++ b/magma/run.sh
+@@ -25,15 +25,17 @@ mkdir -p "$MONITOR"
+ cd "$SHARED"
+ 
+ # prune the seed corpus for any fault-triggering test-cases
+-for seed in "$TARGET/corpus/$PROGRAM"/*; do
+-    out="$("$MAGMA"/runonce.sh "$seed")"
+-    code=$?
++if [ ! -z $NO_PRUNE ]; then
++    for seed in "$TARGET/corpus/$PROGRAM"/*; do
++        out="$("$MAGMA"/runonce.sh "$seed")"
++        code=$?
+ 
+-    if [ $code -ne 0 ]; then
+-        echo "$seed: $out"
+-        rm "$seed"
+-    fi
+-done
++        if [ $code -ne 0 ]; then
++            echo "$seed: $out"
++            rm "$seed"
++        fi
++    done
++fi
+ 
+ shopt -s nullglob
+ seeds=("$1"/*)
+diff --git a/targets/poppler/fetch.sh b/targets/poppler/fetch.sh
+index 65966e99..6914407c 100755
+--- a/targets/poppler/fetch.sh
++++ b/targets/poppler/fetch.sh
+@@ -9,6 +9,6 @@ git clone --no-checkout https://gitlab.freedesktop.org/poppler/poppler.git \
+     "$TARGET/repo"
+ git -C "$TARGET/repo" checkout 1d23101ccebe14261c6afc024ea14f29d209e760
+ 
+-git clone --no-checkout git://git.sv.nongnu.org/freetype/freetype2.git \
+-    "$TARGET/freetype2"
++git clone --no-checkout https://gitlab.freedesktop.org/freetype/freetype.git \
++	"$TARGET/freetype2"
+ git -C "$TARGET/freetype2" checkout 50d0033f7ee600c5f5831b28877353769d1f7d48
+\ No newline at end of file
+diff --git a/tools/captain/captainrc b/tools/captain/captainrc
+index 466d2164..daee625f 100644
+--- a/tools/captain/captainrc
++++ b/tools/captain/captainrc
+@@ -10,7 +10,7 @@
+ WORKDIR=./workdir
+ 
+ # REPEAT: number of campaigns to run per program (per fuzzer)
+-REPEAT=3
++REPEAT=5
+ 
+ # [WORKER_MODE]: defines the type of CPU resources to allocate (default: 1)
+ # - 1: logical cores (possibly SMT-enabled)
+@@ -71,7 +71,7 @@ POLL=5
+ ###
+ 
+ # FUZZERS: an array of fuzzer names (from magma/fuzzers/*) to evaluate
+-FUZZERS=(afl aflfast moptafl aflplusplus fairfuzz honggfuzz)
++FUZZERS=(aflplusplus_lto aflplusplus_lto_no_cmplog angora ddfuzz dataflow_array_use dataflow_array_use_offset dataflow_array_use_val dataflow_array_struct_use dataflow_array_struct_use_offset dataflow_array_struct_use_val)
+ 
+ # [fuzzer_TARGETS]: an array of target names (from magma/targets/*) to fuzz with
+ # `fuzzer`. The `fuzzer` prefix is a fuzzer listed in the FUZZERS array
