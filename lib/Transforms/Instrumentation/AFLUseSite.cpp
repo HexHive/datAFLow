@@ -103,7 +103,8 @@ void AFLUseSite::doInstrument(InterestingMemoryOperand *Op) {
   Inst->setMetadata(Mod->getMDKindID(kFuzzallocInstrumentedUseSiteMD),
                     MDNode::get(*Ctx, None));
 
-  IRBuilder<> IRB(Inst);
+  assert(Inst->getNextNode());
+  IRBuilder<> IRB(Inst->getNextNode());
 
   // Compute the AFL coverage bitmap index based on the def-use chain and update
   // the AFL coverage bitmap (done inside the hash function)

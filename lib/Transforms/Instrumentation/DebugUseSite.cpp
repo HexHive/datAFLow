@@ -68,7 +68,8 @@ void DebugUseSite::doInstrument(InterestingMemoryOperand *Op) {
   Inst->setMetadata(Mod->getMDKindID(kFuzzallocInstrumentedUseSiteMD),
                     MDNode::get(*Ctx, None));
 
-  IRBuilder<> IRB(Inst);
+  assert(Inst->getNextNode());
+  IRBuilder<> IRB(Inst->getNextNode());
 
   auto *PtrCast = IRB.CreatePointerCast(Ptr, Int8PtrTy);
   auto *PtrElemTy = Ptr->getType()->getPointerElementType();
