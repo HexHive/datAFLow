@@ -29,7 +29,8 @@ instructions.
 
 We instrument with different datAFLow configurations:
 
-*
+* "datAFLow (A/A)"
+
 ```
 FUZZALLOC_DEF_SENSITIVITY=array
 FUZZALLOC_USE_SENSITIVITY=read:write
@@ -37,7 +38,8 @@ FUZZALLOC_USE_CAPTURE=use
 FUZZALLOC_USE_INST=afl
 ```
 
-*
+* "datAFLow (A/O)"
+
 ```
 FUZZALLOC_DEF_SENSITIVITY=array
 FUZZALLOC_USE_SENSITIVITY=read:write
@@ -45,7 +47,8 @@ FUZZALLOC_USE_CAPTURE=offset
 FUZZALLOC_USE_INST=afl
 ```
 
-*
+* "datAFLow (A/V)"
+
 ```
 FUZZALLOC_DEF_SENSITIVITY=array
 FUZZALLOC_USE_SENSITIVITY=read:write
@@ -53,7 +56,8 @@ FUZZALLOC_USE_CAPTURE=value
 FUZZALLOC_USE_INST=afl
 ```
 
-*
+* "datAFLow (A+S/A)"
+
 ```
 FUZZALLOC_DEF_SENSITIVITY=array:struct
 FUZZALLOC_USE_SENSITIVITY=read:write
@@ -61,7 +65,8 @@ FUZZALLOC_USE_CAPTURE=use
 FUZZALLOC_USE_INST=afl
 ```
 
-*
+* "datAFLow (A+S/O)"
+
 ```
 FUZZALLOC_DEF_SENSITIVITY=array:struct
 FUZZALLOC_USE_SENSITIVITY=read:write
@@ -69,7 +74,8 @@ FUZZALLOC_USE_CAPTURE=offset
 FUZZALLOC_USE_INST=afl
 ```
 
-*
+* "datAFLow (A+S/V)"
+
 ```
 FUZZALLOC_DEF_SENSITIVITY=array:struct
 FUZZALLOC_USE_SENSITIVITY=read:write
