@@ -1,4 +1,4 @@
-# DDFuzz
+# DDFuzz Targets
 
 [DDFuzz](https://doi.org/10.1109/EuroSP53844.2022.00026) evaluated against the
 following five targets the authors thought would be amenable to data-flow-based
@@ -20,10 +20,13 @@ instrumentation.
 
 When fuzzing we disable the auto-dictionary with `AFL_NO_AUTODICT=1`.
 
+## Angora
+
+We use Angora per their [instructions](https://github.com/AngoraFuzzer/Angora).
+
 ## DDFuzz
 
-We instrument the targets per [DDFuzz's](https://github.com/elManto/DDFuzz)
-instructions.
+We use DDFuzz per their [instructions](https://github.com/elManto/DDFuzz).
 
 ## datAFLow
 
