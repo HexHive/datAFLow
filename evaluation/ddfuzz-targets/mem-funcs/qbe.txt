@@ -1,0 +1,4 @@
+[fuzzalloc]
+fun:emalloc
+fun:alloc
+fun:vnew

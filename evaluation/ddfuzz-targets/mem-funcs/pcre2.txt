@@ -1,0 +1,3 @@
+[fuzzalloc]
+fun:default_malloc
+fun:memctl_malloc
