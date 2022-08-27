@@ -122,15 +122,8 @@ number of tagged variables, number of instrumented use sites, etc.
 coverage](https://clang.llvm.org/docs/SourceBasedCodeCoverage.html) from an
 instrumented binary.
 
-# Magma
+# Evaluation Reproduction
 
-[Magma](https://hexhive.epfl.ch/magma/) can be patched to support datAFLow as
-follows:
-
-```bash
-git clone https://github.com/hexhive/magma
-cd magma
-git apply patches/magma.patch
-```
-
-Magma can then be run as usual.
+See [README.magma.md](evaluation/README.magma.md) and
+[README.ddfuzz.md](evaluation/README.ddfuzz.md) for reproducing the Magma and
+DDFuzz experiments, respectively.
