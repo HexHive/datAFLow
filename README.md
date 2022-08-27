@@ -62,7 +62,7 @@ cmake $FUZZALLOC_SRC \
 make -j
 ```
 
-### Instrumenting a Target
+## Instrumenting a Target
 
 The `dataflow-cc` (and `dataflow-cc++`) tools can be used as dropin replacements
 for `clang` (and `clang++`).  These wrappers provide a number of environment
@@ -99,6 +99,28 @@ fun:malloc_wrapper
 fun:calloc_wrapper
 fun:realloc_wrapper
 ```
+
+## Tools
+
+In addition to `dataflow-cc` and `dataflow-c++`, we provide the following tools:
+
+### `dataflow-sa`
+
+Uses [SVF](https://github.com/SVF-tools/SVF/) to statically derive an upper
+bounds on the number of def-use chains in a BC file. This tool generates JSON
+output tying these def-use chains to source-level variables (recovered through
+debug info).
+
+### `dataflow-stats`
+
+Collect `fuzzalloc` stats from an instrumented bitcode file. Stats include:
+number of tagged variables, number of instrumented use sites, etc.
+
+### `region-cov`
+
+`region-cov` statically extracts Clang's [source-based code
+coverage](https://clang.llvm.org/docs/SourceBasedCodeCoverage.html) from an
+instrumented binary.
 
 # Magma
 
