@@ -103,9 +103,11 @@ void MemFuncIdentify::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 bool MemFuncIdentify::runOnModule(Module &M) {
-  status_stream() << "[" << M.getName()
-                  << "] Using custom memory functions from " << ClMemFuncs
-                  << '\n';
+  if (ClMemFuncs) {
+    status_stream() << "[" << M.getName()
+                    << "] Using custom memory functions from " << ClMemFuncs
+                    << '\n';
+  }
   const auto &CustomMemFuncs = getMemFuncList();
 
   for (auto &F : M) {
