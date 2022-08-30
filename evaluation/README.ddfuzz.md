@@ -88,4 +88,5 @@ FUZZALLOC_USE_INST=afl
 
 We also use the custom memory allocation functions defined in
 `ddfuzz/mem-funcs`, specified using the `FUZZALLOC_DEF_MEM_FUNCS` environment
-variable.
+variable. Finally, initial starting seeds are provided under the `seeds`
+directory.

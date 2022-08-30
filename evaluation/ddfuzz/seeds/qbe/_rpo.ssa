@@ -1,0 +1,12 @@
+function $test() {
+@start
+	jmp @foo
+@baz
+	jnz 1, @end, @foo
+@bar
+	jmp @end
+@foo
+	jnz 0, @bar, @baz
+@end
+	ret
+}
