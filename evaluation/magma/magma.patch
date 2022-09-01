@@ -96,6 +96,9 @@ index e3dd49ab..7ff3dd6b 100644
 +COPY --chown=magma:magma ${magma_root}/${target_path}/corpus ${TARGET}/corpus
 +
  ENTRYPOINT "${MAGMA}/run.sh"
+diff --git a/fuzzers/aflplusplus/src/.gitkeep b/fuzzers/aflplusplus/src/.gitkeep
+new file mode 100644
+index 00000000..e69de29b
 diff --git a/fuzzers/aflplusplus_lto/fetch.sh b/fuzzers/aflplusplus_lto/fetch.sh
 index 4caa9d48..45cdb2bf 100755
 --- a/fuzzers/aflplusplus_lto/fetch.sh
@@ -278,6 +281,297 @@ index 8a369e3a..d7b72eec 100755
 -    "${flag_cmplog[@]}" -d \
 +    -t 1000+ "${flag_cmplog[@]}" -d \
      $FUZZARGS -- "$OUT/afl/$PROGRAM" $ARGS 2>&1
+diff --git a/fuzzers/aflplusplus_lto/src/.gitkeep b/fuzzers/aflplusplus_lto/src/.gitkeep
+new file mode 100644
+index 00000000..e69de29b
+diff --git a/fuzzers/aflplusplus_lto_asan/src/.gitkeep b/fuzzers/aflplusplus_lto_asan/src/.gitkeep
+new file mode 100644
+index 00000000..e69de29b
+diff --git a/fuzzers/aflplusplus_lto_no_cmplog/build.sh b/fuzzers/aflplusplus_lto_no_cmplog/build.sh
+new file mode 100755
+index 00000000..eb06d1a0
+--- /dev/null
++++ b/fuzzers/aflplusplus_lto_no_cmplog/build.sh
+@@ -0,0 +1,22 @@
++#!/bin/bash
++set -e
++
++##
++# Pre-requirements:
++# - env FUZZER: path to fuzzer work dir
++##
++
++if [ ! -d "$FUZZER/repo" ]; then
++    echo "fetch.sh must be executed first."
++    exit 1
++fi
++
++cd "$FUZZER/repo"
++export CC=clang
++export CXX=clang++
++export AFL_NO_X86=1
++export PYTHON_INCLUDE=/
++make -j$(nproc) || exit 1
++make -C utils/aflpp_driver || exit 1
++
++mkdir -p "$OUT/afl"
+diff --git a/fuzzers/aflplusplus_lto_no_cmplog/fetch.sh b/fuzzers/aflplusplus_lto_no_cmplog/fetch.sh
+new file mode 100755
+index 00000000..27648d67
+--- /dev/null
++++ b/fuzzers/aflplusplus_lto_no_cmplog/fetch.sh
+@@ -0,0 +1,65 @@
++#!/bin/bash
++set -e
++
++##
++# Pre-requirements:
++# - env FUZZER: path to fuzzer work dir
++##
++
++git clone --no-checkout https://github.com/AFLplusplus/AFLplusplus "$FUZZER/repo"
++git -C "$FUZZER/repo" checkout 458eb0813a6f7d63eed97f18696bca8274533123
++
++# Fix: CMake-based build systems fail with duplicate (of main) or undefined references (of LLVMFuzzerTestOneInput)
++
++patch -p1 -d "$FUZZER/repo" << EOF
++--- a/utils/aflpp_driver/aflpp_driver.c
+++++ b/utils/aflpp_driver/aflpp_driver.c
++@@ -54,16 +54,17 @@ $AFL_HOME/afl-fuzz -i IN -o OUT ./a.out
++   #include "hash.h"
++ #endif
++
++-int                   __afl_sharedmem_fuzzing = 1;
+++int                   __afl_sharedmem_fuzzing = 0;
++ extern unsigned int * __afl_fuzz_len;
++ extern unsigned char *__afl_fuzz_ptr;
++
++ // libFuzzer interface is thin, so we don't include any libFuzzer headers.
++-int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size);
+++__attribute__((weak)) int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size);
++ __attribute__((weak)) int LLVMFuzzerInitialize(int *argc, char ***argv);
++
++ // Notify AFL about persistent mode.
++-static volatile char AFL_PERSISTENT[] = "##SIG_AFL_PERSISTENT##";
+++// DISABLED to avoid afl-showmap misbehavior
+++static volatile char AFL_PERSISTENT[] = "##SIG_AFL_NOT_PERSISTENT##";
++ int                  __afl_persistent_loop(unsigned int);
++
++ // Notify AFL about deferred forkserver.
++@@ -202,7 +203,7 @@ static int ExecuteFilesOnyByOne(int argc, char **argv) {
++
++ }
++
++-int main(int argc, char **argv) {
+++__attribute__((weak)) int main(int argc, char **argv) {
++
++   if (argc < 2 || strncmp(argv[1], "-h", 2) == 0)
++     printf(
++@@ -276,6 +277,7 @@ int main(int argc, char **argv) {
++
++   }
++
+++  N = 1;
++   assert(N > 0);
++
++   __afl_manual_init();
++@@ -310,3 +312,9 @@ int main(int argc, char **argv) {
++
++ }
++
+++__attribute__((weak))
+++int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
+++{
+++  // assert(0 && "LLVMFuzzerTestOneInput should not be implemented in afl_driver");
+++  return 0;
+++}
++EOF
+diff --git a/fuzzers/aflplusplus_lto_no_cmplog/findings.sh b/fuzzers/aflplusplus_lto_no_cmplog/findings.sh
+new file mode 100755
+index 00000000..afc482c5
+--- /dev/null
++++ b/fuzzers/aflplusplus_lto_no_cmplog/findings.sh
+@@ -0,0 +1,14 @@
++#!/bin/bash
++
++##
++# Pre-requirements:
++# - env SHARED: path to directory shared with host (to store results)
++##
++
++CRASH_DIR="$SHARED/findings/crashes"
++
++if [ ! -d "$CRASH_DIR" ]; then
++    exit 1
++fi
++
++find "$CRASH_DIR" -type f -name 'id:*'
+diff --git a/fuzzers/aflplusplus_lto_no_cmplog/instrument.sh b/fuzzers/aflplusplus_lto_no_cmplog/instrument.sh
+new file mode 100755
+index 00000000..3f3edeae
+--- /dev/null
++++ b/fuzzers/aflplusplus_lto_no_cmplog/instrument.sh
+@@ -0,0 +1,42 @@
++#!/bin/bash
++set -e
++
++##
++# Pre-requirements:
++# - env FUZZER: path to fuzzer work dir
++# - env TARGET: path to target work dir
++# - env MAGMA: path to Magma support files
++# - env OUT: path to directory where artifacts are stored
++# - env CFLAGS and CXXFLAGS must be set to link against Magma instrumentation
++##
++
++export CC="$FUZZER/repo/afl-clang-lto"
++export CXX="$FUZZER/repo/afl-clang-lto++"
++LLVM_PATH=/usr/lib/llvm-12/bin
++export AS="${LLVM_PATH}/llvm-as"
++export RANLIB="${LLVM_PATH}/llvm-ranlib"
++export AR="${LLVM_PATH}/llvm-ar"
++export LD="${LLVM_PATH}/ld.lld"
++export NM="${LLVM_PATH}/llvm-nm"
++
++export LIBS="$LIBS -lstdc++ $FUZZER/repo/utils/aflpp_driver/libAFLDriver.a"
++
++# Some targets do not support a static AFL memory region
++DYNAMIC_TARGETS=(php openssl)
++TARGET_NAME="$(basename $TARGET)"
++if [[ " ${DYNAMIC_TARGETS[@]} " =~ " $TARGET_NAME " ]]; then
++    export AFL_LLVM_MAP_DYNAMIC=1
++fi
++
++# Build the AFL-only instrumented version
++(
++    export OUT="$OUT/afl"
++    export LDFLAGS="$LDFLAGS -L$OUT"
++
++    "$MAGMA/build.sh"
++    "$TARGET/build.sh"
++)
++
++# NOTE: We pass $OUT directly to the target build.sh script, since the artifact
++#       itself is the fuzz target. In the case of Angora, we might need to
++#       replace $OUT by $OUT/fast and $OUT/track, for instance.
+diff --git a/fuzzers/aflplusplus_lto_no_cmplog/preinstall.sh b/fuzzers/aflplusplus_lto_no_cmplog/preinstall.sh
+new file mode 100755
+index 00000000..ec73fe6f
+--- /dev/null
++++ b/fuzzers/aflplusplus_lto_no_cmplog/preinstall.sh
+@@ -0,0 +1,43 @@
++#!/bin/bash
++set -e
++
++apt-get update && \
++    apt-get install -y make build-essential git wget libexpat1-dev
++
++apt-get install -y apt-utils apt-transport-https ca-certificates gnupg
++
++apt-get update && \
++    apt-get install -y clang-12 clangd-12 clang-tools-12 libc++1-12 libc++-12-dev \
++      libc++abi1-12 libc++abi-12-dev libclang1-12 libclang-12-dev libclang-common-12-dev \
++      libclang-cpp12 libclang-cpp12-dev liblld-12 liblld-12-dev liblldb-12 \
++      liblldb-12-dev libllvm12 libomp-12-dev libomp5-12 lld-12 lldb-12 \
++      llvm-12 llvm-12-dev llvm-12-runtime llvm-12-tools
++
++update-alternatives \
++  --install /usr/lib/llvm              llvm             /usr/lib/llvm-12  20 \
++  --slave   /usr/bin/llvm-config       llvm-config      /usr/bin/llvm-config-12  \
++    --slave   /usr/bin/llvm-ar           llvm-ar          /usr/bin/llvm-ar-12 \
++    --slave   /usr/bin/llvm-as           llvm-as          /usr/bin/llvm-as-12 \
++    --slave   /usr/bin/llvm-bcanalyzer   llvm-bcanalyzer  /usr/bin/llvm-bcanalyzer-12 \
++    --slave   /usr/bin/llvm-c-test       llvm-c-test      /usr/bin/llvm-c-test-12 \
++    --slave   /usr/bin/llvm-cov          llvm-cov         /usr/bin/llvm-cov-12 \
++    --slave   /usr/bin/llvm-diff         llvm-diff        /usr/bin/llvm-diff-12 \
++    --slave   /usr/bin/llvm-dis          llvm-dis         /usr/bin/llvm-dis-12 \
++    --slave   /usr/bin/llvm-dwarfdump    llvm-dwarfdump   /usr/bin/llvm-dwarfdump-12 \
++    --slave   /usr/bin/llvm-extract      llvm-extract     /usr/bin/llvm-extract-12 \
++    --slave   /usr/bin/llvm-link         llvm-link        /usr/bin/llvm-link-12 \
++    --slave   /usr/bin/llvm-mc           llvm-mc          /usr/bin/llvm-mc-12 \
++    --slave   /usr/bin/llvm-nm           llvm-nm          /usr/bin/llvm-nm-12 \
++    --slave   /usr/bin/llvm-objdump      llvm-objdump     /usr/bin/llvm-objdump-12 \
++    --slave   /usr/bin/llvm-ranlib       llvm-ranlib      /usr/bin/llvm-ranlib-12 \
++    --slave   /usr/bin/llvm-readobj      llvm-readobj     /usr/bin/llvm-readobj-12 \
++    --slave   /usr/bin/llvm-rtdyld       llvm-rtdyld      /usr/bin/llvm-rtdyld-12 \
++    --slave   /usr/bin/llvm-size         llvm-size        /usr/bin/llvm-size-12 \
++    --slave   /usr/bin/llvm-stress       llvm-stress      /usr/bin/llvm-stress-12 \
++    --slave   /usr/bin/llvm-symbolizer   llvm-symbolizer  /usr/bin/llvm-symbolizer-12 \
++    --slave   /usr/bin/llvm-tblgen       llvm-tblgen      /usr/bin/llvm-tblgen-12
++
++update-alternatives \
++  --install /usr/bin/clang                 clang                  /usr/bin/clang-12     20 \
++  --slave   /usr/bin/clang++               clang++                /usr/bin/clang++-12 \
++  --slave   /usr/bin/clang-cpp             clang-cpp              /usr/bin/clang-cpp-12
+diff --git a/fuzzers/aflplusplus_lto_no_cmplog/run.sh b/fuzzers/aflplusplus_lto_no_cmplog/run.sh
+new file mode 100755
+index 00000000..b0bfd677
+--- /dev/null
++++ b/fuzzers/aflplusplus_lto_no_cmplog/run.sh
+@@ -0,0 +1,26 @@
++#!/bin/bash
++
++##
++# Pre-requirements:
++# - env FUZZER: path to fuzzer work dir
++# - env TARGET: path to target work dir
++# - env OUT: path to directory where artifacts are stored
++# - env SHARED: path to directory shared with host (to store results)
++# - env PROGRAM: name of program to run (should be found in $OUT)
++# - env ARGS: extra arguments to pass to the program
++# - env FUZZARGS: extra arguments to pass to the fuzzer
++##
++
++if nm "$OUT/afl/$PROGRAM" | grep -E '^[0-9a-f]+\s+[Ww]\s+main$'; then
++    ARGS="-"
++fi
++
++mkdir -p "$SHARED/findings"
++
++export AFL_SKIP_CPUFREQ=1
++export AFL_NO_AFFINITY=1
++export AFL_NO_UI=1
++export AFL_NO_FORKSRV=1
++
++"$FUZZER/repo/afl-fuzz" -i "$TARGET/corpus/$PROGRAM" -o "$SHARED/findings" \
++    -m none -t 1000+ -d $FUZZARGS -- "$OUT/afl/$PROGRAM" $ARGS 2>&1
+diff --git a/fuzzers/aflplusplus_lto_no_cmplog/runonce.sh b/fuzzers/aflplusplus_lto_no_cmplog/runonce.sh
+new file mode 100755
+index 00000000..a9ebb068
+--- /dev/null
++++ b/fuzzers/aflplusplus_lto_no_cmplog/runonce.sh
+@@ -0,0 +1,28 @@
++#!/bin/bash -e
++
++##
++# Pre-requirements:
++# - $1: path to test case
++# - env FUZZER: path to fuzzer work dir
++# - env TARGET: path to target work dir
++# - env OUT: path to directory where artifacts are stored
++# - env PROGRAM: name of program to run (should be found in $OUT)
++# - env ARGS: extra arguments to pass to the program
++##
++
++export TIMELIMIT=0.1s
++
++run_limited()
++{
++    ${@:1}
++    test $? -lt 128
++}
++export -f run_limited
++
++args="${ARGS/@@/"$1"}"
++if [ -z "$args" ]; then
++    args="$1"
++fi
++
++timeout -s KILL --preserve-status $TIMELIMIT bash -c \
++    "run_limited '$OUT/afl/$PROGRAM' $args"
+diff --git a/fuzzers/aflplusplus_lto_no_cmplog/src/.gitkeep b/fuzzers/aflplusplus_lto_no_cmplog/src/.gitkeep
+new file mode 100644
+index 00000000..e69de29b
 diff --git a/fuzzers/angora/build.sh b/fuzzers/angora/build.sh
 index 8d810c26..79c0edb2 100755
 --- a/fuzzers/angora/build.sh
@@ -349,6 +643,3636 @@ index dc839b77..c4a0aba6 100755
 -"$FUZZER/repo/angora_fuzzer" -M 100 -i "$TARGET/corpus/$PROGRAM" -o "$SHARED/findings" \
 +"$FUZZER/repo/angora_fuzzer" -M 0 -i "$TARGET/corpus/$PROGRAM" -o "$SHARED/findings" \
      -t "$OUT/angora-track/$PROGRAM" $FUZZARGS -- "$OUT/angora-fast/$PROGRAM" $ARGS 2>&1
+diff --git a/fuzzers/dataflow_array_struct_use/build.sh b/fuzzers/dataflow_array_struct_use/build.sh
+new file mode 100755
+index 00000000..15852a3a
+--- /dev/null
++++ b/fuzzers/dataflow_array_struct_use/build.sh
+@@ -0,0 +1,39 @@
++#!/bin/bash
++set -e
++
++##
++# Pre-requirements:
++# - env FUZZER: path to fuzzer work dir
++##
++
++if [ ! -d "$FUZZER/repo" ] ; then
++    echo "fetch.sh must be executed first."
++    exit 1
++fi
++
++mkdir -p "$FUZZER/repo/build"
++cd "$FUZZER/repo/build"
++
++export CC="clang"
++export CXX="clang++"
++export AFL_NO_X86=1
++export PYTHON_INCLUDE=/
++
++##
++## Build datAFLow
++##
++
++cmake "$FUZZER/repo/" \
++    -DLLVM_DIR="$(llvm-config --cmakedir)" \
++    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$FUZZER/dataflow"
++make -j$(nproc) install
++
++##
++## Build AFL++
++##
++
++cd "$FUZZER/repo/ext/aflplusplus"
++make -j$(nproc) || exit 1
++make -C utils/aflpp_driver || exit 1
++
++mkdir -p "$OUT/afl"
+diff --git a/fuzzers/dataflow_array_struct_use/fetch.sh b/fuzzers/dataflow_array_struct_use/fetch.sh
+new file mode 100755
+index 00000000..56b3080a
+--- /dev/null
++++ b/fuzzers/dataflow_array_struct_use/fetch.sh
+@@ -0,0 +1,70 @@
++#!/bin/bash
++set -e
++
++##
++# Pre-requirements:
++# - env FUZZER: path to fuzzer work dir
++##
++
++##
++## Get datAFLow
++##
++
++git clone --no-checkout https://github.com/HexHive/datAFLow "$FUZZER/repo"
++git -C "$FUZZER/repo" checkout baggybounds
++git -C "$FUZZER/repo" submodule update --init
++git -C "$FUZZER/repo/ext/aflplusplus" checkout 458eb0813a6f7d63eed97f18696bca8274533123
++
++# Fix: CMake-based build systems fail with duplicate (of main) or undefined references (of LLVMFuzzerTestOneInput)
++patch -p1 -d "$FUZZER/repo/ext/aflplusplus" << EOF
++--- a/utils/aflpp_driver/aflpp_driver.c
+++++ b/utils/aflpp_driver/aflpp_driver.c
++@@ -54,16 +54,17 @@ $AFL_HOME/afl-fuzz -i IN -o OUT ./a.out
++   #include "hash.h"
++ #endif
++
++-int                   __afl_sharedmem_fuzzing = 1;
+++int                   __afl_sharedmem_fuzzing = 0;
++ extern unsigned int * __afl_fuzz_len;
++ extern unsigned char *__afl_fuzz_ptr;
++
++ // libFuzzer interface is thin, so we don't include any libFuzzer headers.
++-int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size);
+++__attribute__((weak)) int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size);
++ __attribute__((weak)) int LLVMFuzzerInitialize(int *argc, char ***argv);
++
++ // Notify AFL about persistent mode.
++-static volatile char AFL_PERSISTENT[] = "##SIG_AFL_PERSISTENT##";
+++// DISABLED to avoid afl-showmap misbehavior
+++static volatile char AFL_PERSISTENT[] = "##SIG_AFL_NOT_PERSISTENT##";
++ int                  __afl_persistent_loop(unsigned int);
++
++ // Notify AFL about deferred forkserver.
++@@ -202,7 +203,7 @@ static int ExecuteFilesOnyByOne(int argc, char **argv) {
++
++ }
++
++-int main(int argc, char **argv) {
+++__attribute__((weak)) int main(int argc, char **argv) {
++
++   if (argc < 2 || strncmp(argv[1], "-h", 2) == 0)
++     printf(
++@@ -276,6 +277,7 @@ int main(int argc, char **argv) {
++
++   }
++
+++  N = 1;
++   assert(N > 0);
++
++   __afl_manual_init();
++@@ -310,3 +312,9 @@ int main(int argc, char **argv) {
++
++ }
++
+++__attribute__((weak))
+++int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
+++{
+++  // assert(0 && "LLVMFuzzerTestOneInput should not be implemented in afl_driver");
+++  return 0;
+++}
++EOF
+diff --git a/fuzzers/dataflow_array_struct_use/findings.sh b/fuzzers/dataflow_array_struct_use/findings.sh
+new file mode 100755
+index 00000000..afc482c5
+--- /dev/null
++++ b/fuzzers/dataflow_array_struct_use/findings.sh
+@@ -0,0 +1,14 @@
++#!/bin/bash
++
++##
++# Pre-requirements:
++# - env SHARED: path to directory shared with host (to store results)
++##
++
++CRASH_DIR="$SHARED/findings/crashes"
++
++if [ ! -d "$CRASH_DIR" ]; then
++    exit 1
++fi
++
++find "$CRASH_DIR" -type f -name 'id:*'
+diff --git a/fuzzers/dataflow_array_struct_use/instrument.sh b/fuzzers/dataflow_array_struct_use/instrument.sh
+new file mode 100755
+index 00000000..5ee9ab95
+--- /dev/null
++++ b/fuzzers/dataflow_array_struct_use/instrument.sh
+@@ -0,0 +1,42 @@
++#!/bin/bash
++set -e
++
++##
++# Pre-requirements:
++# - env FUZZER: path to fuzzer work dir
++# - env TARGET: path to target work dir
++# - env MAGMA: path to Magma support files
++# - env OUT: path to directory where artifacts are stored
++# - env CFLAGS and CXXFLAGS must be set to link against Magma instrumentation
++##
++
++LLVM_PATH=/usr/lib/llvm-12/bin
++if [ -f "$TARGET/src/dataflow-mem-funcs.txt" ]; then
++    export FUZZALLOC_DEF_MEM_FUNCS="$TARGET/src/dataflow-mem-funcs.txt"
++fi
++
++export FUZZALLOC_DEF_SENSITIVITY="array:struct"
++export FUZZALLOC_USE_SENSITIVITY="read:write"
++export FUZZALLOC_USE_CAPTURE="use"
++export FUZZALLOC_USE_INST="afl"
++
++export CC="$FUZZER/dataflow/bin/dataflow-cc"
++export CXX="$FUZZER/dataflow/bin/dataflow-c++"
++export AS="${LLVM_PATH}/llvm-as"
++export RANLIB="${LLVM_PATH}/llvm-ranlib"
++export AR="${LLVM_PATH}/llvm-ar"
++export LD="${LLVM_PATH}/ld.lld"
++export NM="${LLVM_PATH}/llvm-nm"
++
++export LIBS="$LIBS -lc++ -lc++abi $FUZZER/repo/ext/aflplusplus/utils/aflpp_driver/libAFLDriver.a"
++export CXXFLAGS="$CXXFLAGS -stdlib=libc++"
++
++export OUT="$OUT/afl"
++export LDFLAGS="$LDFLAGS -L$OUT"
++
++"$MAGMA/build.sh"
++"$TARGET/build.sh"
++
++# NOTE: We pass $OUT directly to the target build.sh script, since the artifact
++#       itself is the fuzz target. In the case of Angora, we might need to
++#       replace $OUT by $OUT/fast and $OUT/track, for instance.
+diff --git a/fuzzers/dataflow_array_struct_use/preinstall.sh b/fuzzers/dataflow_array_struct_use/preinstall.sh
+new file mode 100755
+index 00000000..e5e28077
+--- /dev/null
++++ b/fuzzers/dataflow_array_struct_use/preinstall.sh
+@@ -0,0 +1,43 @@
++#!/bin/bash
++set -e
++
++apt-get update && \
++    apt-get install -y make build-essential git wget libexpat1-dev
++
++apt-get install -y apt-utils apt-transport-https ca-certificates gnupg
++apt-get install -y clang-12 clangd-12 clang-tools-12 libc++1-12 libc++-12-dev \
++    libc++abi1-12 libc++abi-12-dev libclang1-12 libclang-12-dev libclang-common-12-dev \
++    libclang-cpp12 libclang-cpp12-dev liblld-12 liblld-12-dev liblldb-12 \
++    liblldb-12-dev libllvm12 libomp-12-dev libomp5-12 lld-12 lldb-12 \
++    llvm-12 llvm-12-dev llvm-12-runtime llvm-12-tools
++
++apt-get install -y cmake libz-dev python3
++
++update-alternatives \
++  --install /usr/lib/llvm              llvm             /usr/lib/llvm-12  20 \
++  --slave   /usr/bin/llvm-config       llvm-config      /usr/bin/llvm-config-12  \
++    --slave   /usr/bin/llvm-ar           llvm-ar          /usr/bin/llvm-ar-12 \
++    --slave   /usr/bin/llvm-as           llvm-as          /usr/bin/llvm-as-12 \
++    --slave   /usr/bin/llvm-bcanalyzer   llvm-bcanalyzer  /usr/bin/llvm-bcanalyzer-12 \
++    --slave   /usr/bin/llvm-c-test       llvm-c-test      /usr/bin/llvm-c-test-12 \
++    --slave   /usr/bin/llvm-cov          llvm-cov         /usr/bin/llvm-cov-12 \
++    --slave   /usr/bin/llvm-diff         llvm-diff        /usr/bin/llvm-diff-12 \
++    --slave   /usr/bin/llvm-dis          llvm-dis         /usr/bin/llvm-dis-12 \
++    --slave   /usr/bin/llvm-dwarfdump    llvm-dwarfdump   /usr/bin/llvm-dwarfdump-12 \
++    --slave   /usr/bin/llvm-extract      llvm-extract     /usr/bin/llvm-extract-12 \
++    --slave   /usr/bin/llvm-link         llvm-link        /usr/bin/llvm-link-12 \
++    --slave   /usr/bin/llvm-mc           llvm-mc          /usr/bin/llvm-mc-12 \
++    --slave   /usr/bin/llvm-nm           llvm-nm          /usr/bin/llvm-nm-12 \
++    --slave   /usr/bin/llvm-objdump      llvm-objdump     /usr/bin/llvm-objdump-12 \
++    --slave   /usr/bin/llvm-ranlib       llvm-ranlib      /usr/bin/llvm-ranlib-12 \
++    --slave   /usr/bin/llvm-readobj      llvm-readobj     /usr/bin/llvm-readobj-12 \
++    --slave   /usr/bin/llvm-rtdyld       llvm-rtdyld      /usr/bin/llvm-rtdyld-12 \
++    --slave   /usr/bin/llvm-size         llvm-size        /usr/bin/llvm-size-12 \
++    --slave   /usr/bin/llvm-stress       llvm-stress      /usr/bin/llvm-stress-12 \
++    --slave   /usr/bin/llvm-symbolizer   llvm-symbolizer  /usr/bin/llvm-symbolizer-12 \
++    --slave   /usr/bin/llvm-tblgen       llvm-tblgen      /usr/bin/llvm-tblgen-12
++
++update-alternatives \
++  --install /usr/bin/clang                 clang                  /usr/bin/clang-12     20 \
++  --slave   /usr/bin/clang++               clang++                /usr/bin/clang++-12 \
++  --slave   /usr/bin/clang-cpp             clang-cpp              /usr/bin/clang-cpp-12
+diff --git a/fuzzers/dataflow_array_struct_use/run.sh b/fuzzers/dataflow_array_struct_use/run.sh
+new file mode 100755
+index 00000000..18c8d6f0
+--- /dev/null
++++ b/fuzzers/dataflow_array_struct_use/run.sh
+@@ -0,0 +1,28 @@
++#!/bin/bash
++
++##
++# Pre-requirements:
++# - env FUZZER: path to fuzzer work dir
++# - env TARGET: path to target work dir
++# - env OUT: path to directory where artifacts are stored
++# - env SHARED: path to directory shared with host (to store results)
++# - env PROGRAM: name of program to run (should be found in $OUT)
++# - env ARGS: extra arguments to pass to the program
++# - env FUZZARGS: extra arguments to pass to the fuzzer
++##
++
++if nm "$OUT/afl/$PROGRAM" | grep -E '^[0-9a-f]+\s+[Ww]\s+main$'; then
++    ARGS="-"
++fi
++
++mkdir -p "$SHARED/findings"
++
++export AFL_SKIP_CPUFREQ=1
++export AFL_NO_AFFINITY=1
++export AFL_NO_UI=1
++export AFL_NO_FORKSRV=1
++
++"$FUZZER/repo/ext/aflplusplus/afl-fuzz" \
++    -i "$TARGET/corpus/$PROGRAM" -o "$SHARED/findings" \
++    -m none -t 1000+ -d $FUZZARGS -- \
++    "$OUT/afl/$PROGRAM" $ARGS 2>&1
+diff --git a/fuzzers/dataflow_array_struct_use/runonce.sh b/fuzzers/dataflow_array_struct_use/runonce.sh
+new file mode 100755
+index 00000000..a9ebb068
+--- /dev/null
++++ b/fuzzers/dataflow_array_struct_use/runonce.sh
+@@ -0,0 +1,28 @@
++#!/bin/bash -e
++
++##
++# Pre-requirements:
++# - $1: path to test case
++# - env FUZZER: path to fuzzer work dir
++# - env TARGET: path to target work dir
++# - env OUT: path to directory where artifacts are stored
++# - env PROGRAM: name of program to run (should be found in $OUT)
++# - env ARGS: extra arguments to pass to the program
++##
++
++export TIMELIMIT=0.1s
++
++run_limited()
++{
++    ${@:1}
++    test $? -lt 128
++}
++export -f run_limited
++
++args="${ARGS/@@/"$1"}"
++if [ -z "$args" ]; then
++    args="$1"
++fi
++
++timeout -s KILL --preserve-status $TIMELIMIT bash -c \
++    "run_limited '$OUT/afl/$PROGRAM' $args"
+diff --git a/fuzzers/dataflow_array_struct_use/src/.gitignore b/fuzzers/dataflow_array_struct_use/src/.gitignore
+new file mode 100644
+index 00000000..259148fa
+--- /dev/null
++++ b/fuzzers/dataflow_array_struct_use/src/.gitignore
+@@ -0,0 +1,32 @@
++# Prerequisites
++*.d
++
++# Compiled Object files
++*.slo
++*.lo
++*.o
++*.obj
++
++# Precompiled Headers
++*.gch
++*.pch
++
++# Compiled Dynamic libraries
++*.so
++*.dylib
++*.dll
++
++# Fortran module files
++*.mod
++*.smod
++
++# Compiled Static libraries
++*.lai
++*.la
++*.a
++*.lib
++
++# Executables
++*.exe
++*.out
++*.app
+diff --git a/fuzzers/dataflow_array_struct_use/src/afl_driver.cpp b/fuzzers/dataflow_array_struct_use/src/afl_driver.cpp
+new file mode 100644
+index 00000000..42ef010b
+--- /dev/null
++++ b/fuzzers/dataflow_array_struct_use/src/afl_driver.cpp
+@@ -0,0 +1,205 @@
++//===- afl_driver.cpp - a glue between AFL and libFuzzer --------*- C++ -* ===//
++//
++// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
++// See https://llvm.org/LICENSE.txt for license information.
++// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
++//===----------------------------------------------------------------------===//
++
++/* This file allows to fuzz libFuzzer-style target functions
++ (LLVMFuzzerTestOneInput) with AFL using AFL's persistent (in-process) mode.
++
++Usage:
++################################################################################
++cat << EOF > test_fuzzer.cc
++#include <stddef.h>
++#include <stdint.h>
++extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
++  if (size > 0 && data[0] == 'H')
++    if (size > 1 && data[1] == 'I')
++       if (size > 2 && data[2] == '!')
++       __builtin_trap();
++  return 0;
++}
++EOF
++# Build your target with -fsanitize-coverage=trace-pc-guard using fresh clang.
++clang -g -fsanitize-coverage=trace-pc-guard test_fuzzer.cc -c
++# Build afl-llvm-rt.o.c from the AFL distribution.
++clang -c -w $AFL_HOME/llvm_mode/afl-llvm-rt.o.c
++# Build this file, link it with afl-llvm-rt.o.o and the target code.
++clang++ afl_driver.cpp test_fuzzer.o afl-llvm-rt.o.o
++# Run AFL:
++rm -rf IN OUT; mkdir IN OUT; echo z > IN/z;
++$AFL_HOME/afl-fuzz -i IN -o OUT ./a.out
++################################################################################
++AFL_DRIVER_STDERR_DUPLICATE_FILENAME: Setting this *appends* stderr to the file
++specified. If the file does not exist, it is created. This is useful for getting
++stack traces (when using ASAN for example) or original error messages on hard
++to reproduce bugs. Note that any content written to stderr will be written to
++this file instead of stderr's usual location.
++
++AFL_DRIVER_CLOSE_FD_MASK: Similar to libFuzzer's -close_fd_mask behavior option.
++If 1, close stdout at startup. If 2 close stderr; if 3 close both.
++
++*/
++#include <assert.h>
++#include <errno.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++
++#include <fstream>
++#include <iostream>
++#include <vector>
++
++// libFuzzer interface is thin, so we don't include any libFuzzer headers.
++extern "C" {
++__attribute__((weak)) int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size);
++__attribute__((weak)) int LLVMFuzzerInitialize(int *argc, char ***argv);
++}
++
++// Notify AFL about persistent mode.
++static volatile char AFL_PERSISTENT[] = "##SIG_AFL_PERSISTENT##";
++extern "C" int __afl_persistent_loop(unsigned int);
++static volatile char suppress_warning = AFL_PERSISTENT[0];
++
++// Input buffer.
++static const size_t kMaxAflInputSize = 1 << 20;
++static uint8_t AflInputBuf[kMaxAflInputSize];
++
++// Keep track of where stderr content is being written to, so that
++// dup_and_close_stderr can use the correct one.
++static FILE *output_file = stderr;
++
++// If the user asks us to duplicate stderr, then do it.
++static void maybe_duplicate_stderr() {
++  char *stderr_duplicate_filename =
++      getenv("AFL_DRIVER_STDERR_DUPLICATE_FILENAME");
++
++  if (!stderr_duplicate_filename)
++    return;
++
++  FILE *stderr_duplicate_stream =
++      freopen(stderr_duplicate_filename, "a+", stderr);
++
++  if (!stderr_duplicate_stream) {
++    fprintf(
++        stderr,
++        "Failed to duplicate stderr to AFL_DRIVER_STDERR_DUPLICATE_FILENAME");
++    abort();
++  }
++  output_file = stderr_duplicate_stream;
++}
++
++// Most of these I/O functions were inspired by/copied from libFuzzer's code.
++static void discard_output(int fd) {
++  FILE *temp = fopen("/dev/null", "w");
++  if (!temp)
++    abort();
++  dup2(fileno(temp), fd);
++  fclose(temp);
++}
++
++static void close_stdout() { discard_output(STDOUT_FILENO); }
++
++// Prevent the targeted code from writing to "stderr" but allow sanitizers and
++// this driver to do so.
++static void dup_and_close_stderr() {
++  int output_fileno = fileno(output_file);
++  int output_fd = dup(output_fileno);
++  if (output_fd <= 0)
++    abort();
++  FILE *new_output_file = fdopen(output_fd, "w");
++  if (!new_output_file)
++    abort();
++  discard_output(output_fileno);
++}
++
++static void Printf(const char *Fmt, ...) {
++  va_list ap;
++  va_start(ap, Fmt);
++  vfprintf(output_file, Fmt, ap);
++  va_end(ap);
++  fflush(output_file);
++}
++
++// Close stdout and/or stderr if user asks for it.
++static void maybe_close_fd_mask() {
++  char *fd_mask_str = getenv("AFL_DRIVER_CLOSE_FD_MASK");
++  if (!fd_mask_str)
++    return;
++  int fd_mask = atoi(fd_mask_str);
++  if (fd_mask & 2)
++    dup_and_close_stderr();
++  if (fd_mask & 1)
++    close_stdout();
++}
++
++// Define LLVMFuzzerMutate to avoid link failures for targets that use it
++// with libFuzzer's LLVMFuzzerCustomMutator.
++extern "C" size_t LLVMFuzzerMutate(uint8_t *Data, size_t Size, size_t MaxSize) {
++  assert(false && "LLVMFuzzerMutate should not be called from afl_driver");
++  return 0;
++}
++
++extern "C" __attribute__((weak))
++int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
++{
++  assert(false && "LLVMFuzzerTestOneInput should not be implemented in afl_driver");
++  return 0;
++}
++
++// Execute any files provided as parameters.
++static int ExecuteFilesOnyByOne(int argc, char **argv) {
++  for (int i = 1; i < argc; i++) {
++    std::ifstream in(argv[i], std::ios::binary);
++    in.seekg(0, in.end);
++    size_t length = in.tellg();
++    in.seekg (0, in.beg);
++    if (length < 0 || length > kMaxAflInputSize) {
++      continue;
++    }
++    // Allocate exactly length bytes so that we reliably catch buffer overflows.
++    std::vector<char> bytes(length);
++    in.read(bytes.data(), bytes.size());
++    assert(in);
++    LLVMFuzzerTestOneInput(reinterpret_cast<const uint8_t *>(bytes.data()),
++                           bytes.size());
++  }
++  return 0;
++}
++
++__attribute__((weak))
++int main(int argc, char **argv) {
++  maybe_duplicate_stderr();
++  maybe_close_fd_mask();
++  if (LLVMFuzzerInitialize)
++    LLVMFuzzerInitialize(&argc, &argv);
++  // Do any other expensive one-time initialization here.
++
++  int N = 1;
++  if (argc > 1)
++    return ExecuteFilesOnyByOne(argc, argv);
++
++  assert(N > 0);
++
++  // Call LLVMFuzzerTestOneInput here so that coverage caused by initialization
++  // on the first execution of LLVMFuzzerTestOneInput is ignored.
++  uint8_t dummy_input[1] = {0};
++  LLVMFuzzerTestOneInput(dummy_input, 1);
++
++  int num_runs = 0;
++  while (__afl_persistent_loop(N)) {
++    ssize_t n_read = read(0, AflInputBuf, kMaxAflInputSize);
++    if (n_read > 0) {
++      // Copy AflInputBuf into a separate buffer to let asan find buffer
++      // overflows. Don't use unique_ptr/etc to avoid extra dependencies.
++      uint8_t *copy = new uint8_t[n_read];
++      memcpy(copy, AflInputBuf, n_read);
++      num_runs++;
++      LLVMFuzzerTestOneInput(copy, n_read);
++      delete[] copy;
++    }
++  }
++}
+diff --git a/fuzzers/dataflow_array_struct_use/src/standalone_driver.c b/fuzzers/dataflow_array_struct_use/src/standalone_driver.c
+new file mode 100644
+index 00000000..411894c7
+--- /dev/null
++++ b/fuzzers/dataflow_array_struct_use/src/standalone_driver.c
+@@ -0,0 +1,44 @@
++/*===- StandaloneFuzzTargetMain.c - standalone main() for fuzz targets. ---===//
++//
++// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
++// See https://llvm.org/LICENSE.txt for license information.
++// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
++//
++//===----------------------------------------------------------------------===//
++// This main() function can be linked to a fuzz target (i.e. a library
++// that exports LLVMFuzzerTestOneInput() and possibly LLVMFuzzerInitialize())
++// instead of libFuzzer. This main() function will not perform any fuzzing
++// but will simply feed all input files one by one to the fuzz target.
++//
++// Use this file to provide reproducers for bugs when linking against libFuzzer
++// or other fuzzing engine is undesirable.
++//===----------------------------------------------------------------------===*/
++#include <assert.h>
++#include <stdio.h>
++#include <stdlib.h>
++
++__attribute__((weak))
++extern int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size);
++__attribute__((weak))
++extern int LLVMFuzzerInitialize(int *argc, char ***argv);
++__attribute__((weak))
++int main(int argc, char **argv) {
++  fprintf(stderr, "StandaloneFuzzTargetMain: running %d inputs\n", argc - 1);
++  if (LLVMFuzzerInitialize)
++    LLVMFuzzerInitialize(&argc, &argv);
++  for (int i = 1; i < argc; i++) {
++    fprintf(stderr, "Running: %s\n", argv[i]);
++    FILE *f = fopen(argv[i], "r");
++    assert(f);
++    fseek(f, 0, SEEK_END);
++    size_t len = ftell(f);
++    fseek(f, 0, SEEK_SET);
++    unsigned char *buf = (unsigned char*)malloc(len);
++    size_t n_read = fread(buf, 1, len, f);
++    fclose(f);
++    assert(n_read == len);
++    LLVMFuzzerTestOneInput(buf, len);
++    free(buf);
++    fprintf(stderr, "Done:    %s: (%zd bytes)\n", argv[i], n_read);
++  }
++}
+diff --git a/fuzzers/dataflow_array_struct_use_offset/build.sh b/fuzzers/dataflow_array_struct_use_offset/build.sh
+new file mode 100755
+index 00000000..15852a3a
+--- /dev/null
++++ b/fuzzers/dataflow_array_struct_use_offset/build.sh
+@@ -0,0 +1,39 @@
++#!/bin/bash
++set -e
++
++##
++# Pre-requirements:
++# - env FUZZER: path to fuzzer work dir
++##
++
++if [ ! -d "$FUZZER/repo" ] ; then
++    echo "fetch.sh must be executed first."
++    exit 1
++fi
++
++mkdir -p "$FUZZER/repo/build"
++cd "$FUZZER/repo/build"
++
++export CC="clang"
++export CXX="clang++"
++export AFL_NO_X86=1
++export PYTHON_INCLUDE=/
++
++##
++## Build datAFLow
++##
++
++cmake "$FUZZER/repo/" \
++    -DLLVM_DIR="$(llvm-config --cmakedir)" \
++    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$FUZZER/dataflow"
++make -j$(nproc) install
++
++##
++## Build AFL++
++##
++
++cd "$FUZZER/repo/ext/aflplusplus"
++make -j$(nproc) || exit 1
++make -C utils/aflpp_driver || exit 1
++
++mkdir -p "$OUT/afl"
+diff --git a/fuzzers/dataflow_array_struct_use_offset/fetch.sh b/fuzzers/dataflow_array_struct_use_offset/fetch.sh
+new file mode 100755
+index 00000000..56b3080a
+--- /dev/null
++++ b/fuzzers/dataflow_array_struct_use_offset/fetch.sh
+@@ -0,0 +1,70 @@
++#!/bin/bash
++set -e
++
++##
++# Pre-requirements:
++# - env FUZZER: path to fuzzer work dir
++##
++
++##
++## Get datAFLow
++##
++
++git clone --no-checkout https://github.com/HexHive/datAFLow "$FUZZER/repo"
++git -C "$FUZZER/repo" checkout baggybounds
++git -C "$FUZZER/repo" submodule update --init
++git -C "$FUZZER/repo/ext/aflplusplus" checkout 458eb0813a6f7d63eed97f18696bca8274533123
++
++# Fix: CMake-based build systems fail with duplicate (of main) or undefined references (of LLVMFuzzerTestOneInput)
++patch -p1 -d "$FUZZER/repo/ext/aflplusplus" << EOF
++--- a/utils/aflpp_driver/aflpp_driver.c
+++++ b/utils/aflpp_driver/aflpp_driver.c
++@@ -54,16 +54,17 @@ $AFL_HOME/afl-fuzz -i IN -o OUT ./a.out
++   #include "hash.h"
++ #endif
++
++-int                   __afl_sharedmem_fuzzing = 1;
+++int                   __afl_sharedmem_fuzzing = 0;
++ extern unsigned int * __afl_fuzz_len;
++ extern unsigned char *__afl_fuzz_ptr;
++
++ // libFuzzer interface is thin, so we don't include any libFuzzer headers.
++-int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size);
+++__attribute__((weak)) int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size);
++ __attribute__((weak)) int LLVMFuzzerInitialize(int *argc, char ***argv);
++
++ // Notify AFL about persistent mode.
++-static volatile char AFL_PERSISTENT[] = "##SIG_AFL_PERSISTENT##";
+++// DISABLED to avoid afl-showmap misbehavior
+++static volatile char AFL_PERSISTENT[] = "##SIG_AFL_NOT_PERSISTENT##";
++ int                  __afl_persistent_loop(unsigned int);
++
++ // Notify AFL about deferred forkserver.
++@@ -202,7 +203,7 @@ static int ExecuteFilesOnyByOne(int argc, char **argv) {
++
++ }
++
++-int main(int argc, char **argv) {
+++__attribute__((weak)) int main(int argc, char **argv) {
++
++   if (argc < 2 || strncmp(argv[1], "-h", 2) == 0)
++     printf(
++@@ -276,6 +277,7 @@ int main(int argc, char **argv) {
++
++   }
++
+++  N = 1;
++   assert(N > 0);
++
++   __afl_manual_init();
++@@ -310,3 +312,9 @@ int main(int argc, char **argv) {
++
++ }
++
+++__attribute__((weak))
+++int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
+++{
+++  // assert(0 && "LLVMFuzzerTestOneInput should not be implemented in afl_driver");
+++  return 0;
+++}
++EOF
+diff --git a/fuzzers/dataflow_array_struct_use_offset/findings.sh b/fuzzers/dataflow_array_struct_use_offset/findings.sh
+new file mode 100755
+index 00000000..afc482c5
+--- /dev/null
++++ b/fuzzers/dataflow_array_struct_use_offset/findings.sh
+@@ -0,0 +1,14 @@
++#!/bin/bash
++
++##
++# Pre-requirements:
++# - env SHARED: path to directory shared with host (to store results)
++##
++
++CRASH_DIR="$SHARED/findings/crashes"
++
++if [ ! -d "$CRASH_DIR" ]; then
++    exit 1
++fi
++
++find "$CRASH_DIR" -type f -name 'id:*'
+diff --git a/fuzzers/dataflow_array_struct_use_offset/instrument.sh b/fuzzers/dataflow_array_struct_use_offset/instrument.sh
+new file mode 100755
+index 00000000..be7c5d03
+--- /dev/null
++++ b/fuzzers/dataflow_array_struct_use_offset/instrument.sh
+@@ -0,0 +1,42 @@
++#!/bin/bash
++set -e
++
++##
++# Pre-requirements:
++# - env FUZZER: path to fuzzer work dir
++# - env TARGET: path to target work dir
++# - env MAGMA: path to Magma support files
++# - env OUT: path to directory where artifacts are stored
++# - env CFLAGS and CXXFLAGS must be set to link against Magma instrumentation
++##
++
++LLVM_PATH=/usr/lib/llvm-12/bin
++if [ -f "$TARGET/src/dataflow-mem-funcs.txt" ]; then
++    export FUZZALLOC_DEF_MEM_FUNCS="$TARGET/src/dataflow-mem-funcs.txt"
++fi
++
++export FUZZALLOC_DEF_SENSITIVITY="array:struct"
++export FUZZALLOC_USE_SENSITIVITY="read:write"
++export FUZZALLOC_USE_CAPTURE="offset"
++export FUZZALLOC_USE_INST="afl"
++
++export CC="$FUZZER/dataflow/bin/dataflow-cc"
++export CXX="$FUZZER/dataflow/bin/dataflow-c++"
++export AS="${LLVM_PATH}/llvm-as"
++export RANLIB="${LLVM_PATH}/llvm-ranlib"
++export AR="${LLVM_PATH}/llvm-ar"
++export LD="${LLVM_PATH}/ld.lld"
++export NM="${LLVM_PATH}/llvm-nm"
++
++export LIBS="$LIBS -lc++ -lc++abi $FUZZER/repo/ext/aflplusplus/utils/aflpp_driver/libAFLDriver.a"
++export CXXFLAGS="$CXXFLAGS -stdlib=libc++"
++
++export OUT="$OUT/afl"
++export LDFLAGS="$LDFLAGS -L$OUT"
++
++"$MAGMA/build.sh"
++"$TARGET/build.sh"
++
++# NOTE: We pass $OUT directly to the target build.sh script, since the artifact
++#       itself is the fuzz target. In the case of Angora, we might need to
++#       replace $OUT by $OUT/fast and $OUT/track, for instance.
+diff --git a/fuzzers/dataflow_array_struct_use_offset/preinstall.sh b/fuzzers/dataflow_array_struct_use_offset/preinstall.sh
+new file mode 100755
+index 00000000..e5e28077
+--- /dev/null
++++ b/fuzzers/dataflow_array_struct_use_offset/preinstall.sh
+@@ -0,0 +1,43 @@
++#!/bin/bash
++set -e
++
++apt-get update && \
++    apt-get install -y make build-essential git wget libexpat1-dev
++
++apt-get install -y apt-utils apt-transport-https ca-certificates gnupg
++apt-get install -y clang-12 clangd-12 clang-tools-12 libc++1-12 libc++-12-dev \
++    libc++abi1-12 libc++abi-12-dev libclang1-12 libclang-12-dev libclang-common-12-dev \
++    libclang-cpp12 libclang-cpp12-dev liblld-12 liblld-12-dev liblldb-12 \
++    liblldb-12-dev libllvm12 libomp-12-dev libomp5-12 lld-12 lldb-12 \
++    llvm-12 llvm-12-dev llvm-12-runtime llvm-12-tools
++
++apt-get install -y cmake libz-dev python3
++
++update-alternatives \
++  --install /usr/lib/llvm              llvm             /usr/lib/llvm-12  20 \
++  --slave   /usr/bin/llvm-config       llvm-config      /usr/bin/llvm-config-12  \
++    --slave   /usr/bin/llvm-ar           llvm-ar          /usr/bin/llvm-ar-12 \
++    --slave   /usr/bin/llvm-as           llvm-as          /usr/bin/llvm-as-12 \
++    --slave   /usr/bin/llvm-bcanalyzer   llvm-bcanalyzer  /usr/bin/llvm-bcanalyzer-12 \
++    --slave   /usr/bin/llvm-c-test       llvm-c-test      /usr/bin/llvm-c-test-12 \
++    --slave   /usr/bin/llvm-cov          llvm-cov         /usr/bin/llvm-cov-12 \
++    --slave   /usr/bin/llvm-diff         llvm-diff        /usr/bin/llvm-diff-12 \
++    --slave   /usr/bin/llvm-dis          llvm-dis         /usr/bin/llvm-dis-12 \
++    --slave   /usr/bin/llvm-dwarfdump    llvm-dwarfdump   /usr/bin/llvm-dwarfdump-12 \
++    --slave   /usr/bin/llvm-extract      llvm-extract     /usr/bin/llvm-extract-12 \
++    --slave   /usr/bin/llvm-link         llvm-link        /usr/bin/llvm-link-12 \
++    --slave   /usr/bin/llvm-mc           llvm-mc          /usr/bin/llvm-mc-12 \
++    --slave   /usr/bin/llvm-nm           llvm-nm          /usr/bin/llvm-nm-12 \
++    --slave   /usr/bin/llvm-objdump      llvm-objdump     /usr/bin/llvm-objdump-12 \
++    --slave   /usr/bin/llvm-ranlib       llvm-ranlib      /usr/bin/llvm-ranlib-12 \
++    --slave   /usr/bin/llvm-readobj      llvm-readobj     /usr/bin/llvm-readobj-12 \
++    --slave   /usr/bin/llvm-rtdyld       llvm-rtdyld      /usr/bin/llvm-rtdyld-12 \
++    --slave   /usr/bin/llvm-size         llvm-size        /usr/bin/llvm-size-12 \
++    --slave   /usr/bin/llvm-stress       llvm-stress      /usr/bin/llvm-stress-12 \
++    --slave   /usr/bin/llvm-symbolizer   llvm-symbolizer  /usr/bin/llvm-symbolizer-12 \
++    --slave   /usr/bin/llvm-tblgen       llvm-tblgen      /usr/bin/llvm-tblgen-12
++
++update-alternatives \
++  --install /usr/bin/clang                 clang                  /usr/bin/clang-12     20 \
++  --slave   /usr/bin/clang++               clang++                /usr/bin/clang++-12 \
++  --slave   /usr/bin/clang-cpp             clang-cpp              /usr/bin/clang-cpp-12
+diff --git a/fuzzers/dataflow_array_struct_use_offset/run.sh b/fuzzers/dataflow_array_struct_use_offset/run.sh
+new file mode 100755
+index 00000000..18c8d6f0
+--- /dev/null
++++ b/fuzzers/dataflow_array_struct_use_offset/run.sh
+@@ -0,0 +1,28 @@
++#!/bin/bash
++
++##
++# Pre-requirements:
++# - env FUZZER: path to fuzzer work dir
++# - env TARGET: path to target work dir
++# - env OUT: path to directory where artifacts are stored
++# - env SHARED: path to directory shared with host (to store results)
++# - env PROGRAM: name of program to run (should be found in $OUT)
++# - env ARGS: extra arguments to pass to the program
++# - env FUZZARGS: extra arguments to pass to the fuzzer
++##
++
++if nm "$OUT/afl/$PROGRAM" | grep -E '^[0-9a-f]+\s+[Ww]\s+main$'; then
++    ARGS="-"
++fi
++
++mkdir -p "$SHARED/findings"
++
++export AFL_SKIP_CPUFREQ=1
++export AFL_NO_AFFINITY=1
++export AFL_NO_UI=1
++export AFL_NO_FORKSRV=1
++
++"$FUZZER/repo/ext/aflplusplus/afl-fuzz" \
++    -i "$TARGET/corpus/$PROGRAM" -o "$SHARED/findings" \
++    -m none -t 1000+ -d $FUZZARGS -- \
++    "$OUT/afl/$PROGRAM" $ARGS 2>&1
+diff --git a/fuzzers/dataflow_array_struct_use_offset/runonce.sh b/fuzzers/dataflow_array_struct_use_offset/runonce.sh
+new file mode 100755
+index 00000000..a9ebb068
+--- /dev/null
++++ b/fuzzers/dataflow_array_struct_use_offset/runonce.sh
+@@ -0,0 +1,28 @@
++#!/bin/bash -e
++
++##
++# Pre-requirements:
++# - $1: path to test case
++# - env FUZZER: path to fuzzer work dir
++# - env TARGET: path to target work dir
++# - env OUT: path to directory where artifacts are stored
++# - env PROGRAM: name of program to run (should be found in $OUT)
++# - env ARGS: extra arguments to pass to the program
++##
++
++export TIMELIMIT=0.1s
++
++run_limited()
++{
++    ${@:1}
++    test $? -lt 128
++}
++export -f run_limited
++
++args="${ARGS/@@/"$1"}"
++if [ -z "$args" ]; then
++    args="$1"
++fi
++
++timeout -s KILL --preserve-status $TIMELIMIT bash -c \
++    "run_limited '$OUT/afl/$PROGRAM' $args"
+diff --git a/fuzzers/dataflow_array_struct_use_offset/src/.gitignore b/fuzzers/dataflow_array_struct_use_offset/src/.gitignore
+new file mode 100644
+index 00000000..259148fa
+--- /dev/null
++++ b/fuzzers/dataflow_array_struct_use_offset/src/.gitignore
+@@ -0,0 +1,32 @@
++# Prerequisites
++*.d
++
++# Compiled Object files
++*.slo
++*.lo
++*.o
++*.obj
++
++# Precompiled Headers
++*.gch
++*.pch
++
++# Compiled Dynamic libraries
++*.so
++*.dylib
++*.dll
++
++# Fortran module files
++*.mod
++*.smod
++
++# Compiled Static libraries
++*.lai
++*.la
++*.a
++*.lib
++
++# Executables
++*.exe
++*.out
++*.app
+diff --git a/fuzzers/dataflow_array_struct_use_offset/src/afl_driver.cpp b/fuzzers/dataflow_array_struct_use_offset/src/afl_driver.cpp
+new file mode 100644
+index 00000000..42ef010b
+--- /dev/null
++++ b/fuzzers/dataflow_array_struct_use_offset/src/afl_driver.cpp
+@@ -0,0 +1,205 @@
++//===- afl_driver.cpp - a glue between AFL and libFuzzer --------*- C++ -* ===//
++//
++// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
++// See https://llvm.org/LICENSE.txt for license information.
++// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
++//===----------------------------------------------------------------------===//
++
++/* This file allows to fuzz libFuzzer-style target functions
++ (LLVMFuzzerTestOneInput) with AFL using AFL's persistent (in-process) mode.
++
++Usage:
++################################################################################
++cat << EOF > test_fuzzer.cc
++#include <stddef.h>
++#include <stdint.h>
++extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
++  if (size > 0 && data[0] == 'H')
++    if (size > 1 && data[1] == 'I')
++       if (size > 2 && data[2] == '!')
++       __builtin_trap();
++  return 0;
++}
++EOF
++# Build your target with -fsanitize-coverage=trace-pc-guard using fresh clang.
++clang -g -fsanitize-coverage=trace-pc-guard test_fuzzer.cc -c
++# Build afl-llvm-rt.o.c from the AFL distribution.
++clang -c -w $AFL_HOME/llvm_mode/afl-llvm-rt.o.c
++# Build this file, link it with afl-llvm-rt.o.o and the target code.
++clang++ afl_driver.cpp test_fuzzer.o afl-llvm-rt.o.o
++# Run AFL:
++rm -rf IN OUT; mkdir IN OUT; echo z > IN/z;
++$AFL_HOME/afl-fuzz -i IN -o OUT ./a.out
++################################################################################
++AFL_DRIVER_STDERR_DUPLICATE_FILENAME: Setting this *appends* stderr to the file
++specified. If the file does not exist, it is created. This is useful for getting
++stack traces (when using ASAN for example) or original error messages on hard
++to reproduce bugs. Note that any content written to stderr will be written to
++this file instead of stderr's usual location.
++
++AFL_DRIVER_CLOSE_FD_MASK: Similar to libFuzzer's -close_fd_mask behavior option.
++If 1, close stdout at startup. If 2 close stderr; if 3 close both.
++
++*/
++#include <assert.h>
++#include <errno.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++
++#include <fstream>
++#include <iostream>
++#include <vector>
++
++// libFuzzer interface is thin, so we don't include any libFuzzer headers.
++extern "C" {
++__attribute__((weak)) int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size);
++__attribute__((weak)) int LLVMFuzzerInitialize(int *argc, char ***argv);
++}
++
++// Notify AFL about persistent mode.
++static volatile char AFL_PERSISTENT[] = "##SIG_AFL_PERSISTENT##";
++extern "C" int __afl_persistent_loop(unsigned int);
++static volatile char suppress_warning = AFL_PERSISTENT[0];
++
++// Input buffer.
++static const size_t kMaxAflInputSize = 1 << 20;
++static uint8_t AflInputBuf[kMaxAflInputSize];
++
++// Keep track of where stderr content is being written to, so that
++// dup_and_close_stderr can use the correct one.
++static FILE *output_file = stderr;
++
++// If the user asks us to duplicate stderr, then do it.
++static void maybe_duplicate_stderr() {
++  char *stderr_duplicate_filename =
++      getenv("AFL_DRIVER_STDERR_DUPLICATE_FILENAME");
++
++  if (!stderr_duplicate_filename)
++    return;
++
++  FILE *stderr_duplicate_stream =
++      freopen(stderr_duplicate_filename, "a+", stderr);
++
++  if (!stderr_duplicate_stream) {
++    fprintf(
++        stderr,
++        "Failed to duplicate stderr to AFL_DRIVER_STDERR_DUPLICATE_FILENAME");
++    abort();
++  }
++  output_file = stderr_duplicate_stream;
++}
++
++// Most of these I/O functions were inspired by/copied from libFuzzer's code.
++static void discard_output(int fd) {
++  FILE *temp = fopen("/dev/null", "w");
++  if (!temp)
++    abort();
++  dup2(fileno(temp), fd);
++  fclose(temp);
++}
++
++static void close_stdout() { discard_output(STDOUT_FILENO); }
++
++// Prevent the targeted code from writing to "stderr" but allow sanitizers and
++// this driver to do so.
++static void dup_and_close_stderr() {
++  int output_fileno = fileno(output_file);
++  int output_fd = dup(output_fileno);
++  if (output_fd <= 0)
++    abort();
++  FILE *new_output_file = fdopen(output_fd, "w");
++  if (!new_output_file)
++    abort();
++  discard_output(output_fileno);
++}
++
++static void Printf(const char *Fmt, ...) {
++  va_list ap;
++  va_start(ap, Fmt);
++  vfprintf(output_file, Fmt, ap);
++  va_end(ap);
++  fflush(output_file);
++}
++
++// Close stdout and/or stderr if user asks for it.
++static void maybe_close_fd_mask() {
++  char *fd_mask_str = getenv("AFL_DRIVER_CLOSE_FD_MASK");
++  if (!fd_mask_str)
++    return;
++  int fd_mask = atoi(fd_mask_str);
++  if (fd_mask & 2)
++    dup_and_close_stderr();
++  if (fd_mask & 1)
++    close_stdout();
++}
++
++// Define LLVMFuzzerMutate to avoid link failures for targets that use it
++// with libFuzzer's LLVMFuzzerCustomMutator.
++extern "C" size_t LLVMFuzzerMutate(uint8_t *Data, size_t Size, size_t MaxSize) {
++  assert(false && "LLVMFuzzerMutate should not be called from afl_driver");
++  return 0;
++}
++
++extern "C" __attribute__((weak))
++int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
++{
++  assert(false && "LLVMFuzzerTestOneInput should not be implemented in afl_driver");
++  return 0;
++}
++
++// Execute any files provided as parameters.
++static int ExecuteFilesOnyByOne(int argc, char **argv) {
++  for (int i = 1; i < argc; i++) {
++    std::ifstream in(argv[i], std::ios::binary);
++    in.seekg(0, in.end);
++    size_t length = in.tellg();
++    in.seekg (0, in.beg);
++    if (length < 0 || length > kMaxAflInputSize) {
++      continue;
++    }
++    // Allocate exactly length bytes so that we reliably catch buffer overflows.
++    std::vector<char> bytes(length);
++    in.read(bytes.data(), bytes.size());
++    assert(in);
++    LLVMFuzzerTestOneInput(reinterpret_cast<const uint8_t *>(bytes.data()),
++                           bytes.size());
++  }
++  return 0;
++}
++
++__attribute__((weak))
++int main(int argc, char **argv) {
++  maybe_duplicate_stderr();
++  maybe_close_fd_mask();
++  if (LLVMFuzzerInitialize)
++    LLVMFuzzerInitialize(&argc, &argv);
++  // Do any other expensive one-time initialization here.
++
++  int N = 1;
++  if (argc > 1)
++    return ExecuteFilesOnyByOne(argc, argv);
++
++  assert(N > 0);
++
++  // Call LLVMFuzzerTestOneInput here so that coverage caused by initialization
++  // on the first execution of LLVMFuzzerTestOneInput is ignored.
++  uint8_t dummy_input[1] = {0};
++  LLVMFuzzerTestOneInput(dummy_input, 1);
++
++  int num_runs = 0;
++  while (__afl_persistent_loop(N)) {
++    ssize_t n_read = read(0, AflInputBuf, kMaxAflInputSize);
++    if (n_read > 0) {
++      // Copy AflInputBuf into a separate buffer to let asan find buffer
++      // overflows. Don't use unique_ptr/etc to avoid extra dependencies.
++      uint8_t *copy = new uint8_t[n_read];
++      memcpy(copy, AflInputBuf, n_read);
++      num_runs++;
++      LLVMFuzzerTestOneInput(copy, n_read);
++      delete[] copy;
++    }
++  }
++}
+diff --git a/fuzzers/dataflow_array_struct_use_offset/src/standalone_driver.c b/fuzzers/dataflow_array_struct_use_offset/src/standalone_driver.c
+new file mode 100644
+index 00000000..411894c7
+--- /dev/null
++++ b/fuzzers/dataflow_array_struct_use_offset/src/standalone_driver.c
+@@ -0,0 +1,44 @@
++/*===- StandaloneFuzzTargetMain.c - standalone main() for fuzz targets. ---===//
++//
++// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
++// See https://llvm.org/LICENSE.txt for license information.
++// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
++//
++//===----------------------------------------------------------------------===//
++// This main() function can be linked to a fuzz target (i.e. a library
++// that exports LLVMFuzzerTestOneInput() and possibly LLVMFuzzerInitialize())
++// instead of libFuzzer. This main() function will not perform any fuzzing
++// but will simply feed all input files one by one to the fuzz target.
++//
++// Use this file to provide reproducers for bugs when linking against libFuzzer
++// or other fuzzing engine is undesirable.
++//===----------------------------------------------------------------------===*/
++#include <assert.h>
++#include <stdio.h>
++#include <stdlib.h>
++
++__attribute__((weak))
++extern int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size);
++__attribute__((weak))
++extern int LLVMFuzzerInitialize(int *argc, char ***argv);
++__attribute__((weak))
++int main(int argc, char **argv) {
++  fprintf(stderr, "StandaloneFuzzTargetMain: running %d inputs\n", argc - 1);
++  if (LLVMFuzzerInitialize)
++    LLVMFuzzerInitialize(&argc, &argv);
++  for (int i = 1; i < argc; i++) {
++    fprintf(stderr, "Running: %s\n", argv[i]);
++    FILE *f = fopen(argv[i], "r");
++    assert(f);
++    fseek(f, 0, SEEK_END);
++    size_t len = ftell(f);
++    fseek(f, 0, SEEK_SET);
++    unsigned char *buf = (unsigned char*)malloc(len);
++    size_t n_read = fread(buf, 1, len, f);
++    fclose(f);
++    assert(n_read == len);
++    LLVMFuzzerTestOneInput(buf, len);
++    free(buf);
++    fprintf(stderr, "Done:    %s: (%zd bytes)\n", argv[i], n_read);
++  }
++}
+diff --git a/fuzzers/dataflow_array_struct_use_val/build.sh b/fuzzers/dataflow_array_struct_use_val/build.sh
+new file mode 100755
+index 00000000..15852a3a
+--- /dev/null
++++ b/fuzzers/dataflow_array_struct_use_val/build.sh
+@@ -0,0 +1,39 @@
++#!/bin/bash
++set -e
++
++##
++# Pre-requirements:
++# - env FUZZER: path to fuzzer work dir
++##
++
++if [ ! -d "$FUZZER/repo" ] ; then
++    echo "fetch.sh must be executed first."
++    exit 1
++fi
++
++mkdir -p "$FUZZER/repo/build"
++cd "$FUZZER/repo/build"
++
++export CC="clang"
++export CXX="clang++"
++export AFL_NO_X86=1
++export PYTHON_INCLUDE=/
++
++##
++## Build datAFLow
++##
++
++cmake "$FUZZER/repo/" \
++    -DLLVM_DIR="$(llvm-config --cmakedir)" \
++    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$FUZZER/dataflow"
++make -j$(nproc) install
++
++##
++## Build AFL++
++##
++
++cd "$FUZZER/repo/ext/aflplusplus"
++make -j$(nproc) || exit 1
++make -C utils/aflpp_driver || exit 1
++
++mkdir -p "$OUT/afl"
+diff --git a/fuzzers/dataflow_array_struct_use_val/fetch.sh b/fuzzers/dataflow_array_struct_use_val/fetch.sh
+new file mode 100755
+index 00000000..56b3080a
+--- /dev/null
++++ b/fuzzers/dataflow_array_struct_use_val/fetch.sh
+@@ -0,0 +1,70 @@
++#!/bin/bash
++set -e
++
++##
++# Pre-requirements:
++# - env FUZZER: path to fuzzer work dir
++##
++
++##
++## Get datAFLow
++##
++
++git clone --no-checkout https://github.com/HexHive/datAFLow "$FUZZER/repo"
++git -C "$FUZZER/repo" checkout baggybounds
++git -C "$FUZZER/repo" submodule update --init
++git -C "$FUZZER/repo/ext/aflplusplus" checkout 458eb0813a6f7d63eed97f18696bca8274533123
++
++# Fix: CMake-based build systems fail with duplicate (of main) or undefined references (of LLVMFuzzerTestOneInput)
++patch -p1 -d "$FUZZER/repo/ext/aflplusplus" << EOF
++--- a/utils/aflpp_driver/aflpp_driver.c
+++++ b/utils/aflpp_driver/aflpp_driver.c
++@@ -54,16 +54,17 @@ $AFL_HOME/afl-fuzz -i IN -o OUT ./a.out
++   #include "hash.h"
++ #endif
++
++-int                   __afl_sharedmem_fuzzing = 1;
+++int                   __afl_sharedmem_fuzzing = 0;
++ extern unsigned int * __afl_fuzz_len;
++ extern unsigned char *__afl_fuzz_ptr;
++
++ // libFuzzer interface is thin, so we don't include any libFuzzer headers.
++-int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size);
+++__attribute__((weak)) int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size);
++ __attribute__((weak)) int LLVMFuzzerInitialize(int *argc, char ***argv);
++
++ // Notify AFL about persistent mode.
++-static volatile char AFL_PERSISTENT[] = "##SIG_AFL_PERSISTENT##";
+++// DISABLED to avoid afl-showmap misbehavior
+++static volatile char AFL_PERSISTENT[] = "##SIG_AFL_NOT_PERSISTENT##";
++ int                  __afl_persistent_loop(unsigned int);
++
++ // Notify AFL about deferred forkserver.
++@@ -202,7 +203,7 @@ static int ExecuteFilesOnyByOne(int argc, char **argv) {
++
++ }
++
++-int main(int argc, char **argv) {
+++__attribute__((weak)) int main(int argc, char **argv) {
++
++   if (argc < 2 || strncmp(argv[1], "-h", 2) == 0)
++     printf(
++@@ -276,6 +277,7 @@ int main(int argc, char **argv) {
++
++   }
++
+++  N = 1;
++   assert(N > 0);
++
++   __afl_manual_init();
++@@ -310,3 +312,9 @@ int main(int argc, char **argv) {
++
++ }
++
+++__attribute__((weak))
+++int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
+++{
+++  // assert(0 && "LLVMFuzzerTestOneInput should not be implemented in afl_driver");
+++  return 0;
+++}
++EOF
+diff --git a/fuzzers/dataflow_array_struct_use_val/findings.sh b/fuzzers/dataflow_array_struct_use_val/findings.sh
+new file mode 100755
+index 00000000..afc482c5
+--- /dev/null
++++ b/fuzzers/dataflow_array_struct_use_val/findings.sh
+@@ -0,0 +1,14 @@
++#!/bin/bash
++
++##
++# Pre-requirements:
++# - env SHARED: path to directory shared with host (to store results)
++##
++
++CRASH_DIR="$SHARED/findings/crashes"
++
++if [ ! -d "$CRASH_DIR" ]; then
++    exit 1
++fi
++
++find "$CRASH_DIR" -type f -name 'id:*'
+diff --git a/fuzzers/dataflow_array_struct_use_val/instrument.sh b/fuzzers/dataflow_array_struct_use_val/instrument.sh
+new file mode 100755
+index 00000000..4485562c
+--- /dev/null
++++ b/fuzzers/dataflow_array_struct_use_val/instrument.sh
+@@ -0,0 +1,42 @@
++#!/bin/bash
++set -e
++
++##
++# Pre-requirements:
++# - env FUZZER: path to fuzzer work dir
++# - env TARGET: path to target work dir
++# - env MAGMA: path to Magma support files
++# - env OUT: path to directory where artifacts are stored
++# - env CFLAGS and CXXFLAGS must be set to link against Magma instrumentation
++##
++
++LLVM_PATH=/usr/lib/llvm-12/bin
++if [ -f "$TARGET/src/dataflow-mem-funcs.txt" ]; then
++    export FUZZALLOC_DEF_MEM_FUNCS="$TARGET/src/dataflow-mem-funcs.txt"
++fi
++
++export FUZZALLOC_DEF_SENSITIVITY="array:struct"
++export FUZZALLOC_USE_SENSITIVITY="read:write"
++export FUZZALLOC_USE_CAPTURE="value"
++export FUZZALLOC_USE_INST="afl"
++
++export CC="$FUZZER/dataflow/bin/dataflow-cc"
++export CXX="$FUZZER/dataflow/bin/dataflow-c++"
++export AS="${LLVM_PATH}/llvm-as"
++export RANLIB="${LLVM_PATH}/llvm-ranlib"
++export AR="${LLVM_PATH}/llvm-ar"
++export LD="${LLVM_PATH}/ld.lld"
++export NM="${LLVM_PATH}/llvm-nm"
++
++export LIBS="$LIBS -lc++ -lc++abi $FUZZER/repo/ext/aflplusplus/utils/aflpp_driver/libAFLDriver.a"
++export CXXFLAGS="$CXXFLAGS -stdlib=libc++"
++
++export OUT="$OUT/afl"
++export LDFLAGS="$LDFLAGS -L$OUT"
++
++"$MAGMA/build.sh"
++"$TARGET/build.sh"
++
++# NOTE: We pass $OUT directly to the target build.sh script, since the artifact
++#       itself is the fuzz target. In the case of Angora, we might need to
++#       replace $OUT by $OUT/fast and $OUT/track, for instance.
+diff --git a/fuzzers/dataflow_array_struct_use_val/preinstall.sh b/fuzzers/dataflow_array_struct_use_val/preinstall.sh
+new file mode 100755
+index 00000000..e5e28077
+--- /dev/null
++++ b/fuzzers/dataflow_array_struct_use_val/preinstall.sh
+@@ -0,0 +1,43 @@
++#!/bin/bash
++set -e
++
++apt-get update && \
++    apt-get install -y make build-essential git wget libexpat1-dev
++
++apt-get install -y apt-utils apt-transport-https ca-certificates gnupg
++apt-get install -y clang-12 clangd-12 clang-tools-12 libc++1-12 libc++-12-dev \
++    libc++abi1-12 libc++abi-12-dev libclang1-12 libclang-12-dev libclang-common-12-dev \
++    libclang-cpp12 libclang-cpp12-dev liblld-12 liblld-12-dev liblldb-12 \
++    liblldb-12-dev libllvm12 libomp-12-dev libomp5-12 lld-12 lldb-12 \
++    llvm-12 llvm-12-dev llvm-12-runtime llvm-12-tools
++
++apt-get install -y cmake libz-dev python3
++
++update-alternatives \
++  --install /usr/lib/llvm              llvm             /usr/lib/llvm-12  20 \
++  --slave   /usr/bin/llvm-config       llvm-config      /usr/bin/llvm-config-12  \
++    --slave   /usr/bin/llvm-ar           llvm-ar          /usr/bin/llvm-ar-12 \
++    --slave   /usr/bin/llvm-as           llvm-as          /usr/bin/llvm-as-12 \
++    --slave   /usr/bin/llvm-bcanalyzer   llvm-bcanalyzer  /usr/bin/llvm-bcanalyzer-12 \
++    --slave   /usr/bin/llvm-c-test       llvm-c-test      /usr/bin/llvm-c-test-12 \
++    --slave   /usr/bin/llvm-cov          llvm-cov         /usr/bin/llvm-cov-12 \
++    --slave   /usr/bin/llvm-diff         llvm-diff        /usr/bin/llvm-diff-12 \
++    --slave   /usr/bin/llvm-dis          llvm-dis         /usr/bin/llvm-dis-12 \
++    --slave   /usr/bin/llvm-dwarfdump    llvm-dwarfdump   /usr/bin/llvm-dwarfdump-12 \
++    --slave   /usr/bin/llvm-extract      llvm-extract     /usr/bin/llvm-extract-12 \
++    --slave   /usr/bin/llvm-link         llvm-link        /usr/bin/llvm-link-12 \
++    --slave   /usr/bin/llvm-mc           llvm-mc          /usr/bin/llvm-mc-12 \
++    --slave   /usr/bin/llvm-nm           llvm-nm          /usr/bin/llvm-nm-12 \
++    --slave   /usr/bin/llvm-objdump      llvm-objdump     /usr/bin/llvm-objdump-12 \
++    --slave   /usr/bin/llvm-ranlib       llvm-ranlib      /usr/bin/llvm-ranlib-12 \
++    --slave   /usr/bin/llvm-readobj      llvm-readobj     /usr/bin/llvm-readobj-12 \
++    --slave   /usr/bin/llvm-rtdyld       llvm-rtdyld      /usr/bin/llvm-rtdyld-12 \
++    --slave   /usr/bin/llvm-size         llvm-size        /usr/bin/llvm-size-12 \
++    --slave   /usr/bin/llvm-stress       llvm-stress      /usr/bin/llvm-stress-12 \
++    --slave   /usr/bin/llvm-symbolizer   llvm-symbolizer  /usr/bin/llvm-symbolizer-12 \
++    --slave   /usr/bin/llvm-tblgen       llvm-tblgen      /usr/bin/llvm-tblgen-12
++
++update-alternatives \
++  --install /usr/bin/clang                 clang                  /usr/bin/clang-12     20 \
++  --slave   /usr/bin/clang++               clang++                /usr/bin/clang++-12 \
++  --slave   /usr/bin/clang-cpp             clang-cpp              /usr/bin/clang-cpp-12
+diff --git a/fuzzers/dataflow_array_struct_use_val/run.sh b/fuzzers/dataflow_array_struct_use_val/run.sh
+new file mode 100755
+index 00000000..18c8d6f0
+--- /dev/null
++++ b/fuzzers/dataflow_array_struct_use_val/run.sh
+@@ -0,0 +1,28 @@
++#!/bin/bash
++
++##
++# Pre-requirements:
++# - env FUZZER: path to fuzzer work dir
++# - env TARGET: path to target work dir
++# - env OUT: path to directory where artifacts are stored
++# - env SHARED: path to directory shared with host (to store results)
++# - env PROGRAM: name of program to run (should be found in $OUT)
++# - env ARGS: extra arguments to pass to the program
++# - env FUZZARGS: extra arguments to pass to the fuzzer
++##
++
++if nm "$OUT/afl/$PROGRAM" | grep -E '^[0-9a-f]+\s+[Ww]\s+main$'; then
++    ARGS="-"
++fi
++
++mkdir -p "$SHARED/findings"
++
++export AFL_SKIP_CPUFREQ=1
++export AFL_NO_AFFINITY=1
++export AFL_NO_UI=1
++export AFL_NO_FORKSRV=1
++
++"$FUZZER/repo/ext/aflplusplus/afl-fuzz" \
++    -i "$TARGET/corpus/$PROGRAM" -o "$SHARED/findings" \
++    -m none -t 1000+ -d $FUZZARGS -- \
++    "$OUT/afl/$PROGRAM" $ARGS 2>&1
+diff --git a/fuzzers/dataflow_array_struct_use_val/runonce.sh b/fuzzers/dataflow_array_struct_use_val/runonce.sh
+new file mode 100755
+index 00000000..a9ebb068
+--- /dev/null
++++ b/fuzzers/dataflow_array_struct_use_val/runonce.sh
+@@ -0,0 +1,28 @@
++#!/bin/bash -e
++
++##
++# Pre-requirements:
++# - $1: path to test case
++# - env FUZZER: path to fuzzer work dir
++# - env TARGET: path to target work dir
++# - env OUT: path to directory where artifacts are stored
++# - env PROGRAM: name of program to run (should be found in $OUT)
++# - env ARGS: extra arguments to pass to the program
++##
++
++export TIMELIMIT=0.1s
++
++run_limited()
++{
++    ${@:1}
++    test $? -lt 128
++}
++export -f run_limited
++
++args="${ARGS/@@/"$1"}"
++if [ -z "$args" ]; then
++    args="$1"
++fi
++
++timeout -s KILL --preserve-status $TIMELIMIT bash -c \
++    "run_limited '$OUT/afl/$PROGRAM' $args"
+diff --git a/fuzzers/dataflow_array_struct_use_val/src/.gitignore b/fuzzers/dataflow_array_struct_use_val/src/.gitignore
+new file mode 100644
+index 00000000..259148fa
+--- /dev/null
++++ b/fuzzers/dataflow_array_struct_use_val/src/.gitignore
+@@ -0,0 +1,32 @@
++# Prerequisites
++*.d
++
++# Compiled Object files
++*.slo
++*.lo
++*.o
++*.obj
++
++# Precompiled Headers
++*.gch
++*.pch
++
++# Compiled Dynamic libraries
++*.so
++*.dylib
++*.dll
++
++# Fortran module files
++*.mod
++*.smod
++
++# Compiled Static libraries
++*.lai
++*.la
++*.a
++*.lib
++
++# Executables
++*.exe
++*.out
++*.app
+diff --git a/fuzzers/dataflow_array_struct_use_val/src/afl_driver.cpp b/fuzzers/dataflow_array_struct_use_val/src/afl_driver.cpp
+new file mode 100644
+index 00000000..42ef010b
+--- /dev/null
++++ b/fuzzers/dataflow_array_struct_use_val/src/afl_driver.cpp
+@@ -0,0 +1,205 @@
++//===- afl_driver.cpp - a glue between AFL and libFuzzer --------*- C++ -* ===//
++//
++// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
++// See https://llvm.org/LICENSE.txt for license information.
++// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
++//===----------------------------------------------------------------------===//
++
++/* This file allows to fuzz libFuzzer-style target functions
++ (LLVMFuzzerTestOneInput) with AFL using AFL's persistent (in-process) mode.
++
++Usage:
++################################################################################
++cat << EOF > test_fuzzer.cc
++#include <stddef.h>
++#include <stdint.h>
++extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
++  if (size > 0 && data[0] == 'H')
++    if (size > 1 && data[1] == 'I')
++       if (size > 2 && data[2] == '!')
++       __builtin_trap();
++  return 0;
++}
++EOF
++# Build your target with -fsanitize-coverage=trace-pc-guard using fresh clang.
++clang -g -fsanitize-coverage=trace-pc-guard test_fuzzer.cc -c
++# Build afl-llvm-rt.o.c from the AFL distribution.
++clang -c -w $AFL_HOME/llvm_mode/afl-llvm-rt.o.c
++# Build this file, link it with afl-llvm-rt.o.o and the target code.
++clang++ afl_driver.cpp test_fuzzer.o afl-llvm-rt.o.o
++# Run AFL:
++rm -rf IN OUT; mkdir IN OUT; echo z > IN/z;
++$AFL_HOME/afl-fuzz -i IN -o OUT ./a.out
++################################################################################
++AFL_DRIVER_STDERR_DUPLICATE_FILENAME: Setting this *appends* stderr to the file
++specified. If the file does not exist, it is created. This is useful for getting
++stack traces (when using ASAN for example) or original error messages on hard
++to reproduce bugs. Note that any content written to stderr will be written to
++this file instead of stderr's usual location.
++
++AFL_DRIVER_CLOSE_FD_MASK: Similar to libFuzzer's -close_fd_mask behavior option.
++If 1, close stdout at startup. If 2 close stderr; if 3 close both.
++
++*/
++#include <assert.h>
++#include <errno.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++
++#include <fstream>
++#include <iostream>
++#include <vector>
++
++// libFuzzer interface is thin, so we don't include any libFuzzer headers.
++extern "C" {
++__attribute__((weak)) int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size);
++__attribute__((weak)) int LLVMFuzzerInitialize(int *argc, char ***argv);
++}
++
++// Notify AFL about persistent mode.
++static volatile char AFL_PERSISTENT[] = "##SIG_AFL_PERSISTENT##";
++extern "C" int __afl_persistent_loop(unsigned int);
++static volatile char suppress_warning = AFL_PERSISTENT[0];
++
++// Input buffer.
++static const size_t kMaxAflInputSize = 1 << 20;
++static uint8_t AflInputBuf[kMaxAflInputSize];
++
++// Keep track of where stderr content is being written to, so that
++// dup_and_close_stderr can use the correct one.
++static FILE *output_file = stderr;
++
++// If the user asks us to duplicate stderr, then do it.
++static void maybe_duplicate_stderr() {
++  char *stderr_duplicate_filename =
++      getenv("AFL_DRIVER_STDERR_DUPLICATE_FILENAME");
++
++  if (!stderr_duplicate_filename)
++    return;
++
++  FILE *stderr_duplicate_stream =
++      freopen(stderr_duplicate_filename, "a+", stderr);
++
++  if (!stderr_duplicate_stream) {
++    fprintf(
++        stderr,
++        "Failed to duplicate stderr to AFL_DRIVER_STDERR_DUPLICATE_FILENAME");
++    abort();
++  }
++  output_file = stderr_duplicate_stream;
++}
++
++// Most of these I/O functions were inspired by/copied from libFuzzer's code.
++static void discard_output(int fd) {
++  FILE *temp = fopen("/dev/null", "w");
++  if (!temp)
++    abort();
++  dup2(fileno(temp), fd);
++  fclose(temp);
++}
++
++static void close_stdout() { discard_output(STDOUT_FILENO); }
++
++// Prevent the targeted code from writing to "stderr" but allow sanitizers and
++// this driver to do so.
++static void dup_and_close_stderr() {
++  int output_fileno = fileno(output_file);
++  int output_fd = dup(output_fileno);
++  if (output_fd <= 0)
++    abort();
++  FILE *new_output_file = fdopen(output_fd, "w");
++  if (!new_output_file)
++    abort();
++  discard_output(output_fileno);
++}
++
++static void Printf(const char *Fmt, ...) {
++  va_list ap;
++  va_start(ap, Fmt);
++  vfprintf(output_file, Fmt, ap);
++  va_end(ap);
++  fflush(output_file);
++}
++
++// Close stdout and/or stderr if user asks for it.
++static void maybe_close_fd_mask() {
++  char *fd_mask_str = getenv("AFL_DRIVER_CLOSE_FD_MASK");
++  if (!fd_mask_str)
++    return;
++  int fd_mask = atoi(fd_mask_str);
++  if (fd_mask & 2)
++    dup_and_close_stderr();
++  if (fd_mask & 1)
++    close_stdout();
++}
++
++// Define LLVMFuzzerMutate to avoid link failures for targets that use it
++// with libFuzzer's LLVMFuzzerCustomMutator.
++extern "C" size_t LLVMFuzzerMutate(uint8_t *Data, size_t Size, size_t MaxSize) {
++  assert(false && "LLVMFuzzerMutate should not be called from afl_driver");
++  return 0;
++}
++
++extern "C" __attribute__((weak))
++int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
++{
++  assert(false && "LLVMFuzzerTestOneInput should not be implemented in afl_driver");
++  return 0;
++}
++
++// Execute any files provided as parameters.
++static int ExecuteFilesOnyByOne(int argc, char **argv) {
++  for (int i = 1; i < argc; i++) {
++    std::ifstream in(argv[i], std::ios::binary);
++    in.seekg(0, in.end);
++    size_t length = in.tellg();
++    in.seekg (0, in.beg);
++    if (length < 0 || length > kMaxAflInputSize) {
++      continue;
++    }
++    // Allocate exactly length bytes so that we reliably catch buffer overflows.
++    std::vector<char> bytes(length);
++    in.read(bytes.data(), bytes.size());
++    assert(in);
++    LLVMFuzzerTestOneInput(reinterpret_cast<const uint8_t *>(bytes.data()),
++                           bytes.size());
++  }
++  return 0;
++}
++
++__attribute__((weak))
++int main(int argc, char **argv) {
++  maybe_duplicate_stderr();
++  maybe_close_fd_mask();
++  if (LLVMFuzzerInitialize)
++    LLVMFuzzerInitialize(&argc, &argv);
++  // Do any other expensive one-time initialization here.
++
++  int N = 1;
++  if (argc > 1)
++    return ExecuteFilesOnyByOne(argc, argv);
++
++  assert(N > 0);
++
++  // Call LLVMFuzzerTestOneInput here so that coverage caused by initialization
++  // on the first execution of LLVMFuzzerTestOneInput is ignored.
++  uint8_t dummy_input[1] = {0};
++  LLVMFuzzerTestOneInput(dummy_input, 1);
++
++  int num_runs = 0;
++  while (__afl_persistent_loop(N)) {
++    ssize_t n_read = read(0, AflInputBuf, kMaxAflInputSize);
++    if (n_read > 0) {
++      // Copy AflInputBuf into a separate buffer to let asan find buffer
++      // overflows. Don't use unique_ptr/etc to avoid extra dependencies.
++      uint8_t *copy = new uint8_t[n_read];
++      memcpy(copy, AflInputBuf, n_read);
++      num_runs++;
++      LLVMFuzzerTestOneInput(copy, n_read);
++      delete[] copy;
++    }
++  }
++}
+diff --git a/fuzzers/dataflow_array_struct_use_val/src/standalone_driver.c b/fuzzers/dataflow_array_struct_use_val/src/standalone_driver.c
+new file mode 100644
+index 00000000..411894c7
+--- /dev/null
++++ b/fuzzers/dataflow_array_struct_use_val/src/standalone_driver.c
+@@ -0,0 +1,44 @@
++/*===- StandaloneFuzzTargetMain.c - standalone main() for fuzz targets. ---===//
++//
++// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
++// See https://llvm.org/LICENSE.txt for license information.
++// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
++//
++//===----------------------------------------------------------------------===//
++// This main() function can be linked to a fuzz target (i.e. a library
++// that exports LLVMFuzzerTestOneInput() and possibly LLVMFuzzerInitialize())
++// instead of libFuzzer. This main() function will not perform any fuzzing
++// but will simply feed all input files one by one to the fuzz target.
++//
++// Use this file to provide reproducers for bugs when linking against libFuzzer
++// or other fuzzing engine is undesirable.
++//===----------------------------------------------------------------------===*/
++#include <assert.h>
++#include <stdio.h>
++#include <stdlib.h>
++
++__attribute__((weak))
++extern int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size);
++__attribute__((weak))
++extern int LLVMFuzzerInitialize(int *argc, char ***argv);
++__attribute__((weak))
++int main(int argc, char **argv) {
++  fprintf(stderr, "StandaloneFuzzTargetMain: running %d inputs\n", argc - 1);
++  if (LLVMFuzzerInitialize)
++    LLVMFuzzerInitialize(&argc, &argv);
++  for (int i = 1; i < argc; i++) {
++    fprintf(stderr, "Running: %s\n", argv[i]);
++    FILE *f = fopen(argv[i], "r");
++    assert(f);
++    fseek(f, 0, SEEK_END);
++    size_t len = ftell(f);
++    fseek(f, 0, SEEK_SET);
++    unsigned char *buf = (unsigned char*)malloc(len);
++    size_t n_read = fread(buf, 1, len, f);
++    fclose(f);
++    assert(n_read == len);
++    LLVMFuzzerTestOneInput(buf, len);
++    free(buf);
++    fprintf(stderr, "Done:    %s: (%zd bytes)\n", argv[i], n_read);
++  }
++}
+diff --git a/fuzzers/dataflow_array_use/build.sh b/fuzzers/dataflow_array_use/build.sh
+new file mode 100755
+index 00000000..15852a3a
+--- /dev/null
++++ b/fuzzers/dataflow_array_use/build.sh
+@@ -0,0 +1,39 @@
++#!/bin/bash
++set -e
++
++##
++# Pre-requirements:
++# - env FUZZER: path to fuzzer work dir
++##
++
++if [ ! -d "$FUZZER/repo" ] ; then
++    echo "fetch.sh must be executed first."
++    exit 1
++fi
++
++mkdir -p "$FUZZER/repo/build"
++cd "$FUZZER/repo/build"
++
++export CC="clang"
++export CXX="clang++"
++export AFL_NO_X86=1
++export PYTHON_INCLUDE=/
++
++##
++## Build datAFLow
++##
++
++cmake "$FUZZER/repo/" \
++    -DLLVM_DIR="$(llvm-config --cmakedir)" \
++    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$FUZZER/dataflow"
++make -j$(nproc) install
++
++##
++## Build AFL++
++##
++
++cd "$FUZZER/repo/ext/aflplusplus"
++make -j$(nproc) || exit 1
++make -C utils/aflpp_driver || exit 1
++
++mkdir -p "$OUT/afl"
+diff --git a/fuzzers/dataflow_array_use/fetch.sh b/fuzzers/dataflow_array_use/fetch.sh
+new file mode 100755
+index 00000000..56b3080a
+--- /dev/null
++++ b/fuzzers/dataflow_array_use/fetch.sh
+@@ -0,0 +1,70 @@
++#!/bin/bash
++set -e
++
++##
++# Pre-requirements:
++# - env FUZZER: path to fuzzer work dir
++##
++
++##
++## Get datAFLow
++##
++
++git clone --no-checkout https://github.com/HexHive/datAFLow "$FUZZER/repo"
++git -C "$FUZZER/repo" checkout baggybounds
++git -C "$FUZZER/repo" submodule update --init
++git -C "$FUZZER/repo/ext/aflplusplus" checkout 458eb0813a6f7d63eed97f18696bca8274533123
++
++# Fix: CMake-based build systems fail with duplicate (of main) or undefined references (of LLVMFuzzerTestOneInput)
++patch -p1 -d "$FUZZER/repo/ext/aflplusplus" << EOF
++--- a/utils/aflpp_driver/aflpp_driver.c
+++++ b/utils/aflpp_driver/aflpp_driver.c
++@@ -54,16 +54,17 @@ $AFL_HOME/afl-fuzz -i IN -o OUT ./a.out
++   #include "hash.h"
++ #endif
++
++-int                   __afl_sharedmem_fuzzing = 1;
+++int                   __afl_sharedmem_fuzzing = 0;
++ extern unsigned int * __afl_fuzz_len;
++ extern unsigned char *__afl_fuzz_ptr;
++
++ // libFuzzer interface is thin, so we don't include any libFuzzer headers.
++-int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size);
+++__attribute__((weak)) int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size);
++ __attribute__((weak)) int LLVMFuzzerInitialize(int *argc, char ***argv);
++
++ // Notify AFL about persistent mode.
++-static volatile char AFL_PERSISTENT[] = "##SIG_AFL_PERSISTENT##";
+++// DISABLED to avoid afl-showmap misbehavior
+++static volatile char AFL_PERSISTENT[] = "##SIG_AFL_NOT_PERSISTENT##";
++ int                  __afl_persistent_loop(unsigned int);
++
++ // Notify AFL about deferred forkserver.
++@@ -202,7 +203,7 @@ static int ExecuteFilesOnyByOne(int argc, char **argv) {
++
++ }
++
++-int main(int argc, char **argv) {
+++__attribute__((weak)) int main(int argc, char **argv) {
++
++   if (argc < 2 || strncmp(argv[1], "-h", 2) == 0)
++     printf(
++@@ -276,6 +277,7 @@ int main(int argc, char **argv) {
++
++   }
++
+++  N = 1;
++   assert(N > 0);
++
++   __afl_manual_init();
++@@ -310,3 +312,9 @@ int main(int argc, char **argv) {
++
++ }
++
+++__attribute__((weak))
+++int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
+++{
+++  // assert(0 && "LLVMFuzzerTestOneInput should not be implemented in afl_driver");
+++  return 0;
+++}
++EOF
+diff --git a/fuzzers/dataflow_array_use/findings.sh b/fuzzers/dataflow_array_use/findings.sh
+new file mode 100755
+index 00000000..afc482c5
+--- /dev/null
++++ b/fuzzers/dataflow_array_use/findings.sh
+@@ -0,0 +1,14 @@
++#!/bin/bash
++
++##
++# Pre-requirements:
++# - env SHARED: path to directory shared with host (to store results)
++##
++
++CRASH_DIR="$SHARED/findings/crashes"
++
++if [ ! -d "$CRASH_DIR" ]; then
++    exit 1
++fi
++
++find "$CRASH_DIR" -type f -name 'id:*'
+diff --git a/fuzzers/dataflow_array_use/instrument.sh b/fuzzers/dataflow_array_use/instrument.sh
+new file mode 100755
+index 00000000..aa1817f1
+--- /dev/null
++++ b/fuzzers/dataflow_array_use/instrument.sh
+@@ -0,0 +1,42 @@
++#!/bin/bash
++set -e
++
++##
++# Pre-requirements:
++# - env FUZZER: path to fuzzer work dir
++# - env TARGET: path to target work dir
++# - env MAGMA: path to Magma support files
++# - env OUT: path to directory where artifacts are stored
++# - env CFLAGS and CXXFLAGS must be set to link against Magma instrumentation
++##
++
++LLVM_PATH=/usr/lib/llvm-12/bin
++if [ -f "$TARGET/src/dataflow-mem-funcs.txt" ]; then
++    export FUZZALLOC_DEF_MEM_FUNCS="$TARGET/src/dataflow-mem-funcs.txt"
++fi
++
++export FUZZALLOC_DEF_SENSITIVITY="array"
++export FUZZALLOC_USE_SENSITIVITY="read:write"
++export FUZZALLOC_USE_CAPTURE="use"
++export FUZZALLOC_USE_INST="afl"
++
++export CC="$FUZZER/dataflow/bin/dataflow-cc"
++export CXX="$FUZZER/dataflow/bin/dataflow-c++"
++export AS="${LLVM_PATH}/llvm-as"
++export RANLIB="${LLVM_PATH}/llvm-ranlib"
++export AR="${LLVM_PATH}/llvm-ar"
++export LD="${LLVM_PATH}/ld.lld"
++export NM="${LLVM_PATH}/llvm-nm"
++
++export LIBS="$LIBS -lc++ -lc++abi $FUZZER/repo/ext/aflplusplus/utils/aflpp_driver/libAFLDriver.a"
++export CXXFLAGS="$CXXFLAGS -stdlib=libc++"
++
++export OUT="$OUT/afl"
++export LDFLAGS="$LDFLAGS -L$OUT"
++
++"$MAGMA/build.sh"
++"$TARGET/build.sh"
++
++# NOTE: We pass $OUT directly to the target build.sh script, since the artifact
++#       itself is the fuzz target. In the case of Angora, we might need to
++#       replace $OUT by $OUT/fast and $OUT/track, for instance.
+diff --git a/fuzzers/dataflow_array_use/preinstall.sh b/fuzzers/dataflow_array_use/preinstall.sh
+new file mode 100755
+index 00000000..e5e28077
+--- /dev/null
++++ b/fuzzers/dataflow_array_use/preinstall.sh
+@@ -0,0 +1,43 @@
++#!/bin/bash
++set -e
++
++apt-get update && \
++    apt-get install -y make build-essential git wget libexpat1-dev
++
++apt-get install -y apt-utils apt-transport-https ca-certificates gnupg
++apt-get install -y clang-12 clangd-12 clang-tools-12 libc++1-12 libc++-12-dev \
++    libc++abi1-12 libc++abi-12-dev libclang1-12 libclang-12-dev libclang-common-12-dev \
++    libclang-cpp12 libclang-cpp12-dev liblld-12 liblld-12-dev liblldb-12 \
++    liblldb-12-dev libllvm12 libomp-12-dev libomp5-12 lld-12 lldb-12 \
++    llvm-12 llvm-12-dev llvm-12-runtime llvm-12-tools
++
++apt-get install -y cmake libz-dev python3
++
++update-alternatives \
++  --install /usr/lib/llvm              llvm             /usr/lib/llvm-12  20 \
++  --slave   /usr/bin/llvm-config       llvm-config      /usr/bin/llvm-config-12  \
++    --slave   /usr/bin/llvm-ar           llvm-ar          /usr/bin/llvm-ar-12 \
++    --slave   /usr/bin/llvm-as           llvm-as          /usr/bin/llvm-as-12 \
++    --slave   /usr/bin/llvm-bcanalyzer   llvm-bcanalyzer  /usr/bin/llvm-bcanalyzer-12 \
++    --slave   /usr/bin/llvm-c-test       llvm-c-test      /usr/bin/llvm-c-test-12 \
++    --slave   /usr/bin/llvm-cov          llvm-cov         /usr/bin/llvm-cov-12 \
++    --slave   /usr/bin/llvm-diff         llvm-diff        /usr/bin/llvm-diff-12 \
++    --slave   /usr/bin/llvm-dis          llvm-dis         /usr/bin/llvm-dis-12 \
++    --slave   /usr/bin/llvm-dwarfdump    llvm-dwarfdump   /usr/bin/llvm-dwarfdump-12 \
++    --slave   /usr/bin/llvm-extract      llvm-extract     /usr/bin/llvm-extract-12 \
++    --slave   /usr/bin/llvm-link         llvm-link        /usr/bin/llvm-link-12 \
++    --slave   /usr/bin/llvm-mc           llvm-mc          /usr/bin/llvm-mc-12 \
++    --slave   /usr/bin/llvm-nm           llvm-nm          /usr/bin/llvm-nm-12 \
++    --slave   /usr/bin/llvm-objdump      llvm-objdump     /usr/bin/llvm-objdump-12 \
++    --slave   /usr/bin/llvm-ranlib       llvm-ranlib      /usr/bin/llvm-ranlib-12 \
++    --slave   /usr/bin/llvm-readobj      llvm-readobj     /usr/bin/llvm-readobj-12 \
++    --slave   /usr/bin/llvm-rtdyld       llvm-rtdyld      /usr/bin/llvm-rtdyld-12 \
++    --slave   /usr/bin/llvm-size         llvm-size        /usr/bin/llvm-size-12 \
++    --slave   /usr/bin/llvm-stress       llvm-stress      /usr/bin/llvm-stress-12 \
++    --slave   /usr/bin/llvm-symbolizer   llvm-symbolizer  /usr/bin/llvm-symbolizer-12 \
++    --slave   /usr/bin/llvm-tblgen       llvm-tblgen      /usr/bin/llvm-tblgen-12
++
++update-alternatives \
++  --install /usr/bin/clang                 clang                  /usr/bin/clang-12     20 \
++  --slave   /usr/bin/clang++               clang++                /usr/bin/clang++-12 \
++  --slave   /usr/bin/clang-cpp             clang-cpp              /usr/bin/clang-cpp-12
+diff --git a/fuzzers/dataflow_array_use/run.sh b/fuzzers/dataflow_array_use/run.sh
+new file mode 100755
+index 00000000..18c8d6f0
+--- /dev/null
++++ b/fuzzers/dataflow_array_use/run.sh
+@@ -0,0 +1,28 @@
++#!/bin/bash
++
++##
++# Pre-requirements:
++# - env FUZZER: path to fuzzer work dir
++# - env TARGET: path to target work dir
++# - env OUT: path to directory where artifacts are stored
++# - env SHARED: path to directory shared with host (to store results)
++# - env PROGRAM: name of program to run (should be found in $OUT)
++# - env ARGS: extra arguments to pass to the program
++# - env FUZZARGS: extra arguments to pass to the fuzzer
++##
++
++if nm "$OUT/afl/$PROGRAM" | grep -E '^[0-9a-f]+\s+[Ww]\s+main$'; then
++    ARGS="-"
++fi
++
++mkdir -p "$SHARED/findings"
++
++export AFL_SKIP_CPUFREQ=1
++export AFL_NO_AFFINITY=1
++export AFL_NO_UI=1
++export AFL_NO_FORKSRV=1
++
++"$FUZZER/repo/ext/aflplusplus/afl-fuzz" \
++    -i "$TARGET/corpus/$PROGRAM" -o "$SHARED/findings" \
++    -m none -t 1000+ -d $FUZZARGS -- \
++    "$OUT/afl/$PROGRAM" $ARGS 2>&1
+diff --git a/fuzzers/dataflow_array_use/runonce.sh b/fuzzers/dataflow_array_use/runonce.sh
+new file mode 100755
+index 00000000..a9ebb068
+--- /dev/null
++++ b/fuzzers/dataflow_array_use/runonce.sh
+@@ -0,0 +1,28 @@
++#!/bin/bash -e
++
++##
++# Pre-requirements:
++# - $1: path to test case
++# - env FUZZER: path to fuzzer work dir
++# - env TARGET: path to target work dir
++# - env OUT: path to directory where artifacts are stored
++# - env PROGRAM: name of program to run (should be found in $OUT)
++# - env ARGS: extra arguments to pass to the program
++##
++
++export TIMELIMIT=0.1s
++
++run_limited()
++{
++    ${@:1}
++    test $? -lt 128
++}
++export -f run_limited
++
++args="${ARGS/@@/"$1"}"
++if [ -z "$args" ]; then
++    args="$1"
++fi
++
++timeout -s KILL --preserve-status $TIMELIMIT bash -c \
++    "run_limited '$OUT/afl/$PROGRAM' $args"
+diff --git a/fuzzers/dataflow_array_use/src/.gitignore b/fuzzers/dataflow_array_use/src/.gitignore
+new file mode 100644
+index 00000000..259148fa
+--- /dev/null
++++ b/fuzzers/dataflow_array_use/src/.gitignore
+@@ -0,0 +1,32 @@
++# Prerequisites
++*.d
++
++# Compiled Object files
++*.slo
++*.lo
++*.o
++*.obj
++
++# Precompiled Headers
++*.gch
++*.pch
++
++# Compiled Dynamic libraries
++*.so
++*.dylib
++*.dll
++
++# Fortran module files
++*.mod
++*.smod
++
++# Compiled Static libraries
++*.lai
++*.la
++*.a
++*.lib
++
++# Executables
++*.exe
++*.out
++*.app
+diff --git a/fuzzers/dataflow_array_use/src/afl_driver.cpp b/fuzzers/dataflow_array_use/src/afl_driver.cpp
+new file mode 100644
+index 00000000..42ef010b
+--- /dev/null
++++ b/fuzzers/dataflow_array_use/src/afl_driver.cpp
+@@ -0,0 +1,205 @@
++//===- afl_driver.cpp - a glue between AFL and libFuzzer --------*- C++ -* ===//
++//
++// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
++// See https://llvm.org/LICENSE.txt for license information.
++// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
++//===----------------------------------------------------------------------===//
++
++/* This file allows to fuzz libFuzzer-style target functions
++ (LLVMFuzzerTestOneInput) with AFL using AFL's persistent (in-process) mode.
++
++Usage:
++################################################################################
++cat << EOF > test_fuzzer.cc
++#include <stddef.h>
++#include <stdint.h>
++extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
++  if (size > 0 && data[0] == 'H')
++    if (size > 1 && data[1] == 'I')
++       if (size > 2 && data[2] == '!')
++       __builtin_trap();
++  return 0;
++}
++EOF
++# Build your target with -fsanitize-coverage=trace-pc-guard using fresh clang.
++clang -g -fsanitize-coverage=trace-pc-guard test_fuzzer.cc -c
++# Build afl-llvm-rt.o.c from the AFL distribution.
++clang -c -w $AFL_HOME/llvm_mode/afl-llvm-rt.o.c
++# Build this file, link it with afl-llvm-rt.o.o and the target code.
++clang++ afl_driver.cpp test_fuzzer.o afl-llvm-rt.o.o
++# Run AFL:
++rm -rf IN OUT; mkdir IN OUT; echo z > IN/z;
++$AFL_HOME/afl-fuzz -i IN -o OUT ./a.out
++################################################################################
++AFL_DRIVER_STDERR_DUPLICATE_FILENAME: Setting this *appends* stderr to the file
++specified. If the file does not exist, it is created. This is useful for getting
++stack traces (when using ASAN for example) or original error messages on hard
++to reproduce bugs. Note that any content written to stderr will be written to
++this file instead of stderr's usual location.
++
++AFL_DRIVER_CLOSE_FD_MASK: Similar to libFuzzer's -close_fd_mask behavior option.
++If 1, close stdout at startup. If 2 close stderr; if 3 close both.
++
++*/
++#include <assert.h>
++#include <errno.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++
++#include <fstream>
++#include <iostream>
++#include <vector>
++
++// libFuzzer interface is thin, so we don't include any libFuzzer headers.
++extern "C" {
++__attribute__((weak)) int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size);
++__attribute__((weak)) int LLVMFuzzerInitialize(int *argc, char ***argv);
++}
++
++// Notify AFL about persistent mode.
++static volatile char AFL_PERSISTENT[] = "##SIG_AFL_PERSISTENT##";
++extern "C" int __afl_persistent_loop(unsigned int);
++static volatile char suppress_warning = AFL_PERSISTENT[0];
++
++// Input buffer.
++static const size_t kMaxAflInputSize = 1 << 20;
++static uint8_t AflInputBuf[kMaxAflInputSize];
++
++// Keep track of where stderr content is being written to, so that
++// dup_and_close_stderr can use the correct one.
++static FILE *output_file = stderr;
++
++// If the user asks us to duplicate stderr, then do it.
++static void maybe_duplicate_stderr() {
++  char *stderr_duplicate_filename =
++      getenv("AFL_DRIVER_STDERR_DUPLICATE_FILENAME");
++
++  if (!stderr_duplicate_filename)
++    return;
++
++  FILE *stderr_duplicate_stream =
++      freopen(stderr_duplicate_filename, "a+", stderr);
++
++  if (!stderr_duplicate_stream) {
++    fprintf(
++        stderr,
++        "Failed to duplicate stderr to AFL_DRIVER_STDERR_DUPLICATE_FILENAME");
++    abort();
++  }
++  output_file = stderr_duplicate_stream;
++}
++
++// Most of these I/O functions were inspired by/copied from libFuzzer's code.
++static void discard_output(int fd) {
++  FILE *temp = fopen("/dev/null", "w");
++  if (!temp)
++    abort();
++  dup2(fileno(temp), fd);
++  fclose(temp);
++}
++
++static void close_stdout() { discard_output(STDOUT_FILENO); }
++
++// Prevent the targeted code from writing to "stderr" but allow sanitizers and
++// this driver to do so.
++static void dup_and_close_stderr() {
++  int output_fileno = fileno(output_file);
++  int output_fd = dup(output_fileno);
++  if (output_fd <= 0)
++    abort();
++  FILE *new_output_file = fdopen(output_fd, "w");
++  if (!new_output_file)
++    abort();
++  discard_output(output_fileno);
++}
++
++static void Printf(const char *Fmt, ...) {
++  va_list ap;
++  va_start(ap, Fmt);
++  vfprintf(output_file, Fmt, ap);
++  va_end(ap);
++  fflush(output_file);
++}
++
++// Close stdout and/or stderr if user asks for it.
++static void maybe_close_fd_mask() {
++  char *fd_mask_str = getenv("AFL_DRIVER_CLOSE_FD_MASK");
++  if (!fd_mask_str)
++    return;
++  int fd_mask = atoi(fd_mask_str);
++  if (fd_mask & 2)
++    dup_and_close_stderr();
++  if (fd_mask & 1)
++    close_stdout();
++}
++
++// Define LLVMFuzzerMutate to avoid link failures for targets that use it
++// with libFuzzer's LLVMFuzzerCustomMutator.
++extern "C" size_t LLVMFuzzerMutate(uint8_t *Data, size_t Size, size_t MaxSize) {
++  assert(false && "LLVMFuzzerMutate should not be called from afl_driver");
++  return 0;
++}
++
++extern "C" __attribute__((weak))
++int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
++{
++  assert(false && "LLVMFuzzerTestOneInput should not be implemented in afl_driver");
++  return 0;
++}
++
++// Execute any files provided as parameters.
++static int ExecuteFilesOnyByOne(int argc, char **argv) {
++  for (int i = 1; i < argc; i++) {
++    std::ifstream in(argv[i], std::ios::binary);
++    in.seekg(0, in.end);
++    size_t length = in.tellg();
++    in.seekg (0, in.beg);
++    if (length < 0 || length > kMaxAflInputSize) {
++      continue;
++    }
++    // Allocate exactly length bytes so that we reliably catch buffer overflows.
++    std::vector<char> bytes(length);
++    in.read(bytes.data(), bytes.size());
++    assert(in);
++    LLVMFuzzerTestOneInput(reinterpret_cast<const uint8_t *>(bytes.data()),
++                           bytes.size());
++  }
++  return 0;
++}
++
++__attribute__((weak))
++int main(int argc, char **argv) {
++  maybe_duplicate_stderr();
++  maybe_close_fd_mask();
++  if (LLVMFuzzerInitialize)
++    LLVMFuzzerInitialize(&argc, &argv);
++  // Do any other expensive one-time initialization here.
++
++  int N = 1;
++  if (argc > 1)
++    return ExecuteFilesOnyByOne(argc, argv);
++
++  assert(N > 0);
++
++  // Call LLVMFuzzerTestOneInput here so that coverage caused by initialization
++  // on the first execution of LLVMFuzzerTestOneInput is ignored.
++  uint8_t dummy_input[1] = {0};
++  LLVMFuzzerTestOneInput(dummy_input, 1);
++
++  int num_runs = 0;
++  while (__afl_persistent_loop(N)) {
++    ssize_t n_read = read(0, AflInputBuf, kMaxAflInputSize);
++    if (n_read > 0) {
++      // Copy AflInputBuf into a separate buffer to let asan find buffer
++      // overflows. Don't use unique_ptr/etc to avoid extra dependencies.
++      uint8_t *copy = new uint8_t[n_read];
++      memcpy(copy, AflInputBuf, n_read);
++      num_runs++;
++      LLVMFuzzerTestOneInput(copy, n_read);
++      delete[] copy;
++    }
++  }
++}
+diff --git a/fuzzers/dataflow_array_use/src/standalone_driver.c b/fuzzers/dataflow_array_use/src/standalone_driver.c
+new file mode 100644
+index 00000000..411894c7
+--- /dev/null
++++ b/fuzzers/dataflow_array_use/src/standalone_driver.c
+@@ -0,0 +1,44 @@
++/*===- StandaloneFuzzTargetMain.c - standalone main() for fuzz targets. ---===//
++//
++// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
++// See https://llvm.org/LICENSE.txt for license information.
++// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
++//
++//===----------------------------------------------------------------------===//
++// This main() function can be linked to a fuzz target (i.e. a library
++// that exports LLVMFuzzerTestOneInput() and possibly LLVMFuzzerInitialize())
++// instead of libFuzzer. This main() function will not perform any fuzzing
++// but will simply feed all input files one by one to the fuzz target.
++//
++// Use this file to provide reproducers for bugs when linking against libFuzzer
++// or other fuzzing engine is undesirable.
++//===----------------------------------------------------------------------===*/
++#include <assert.h>
++#include <stdio.h>
++#include <stdlib.h>
++
++__attribute__((weak))
++extern int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size);
++__attribute__((weak))
++extern int LLVMFuzzerInitialize(int *argc, char ***argv);
++__attribute__((weak))
++int main(int argc, char **argv) {
++  fprintf(stderr, "StandaloneFuzzTargetMain: running %d inputs\n", argc - 1);
++  if (LLVMFuzzerInitialize)
++    LLVMFuzzerInitialize(&argc, &argv);
++  for (int i = 1; i < argc; i++) {
++    fprintf(stderr, "Running: %s\n", argv[i]);
++    FILE *f = fopen(argv[i], "r");
++    assert(f);
++    fseek(f, 0, SEEK_END);
++    size_t len = ftell(f);
++    fseek(f, 0, SEEK_SET);
++    unsigned char *buf = (unsigned char*)malloc(len);
++    size_t n_read = fread(buf, 1, len, f);
++    fclose(f);
++    assert(n_read == len);
++    LLVMFuzzerTestOneInput(buf, len);
++    free(buf);
++    fprintf(stderr, "Done:    %s: (%zd bytes)\n", argv[i], n_read);
++  }
++}
+diff --git a/fuzzers/dataflow_array_use_offset/build.sh b/fuzzers/dataflow_array_use_offset/build.sh
+new file mode 100755
+index 00000000..15852a3a
+--- /dev/null
++++ b/fuzzers/dataflow_array_use_offset/build.sh
+@@ -0,0 +1,39 @@
++#!/bin/bash
++set -e
++
++##
++# Pre-requirements:
++# - env FUZZER: path to fuzzer work dir
++##
++
++if [ ! -d "$FUZZER/repo" ] ; then
++    echo "fetch.sh must be executed first."
++    exit 1
++fi
++
++mkdir -p "$FUZZER/repo/build"
++cd "$FUZZER/repo/build"
++
++export CC="clang"
++export CXX="clang++"
++export AFL_NO_X86=1
++export PYTHON_INCLUDE=/
++
++##
++## Build datAFLow
++##
++
++cmake "$FUZZER/repo/" \
++    -DLLVM_DIR="$(llvm-config --cmakedir)" \
++    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$FUZZER/dataflow"
++make -j$(nproc) install
++
++##
++## Build AFL++
++##
++
++cd "$FUZZER/repo/ext/aflplusplus"
++make -j$(nproc) || exit 1
++make -C utils/aflpp_driver || exit 1
++
++mkdir -p "$OUT/afl"
+diff --git a/fuzzers/dataflow_array_use_offset/fetch.sh b/fuzzers/dataflow_array_use_offset/fetch.sh
+new file mode 100755
+index 00000000..56b3080a
+--- /dev/null
++++ b/fuzzers/dataflow_array_use_offset/fetch.sh
+@@ -0,0 +1,70 @@
++#!/bin/bash
++set -e
++
++##
++# Pre-requirements:
++# - env FUZZER: path to fuzzer work dir
++##
++
++##
++## Get datAFLow
++##
++
++git clone --no-checkout https://github.com/HexHive/datAFLow "$FUZZER/repo"
++git -C "$FUZZER/repo" checkout baggybounds
++git -C "$FUZZER/repo" submodule update --init
++git -C "$FUZZER/repo/ext/aflplusplus" checkout 458eb0813a6f7d63eed97f18696bca8274533123
++
++# Fix: CMake-based build systems fail with duplicate (of main) or undefined references (of LLVMFuzzerTestOneInput)
++patch -p1 -d "$FUZZER/repo/ext/aflplusplus" << EOF
++--- a/utils/aflpp_driver/aflpp_driver.c
+++++ b/utils/aflpp_driver/aflpp_driver.c
++@@ -54,16 +54,17 @@ $AFL_HOME/afl-fuzz -i IN -o OUT ./a.out
++   #include "hash.h"
++ #endif
++
++-int                   __afl_sharedmem_fuzzing = 1;
+++int                   __afl_sharedmem_fuzzing = 0;
++ extern unsigned int * __afl_fuzz_len;
++ extern unsigned char *__afl_fuzz_ptr;
++
++ // libFuzzer interface is thin, so we don't include any libFuzzer headers.
++-int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size);
+++__attribute__((weak)) int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size);
++ __attribute__((weak)) int LLVMFuzzerInitialize(int *argc, char ***argv);
++
++ // Notify AFL about persistent mode.
++-static volatile char AFL_PERSISTENT[] = "##SIG_AFL_PERSISTENT##";
+++// DISABLED to avoid afl-showmap misbehavior
+++static volatile char AFL_PERSISTENT[] = "##SIG_AFL_NOT_PERSISTENT##";
++ int                  __afl_persistent_loop(unsigned int);
++
++ // Notify AFL about deferred forkserver.
++@@ -202,7 +203,7 @@ static int ExecuteFilesOnyByOne(int argc, char **argv) {
++
++ }
++
++-int main(int argc, char **argv) {
+++__attribute__((weak)) int main(int argc, char **argv) {
++
++   if (argc < 2 || strncmp(argv[1], "-h", 2) == 0)
++     printf(
++@@ -276,6 +277,7 @@ int main(int argc, char **argv) {
++
++   }
++
+++  N = 1;
++   assert(N > 0);
++
++   __afl_manual_init();
++@@ -310,3 +312,9 @@ int main(int argc, char **argv) {
++
++ }
++
+++__attribute__((weak))
+++int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
+++{
+++  // assert(0 && "LLVMFuzzerTestOneInput should not be implemented in afl_driver");
+++  return 0;
+++}
++EOF
+diff --git a/fuzzers/dataflow_array_use_offset/findings.sh b/fuzzers/dataflow_array_use_offset/findings.sh
+new file mode 100755
+index 00000000..afc482c5
+--- /dev/null
++++ b/fuzzers/dataflow_array_use_offset/findings.sh
+@@ -0,0 +1,14 @@
++#!/bin/bash
++
++##
++# Pre-requirements:
++# - env SHARED: path to directory shared with host (to store results)
++##
++
++CRASH_DIR="$SHARED/findings/crashes"
++
++if [ ! -d "$CRASH_DIR" ]; then
++    exit 1
++fi
++
++find "$CRASH_DIR" -type f -name 'id:*'
+diff --git a/fuzzers/dataflow_array_use_offset/instrument.sh b/fuzzers/dataflow_array_use_offset/instrument.sh
+new file mode 100755
+index 00000000..b3a83ff8
+--- /dev/null
++++ b/fuzzers/dataflow_array_use_offset/instrument.sh
+@@ -0,0 +1,42 @@
++#!/bin/bash
++set -e
++
++##
++# Pre-requirements:
++# - env FUZZER: path to fuzzer work dir
++# - env TARGET: path to target work dir
++# - env MAGMA: path to Magma support files
++# - env OUT: path to directory where artifacts are stored
++# - env CFLAGS and CXXFLAGS must be set to link against Magma instrumentation
++##
++
++LLVM_PATH=/usr/lib/llvm-12/bin
++if [ -f "$TARGET/src/dataflow-mem-funcs.txt" ]; then
++    export FUZZALLOC_DEF_MEM_FUNCS="$TARGET/src/dataflow-mem-funcs.txt"
++fi
++
++export FUZZALLOC_DEF_SENSITIVITY="array"
++export FUZZALLOC_USE_SENSITIVITY="read:write"
++export FUZZALLOC_USE_CAPTURE="offset"
++export FUZZALLOC_USE_INST="afl"
++
++export CC="$FUZZER/dataflow/bin/dataflow-cc"
++export CXX="$FUZZER/dataflow/bin/dataflow-c++"
++export AS="${LLVM_PATH}/llvm-as"
++export RANLIB="${LLVM_PATH}/llvm-ranlib"
++export AR="${LLVM_PATH}/llvm-ar"
++export LD="${LLVM_PATH}/ld.lld"
++export NM="${LLVM_PATH}/llvm-nm"
++
++export LIBS="$LIBS -lc++ -lc++abi $FUZZER/repo/ext/aflplusplus/utils/aflpp_driver/libAFLDriver.a"
++export CXXFLAGS="$CXXFLAGS -stdlib=libc++"
++
++export OUT="$OUT/afl"
++export LDFLAGS="$LDFLAGS -L$OUT"
++
++"$MAGMA/build.sh"
++"$TARGET/build.sh"
++
++# NOTE: We pass $OUT directly to the target build.sh script, since the artifact
++#       itself is the fuzz target. In the case of Angora, we might need to
++#       replace $OUT by $OUT/fast and $OUT/track, for instance.
+diff --git a/fuzzers/dataflow_array_use_offset/preinstall.sh b/fuzzers/dataflow_array_use_offset/preinstall.sh
+new file mode 100755
+index 00000000..e5e28077
+--- /dev/null
++++ b/fuzzers/dataflow_array_use_offset/preinstall.sh
+@@ -0,0 +1,43 @@
++#!/bin/bash
++set -e
++
++apt-get update && \
++    apt-get install -y make build-essential git wget libexpat1-dev
++
++apt-get install -y apt-utils apt-transport-https ca-certificates gnupg
++apt-get install -y clang-12 clangd-12 clang-tools-12 libc++1-12 libc++-12-dev \
++    libc++abi1-12 libc++abi-12-dev libclang1-12 libclang-12-dev libclang-common-12-dev \
++    libclang-cpp12 libclang-cpp12-dev liblld-12 liblld-12-dev liblldb-12 \
++    liblldb-12-dev libllvm12 libomp-12-dev libomp5-12 lld-12 lldb-12 \
++    llvm-12 llvm-12-dev llvm-12-runtime llvm-12-tools
++
++apt-get install -y cmake libz-dev python3
++
++update-alternatives \
++  --install /usr/lib/llvm              llvm             /usr/lib/llvm-12  20 \
++  --slave   /usr/bin/llvm-config       llvm-config      /usr/bin/llvm-config-12  \
++    --slave   /usr/bin/llvm-ar           llvm-ar          /usr/bin/llvm-ar-12 \
++    --slave   /usr/bin/llvm-as           llvm-as          /usr/bin/llvm-as-12 \
++    --slave   /usr/bin/llvm-bcanalyzer   llvm-bcanalyzer  /usr/bin/llvm-bcanalyzer-12 \
++    --slave   /usr/bin/llvm-c-test       llvm-c-test      /usr/bin/llvm-c-test-12 \
++    --slave   /usr/bin/llvm-cov          llvm-cov         /usr/bin/llvm-cov-12 \
++    --slave   /usr/bin/llvm-diff         llvm-diff        /usr/bin/llvm-diff-12 \
++    --slave   /usr/bin/llvm-dis          llvm-dis         /usr/bin/llvm-dis-12 \
++    --slave   /usr/bin/llvm-dwarfdump    llvm-dwarfdump   /usr/bin/llvm-dwarfdump-12 \
++    --slave   /usr/bin/llvm-extract      llvm-extract     /usr/bin/llvm-extract-12 \
++    --slave   /usr/bin/llvm-link         llvm-link        /usr/bin/llvm-link-12 \
++    --slave   /usr/bin/llvm-mc           llvm-mc          /usr/bin/llvm-mc-12 \
++    --slave   /usr/bin/llvm-nm           llvm-nm          /usr/bin/llvm-nm-12 \
++    --slave   /usr/bin/llvm-objdump      llvm-objdump     /usr/bin/llvm-objdump-12 \
++    --slave   /usr/bin/llvm-ranlib       llvm-ranlib      /usr/bin/llvm-ranlib-12 \
++    --slave   /usr/bin/llvm-readobj      llvm-readobj     /usr/bin/llvm-readobj-12 \
++    --slave   /usr/bin/llvm-rtdyld       llvm-rtdyld      /usr/bin/llvm-rtdyld-12 \
++    --slave   /usr/bin/llvm-size         llvm-size        /usr/bin/llvm-size-12 \
++    --slave   /usr/bin/llvm-stress       llvm-stress      /usr/bin/llvm-stress-12 \
++    --slave   /usr/bin/llvm-symbolizer   llvm-symbolizer  /usr/bin/llvm-symbolizer-12 \
++    --slave   /usr/bin/llvm-tblgen       llvm-tblgen      /usr/bin/llvm-tblgen-12
++
++update-alternatives \
++  --install /usr/bin/clang                 clang                  /usr/bin/clang-12     20 \
++  --slave   /usr/bin/clang++               clang++                /usr/bin/clang++-12 \
++  --slave   /usr/bin/clang-cpp             clang-cpp              /usr/bin/clang-cpp-12
+diff --git a/fuzzers/dataflow_array_use_offset/run.sh b/fuzzers/dataflow_array_use_offset/run.sh
+new file mode 100755
+index 00000000..18c8d6f0
+--- /dev/null
++++ b/fuzzers/dataflow_array_use_offset/run.sh
+@@ -0,0 +1,28 @@
++#!/bin/bash
++
++##
++# Pre-requirements:
++# - env FUZZER: path to fuzzer work dir
++# - env TARGET: path to target work dir
++# - env OUT: path to directory where artifacts are stored
++# - env SHARED: path to directory shared with host (to store results)
++# - env PROGRAM: name of program to run (should be found in $OUT)
++# - env ARGS: extra arguments to pass to the program
++# - env FUZZARGS: extra arguments to pass to the fuzzer
++##
++
++if nm "$OUT/afl/$PROGRAM" | grep -E '^[0-9a-f]+\s+[Ww]\s+main$'; then
++    ARGS="-"
++fi
++
++mkdir -p "$SHARED/findings"
++
++export AFL_SKIP_CPUFREQ=1
++export AFL_NO_AFFINITY=1
++export AFL_NO_UI=1
++export AFL_NO_FORKSRV=1
++
++"$FUZZER/repo/ext/aflplusplus/afl-fuzz" \
++    -i "$TARGET/corpus/$PROGRAM" -o "$SHARED/findings" \
++    -m none -t 1000+ -d $FUZZARGS -- \
++    "$OUT/afl/$PROGRAM" $ARGS 2>&1
+diff --git a/fuzzers/dataflow_array_use_offset/runonce.sh b/fuzzers/dataflow_array_use_offset/runonce.sh
+new file mode 100755
+index 00000000..a9ebb068
+--- /dev/null
++++ b/fuzzers/dataflow_array_use_offset/runonce.sh
+@@ -0,0 +1,28 @@
++#!/bin/bash -e
++
++##
++# Pre-requirements:
++# - $1: path to test case
++# - env FUZZER: path to fuzzer work dir
++# - env TARGET: path to target work dir
++# - env OUT: path to directory where artifacts are stored
++# - env PROGRAM: name of program to run (should be found in $OUT)
++# - env ARGS: extra arguments to pass to the program
++##
++
++export TIMELIMIT=0.1s
++
++run_limited()
++{
++    ${@:1}
++    test $? -lt 128
++}
++export -f run_limited
++
++args="${ARGS/@@/"$1"}"
++if [ -z "$args" ]; then
++    args="$1"
++fi
++
++timeout -s KILL --preserve-status $TIMELIMIT bash -c \
++    "run_limited '$OUT/afl/$PROGRAM' $args"
+diff --git a/fuzzers/dataflow_array_use_offset/src/.gitignore b/fuzzers/dataflow_array_use_offset/src/.gitignore
+new file mode 100644
+index 00000000..259148fa
+--- /dev/null
++++ b/fuzzers/dataflow_array_use_offset/src/.gitignore
+@@ -0,0 +1,32 @@
++# Prerequisites
++*.d
++
++# Compiled Object files
++*.slo
++*.lo
++*.o
++*.obj
++
++# Precompiled Headers
++*.gch
++*.pch
++
++# Compiled Dynamic libraries
++*.so
++*.dylib
++*.dll
++
++# Fortran module files
++*.mod
++*.smod
++
++# Compiled Static libraries
++*.lai
++*.la
++*.a
++*.lib
++
++# Executables
++*.exe
++*.out
++*.app
+diff --git a/fuzzers/dataflow_array_use_offset/src/afl_driver.cpp b/fuzzers/dataflow_array_use_offset/src/afl_driver.cpp
+new file mode 100644
+index 00000000..42ef010b
+--- /dev/null
++++ b/fuzzers/dataflow_array_use_offset/src/afl_driver.cpp
+@@ -0,0 +1,205 @@
++//===- afl_driver.cpp - a glue between AFL and libFuzzer --------*- C++ -* ===//
++//
++// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
++// See https://llvm.org/LICENSE.txt for license information.
++// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
++//===----------------------------------------------------------------------===//
++
++/* This file allows to fuzz libFuzzer-style target functions
++ (LLVMFuzzerTestOneInput) with AFL using AFL's persistent (in-process) mode.
++
++Usage:
++################################################################################
++cat << EOF > test_fuzzer.cc
++#include <stddef.h>
++#include <stdint.h>
++extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
++  if (size > 0 && data[0] == 'H')
++    if (size > 1 && data[1] == 'I')
++       if (size > 2 && data[2] == '!')
++       __builtin_trap();
++  return 0;
++}
++EOF
++# Build your target with -fsanitize-coverage=trace-pc-guard using fresh clang.
++clang -g -fsanitize-coverage=trace-pc-guard test_fuzzer.cc -c
++# Build afl-llvm-rt.o.c from the AFL distribution.
++clang -c -w $AFL_HOME/llvm_mode/afl-llvm-rt.o.c
++# Build this file, link it with afl-llvm-rt.o.o and the target code.
++clang++ afl_driver.cpp test_fuzzer.o afl-llvm-rt.o.o
++# Run AFL:
++rm -rf IN OUT; mkdir IN OUT; echo z > IN/z;
++$AFL_HOME/afl-fuzz -i IN -o OUT ./a.out
++################################################################################
++AFL_DRIVER_STDERR_DUPLICATE_FILENAME: Setting this *appends* stderr to the file
++specified. If the file does not exist, it is created. This is useful for getting
++stack traces (when using ASAN for example) or original error messages on hard
++to reproduce bugs. Note that any content written to stderr will be written to
++this file instead of stderr's usual location.
++
++AFL_DRIVER_CLOSE_FD_MASK: Similar to libFuzzer's -close_fd_mask behavior option.
++If 1, close stdout at startup. If 2 close stderr; if 3 close both.
++
++*/
++#include <assert.h>
++#include <errno.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++
++#include <fstream>
++#include <iostream>
++#include <vector>
++
++// libFuzzer interface is thin, so we don't include any libFuzzer headers.
++extern "C" {
++__attribute__((weak)) int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size);
++__attribute__((weak)) int LLVMFuzzerInitialize(int *argc, char ***argv);
++}
++
++// Notify AFL about persistent mode.
++static volatile char AFL_PERSISTENT[] = "##SIG_AFL_PERSISTENT##";
++extern "C" int __afl_persistent_loop(unsigned int);
++static volatile char suppress_warning = AFL_PERSISTENT[0];
++
++// Input buffer.
++static const size_t kMaxAflInputSize = 1 << 20;
++static uint8_t AflInputBuf[kMaxAflInputSize];
++
++// Keep track of where stderr content is being written to, so that
++// dup_and_close_stderr can use the correct one.
++static FILE *output_file = stderr;
++
++// If the user asks us to duplicate stderr, then do it.
++static void maybe_duplicate_stderr() {
++  char *stderr_duplicate_filename =
++      getenv("AFL_DRIVER_STDERR_DUPLICATE_FILENAME");
++
++  if (!stderr_duplicate_filename)
++    return;
++
++  FILE *stderr_duplicate_stream =
++      freopen(stderr_duplicate_filename, "a+", stderr);
++
++  if (!stderr_duplicate_stream) {
++    fprintf(
++        stderr,
++        "Failed to duplicate stderr to AFL_DRIVER_STDERR_DUPLICATE_FILENAME");
++    abort();
++  }
++  output_file = stderr_duplicate_stream;
++}
++
++// Most of these I/O functions were inspired by/copied from libFuzzer's code.
++static void discard_output(int fd) {
++  FILE *temp = fopen("/dev/null", "w");
++  if (!temp)
++    abort();
++  dup2(fileno(temp), fd);
++  fclose(temp);
++}
++
++static void close_stdout() { discard_output(STDOUT_FILENO); }
++
++// Prevent the targeted code from writing to "stderr" but allow sanitizers and
++// this driver to do so.
++static void dup_and_close_stderr() {
++  int output_fileno = fileno(output_file);
++  int output_fd = dup(output_fileno);
++  if (output_fd <= 0)
++    abort();
++  FILE *new_output_file = fdopen(output_fd, "w");
++  if (!new_output_file)
++    abort();
++  discard_output(output_fileno);
++}
++
++static void Printf(const char *Fmt, ...) {
++  va_list ap;
++  va_start(ap, Fmt);
++  vfprintf(output_file, Fmt, ap);
++  va_end(ap);
++  fflush(output_file);
++}
++
++// Close stdout and/or stderr if user asks for it.
++static void maybe_close_fd_mask() {
++  char *fd_mask_str = getenv("AFL_DRIVER_CLOSE_FD_MASK");
++  if (!fd_mask_str)
++    return;
++  int fd_mask = atoi(fd_mask_str);
++  if (fd_mask & 2)
++    dup_and_close_stderr();
++  if (fd_mask & 1)
++    close_stdout();
++}
++
++// Define LLVMFuzzerMutate to avoid link failures for targets that use it
++// with libFuzzer's LLVMFuzzerCustomMutator.
++extern "C" size_t LLVMFuzzerMutate(uint8_t *Data, size_t Size, size_t MaxSize) {
++  assert(false && "LLVMFuzzerMutate should not be called from afl_driver");
++  return 0;
++}
++
++extern "C" __attribute__((weak))
++int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
++{
++  assert(false && "LLVMFuzzerTestOneInput should not be implemented in afl_driver");
++  return 0;
++}
++
++// Execute any files provided as parameters.
++static int ExecuteFilesOnyByOne(int argc, char **argv) {
++  for (int i = 1; i < argc; i++) {
++    std::ifstream in(argv[i], std::ios::binary);
++    in.seekg(0, in.end);
++    size_t length = in.tellg();
++    in.seekg (0, in.beg);
++    if (length < 0 || length > kMaxAflInputSize) {
++      continue;
++    }
++    // Allocate exactly length bytes so that we reliably catch buffer overflows.
++    std::vector<char> bytes(length);
++    in.read(bytes.data(), bytes.size());
++    assert(in);
++    LLVMFuzzerTestOneInput(reinterpret_cast<const uint8_t *>(bytes.data()),
++                           bytes.size());
++  }
++  return 0;
++}
++
++__attribute__((weak))
++int main(int argc, char **argv) {
++  maybe_duplicate_stderr();
++  maybe_close_fd_mask();
++  if (LLVMFuzzerInitialize)
++    LLVMFuzzerInitialize(&argc, &argv);
++  // Do any other expensive one-time initialization here.
++
++  int N = 1;
++  if (argc > 1)
++    return ExecuteFilesOnyByOne(argc, argv);
++
++  assert(N > 0);
++
++  // Call LLVMFuzzerTestOneInput here so that coverage caused by initialization
++  // on the first execution of LLVMFuzzerTestOneInput is ignored.
++  uint8_t dummy_input[1] = {0};
++  LLVMFuzzerTestOneInput(dummy_input, 1);
++
++  int num_runs = 0;
++  while (__afl_persistent_loop(N)) {
++    ssize_t n_read = read(0, AflInputBuf, kMaxAflInputSize);
++    if (n_read > 0) {
++      // Copy AflInputBuf into a separate buffer to let asan find buffer
++      // overflows. Don't use unique_ptr/etc to avoid extra dependencies.
++      uint8_t *copy = new uint8_t[n_read];
++      memcpy(copy, AflInputBuf, n_read);
++      num_runs++;
++      LLVMFuzzerTestOneInput(copy, n_read);
++      delete[] copy;
++    }
++  }
++}
+diff --git a/fuzzers/dataflow_array_use_offset/src/standalone_driver.c b/fuzzers/dataflow_array_use_offset/src/standalone_driver.c
+new file mode 100644
+index 00000000..411894c7
+--- /dev/null
++++ b/fuzzers/dataflow_array_use_offset/src/standalone_driver.c
+@@ -0,0 +1,44 @@
++/*===- StandaloneFuzzTargetMain.c - standalone main() for fuzz targets. ---===//
++//
++// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
++// See https://llvm.org/LICENSE.txt for license information.
++// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
++//
++//===----------------------------------------------------------------------===//
++// This main() function can be linked to a fuzz target (i.e. a library
++// that exports LLVMFuzzerTestOneInput() and possibly LLVMFuzzerInitialize())
++// instead of libFuzzer. This main() function will not perform any fuzzing
++// but will simply feed all input files one by one to the fuzz target.
++//
++// Use this file to provide reproducers for bugs when linking against libFuzzer
++// or other fuzzing engine is undesirable.
++//===----------------------------------------------------------------------===*/
++#include <assert.h>
++#include <stdio.h>
++#include <stdlib.h>
++
++__attribute__((weak))
++extern int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size);
++__attribute__((weak))
++extern int LLVMFuzzerInitialize(int *argc, char ***argv);
++__attribute__((weak))
++int main(int argc, char **argv) {
++  fprintf(stderr, "StandaloneFuzzTargetMain: running %d inputs\n", argc - 1);
++  if (LLVMFuzzerInitialize)
++    LLVMFuzzerInitialize(&argc, &argv);
++  for (int i = 1; i < argc; i++) {
++    fprintf(stderr, "Running: %s\n", argv[i]);
++    FILE *f = fopen(argv[i], "r");
++    assert(f);
++    fseek(f, 0, SEEK_END);
++    size_t len = ftell(f);
++    fseek(f, 0, SEEK_SET);
++    unsigned char *buf = (unsigned char*)malloc(len);
++    size_t n_read = fread(buf, 1, len, f);
++    fclose(f);
++    assert(n_read == len);
++    LLVMFuzzerTestOneInput(buf, len);
++    free(buf);
++    fprintf(stderr, "Done:    %s: (%zd bytes)\n", argv[i], n_read);
++  }
++}
+diff --git a/fuzzers/dataflow_array_use_val/build.sh b/fuzzers/dataflow_array_use_val/build.sh
+new file mode 100755
+index 00000000..15852a3a
+--- /dev/null
++++ b/fuzzers/dataflow_array_use_val/build.sh
+@@ -0,0 +1,39 @@
++#!/bin/bash
++set -e
++
++##
++# Pre-requirements:
++# - env FUZZER: path to fuzzer work dir
++##
++
++if [ ! -d "$FUZZER/repo" ] ; then
++    echo "fetch.sh must be executed first."
++    exit 1
++fi
++
++mkdir -p "$FUZZER/repo/build"
++cd "$FUZZER/repo/build"
++
++export CC="clang"
++export CXX="clang++"
++export AFL_NO_X86=1
++export PYTHON_INCLUDE=/
++
++##
++## Build datAFLow
++##
++
++cmake "$FUZZER/repo/" \
++    -DLLVM_DIR="$(llvm-config --cmakedir)" \
++    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$FUZZER/dataflow"
++make -j$(nproc) install
++
++##
++## Build AFL++
++##
++
++cd "$FUZZER/repo/ext/aflplusplus"
++make -j$(nproc) || exit 1
++make -C utils/aflpp_driver || exit 1
++
++mkdir -p "$OUT/afl"
+diff --git a/fuzzers/dataflow_array_use_val/fetch.sh b/fuzzers/dataflow_array_use_val/fetch.sh
+new file mode 100755
+index 00000000..56b3080a
+--- /dev/null
++++ b/fuzzers/dataflow_array_use_val/fetch.sh
+@@ -0,0 +1,70 @@
++#!/bin/bash
++set -e
++
++##
++# Pre-requirements:
++# - env FUZZER: path to fuzzer work dir
++##
++
++##
++## Get datAFLow
++##
++
++git clone --no-checkout https://github.com/HexHive/datAFLow "$FUZZER/repo"
++git -C "$FUZZER/repo" checkout baggybounds
++git -C "$FUZZER/repo" submodule update --init
++git -C "$FUZZER/repo/ext/aflplusplus" checkout 458eb0813a6f7d63eed97f18696bca8274533123
++
++# Fix: CMake-based build systems fail with duplicate (of main) or undefined references (of LLVMFuzzerTestOneInput)
++patch -p1 -d "$FUZZER/repo/ext/aflplusplus" << EOF
++--- a/utils/aflpp_driver/aflpp_driver.c
+++++ b/utils/aflpp_driver/aflpp_driver.c
++@@ -54,16 +54,17 @@ $AFL_HOME/afl-fuzz -i IN -o OUT ./a.out
++   #include "hash.h"
++ #endif
++
++-int                   __afl_sharedmem_fuzzing = 1;
+++int                   __afl_sharedmem_fuzzing = 0;
++ extern unsigned int * __afl_fuzz_len;
++ extern unsigned char *__afl_fuzz_ptr;
++
++ // libFuzzer interface is thin, so we don't include any libFuzzer headers.
++-int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size);
+++__attribute__((weak)) int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size);
++ __attribute__((weak)) int LLVMFuzzerInitialize(int *argc, char ***argv);
++
++ // Notify AFL about persistent mode.
++-static volatile char AFL_PERSISTENT[] = "##SIG_AFL_PERSISTENT##";
+++// DISABLED to avoid afl-showmap misbehavior
+++static volatile char AFL_PERSISTENT[] = "##SIG_AFL_NOT_PERSISTENT##";
++ int                  __afl_persistent_loop(unsigned int);
++
++ // Notify AFL about deferred forkserver.
++@@ -202,7 +203,7 @@ static int ExecuteFilesOnyByOne(int argc, char **argv) {
++
++ }
++
++-int main(int argc, char **argv) {
+++__attribute__((weak)) int main(int argc, char **argv) {
++
++   if (argc < 2 || strncmp(argv[1], "-h", 2) == 0)
++     printf(
++@@ -276,6 +277,7 @@ int main(int argc, char **argv) {
++
++   }
++
+++  N = 1;
++   assert(N > 0);
++
++   __afl_manual_init();
++@@ -310,3 +312,9 @@ int main(int argc, char **argv) {
++
++ }
++
+++__attribute__((weak))
+++int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
+++{
+++  // assert(0 && "LLVMFuzzerTestOneInput should not be implemented in afl_driver");
+++  return 0;
+++}
++EOF
+diff --git a/fuzzers/dataflow_array_use_val/findings.sh b/fuzzers/dataflow_array_use_val/findings.sh
+new file mode 100755
+index 00000000..afc482c5
+--- /dev/null
++++ b/fuzzers/dataflow_array_use_val/findings.sh
+@@ -0,0 +1,14 @@
++#!/bin/bash
++
++##
++# Pre-requirements:
++# - env SHARED: path to directory shared with host (to store results)
++##
++
++CRASH_DIR="$SHARED/findings/crashes"
++
++if [ ! -d "$CRASH_DIR" ]; then
++    exit 1
++fi
++
++find "$CRASH_DIR" -type f -name 'id:*'
+diff --git a/fuzzers/dataflow_array_use_val/instrument.sh b/fuzzers/dataflow_array_use_val/instrument.sh
+new file mode 100755
+index 00000000..f7dab29b
+--- /dev/null
++++ b/fuzzers/dataflow_array_use_val/instrument.sh
+@@ -0,0 +1,42 @@
++#!/bin/bash
++set -e
++
++##
++# Pre-requirements:
++# - env FUZZER: path to fuzzer work dir
++# - env TARGET: path to target work dir
++# - env MAGMA: path to Magma support files
++# - env OUT: path to directory where artifacts are stored
++# - env CFLAGS and CXXFLAGS must be set to link against Magma instrumentation
++##
++
++LLVM_PATH=/usr/lib/llvm-12/bin
++if [ -f "$TARGET/src/dataflow-mem-funcs.txt" ]; then
++    export FUZZALLOC_DEF_MEM_FUNCS="$TARGET/src/dataflow-mem-funcs.txt"
++fi
++
++export FUZZALLOC_DEF_SENSITIVITY="array"
++export FUZZALLOC_USE_SENSITIVITY="read:write"
++export FUZZALLOC_USE_CAPTURE="value"
++export FUZZALLOC_USE_INST="afl"
++
++export CC="$FUZZER/dataflow/bin/dataflow-cc"
++export CXX="$FUZZER/dataflow/bin/dataflow-c++"
++export AS="${LLVM_PATH}/llvm-as"
++export RANLIB="${LLVM_PATH}/llvm-ranlib"
++export AR="${LLVM_PATH}/llvm-ar"
++export LD="${LLVM_PATH}/ld.lld"
++export NM="${LLVM_PATH}/llvm-nm"
++
++export LIBS="$LIBS -lc++ -lc++abi $FUZZER/repo/ext/aflplusplus/utils/aflpp_driver/libAFLDriver.a"
++export CXXFLAGS="$CXXFLAGS -stdlib=libc++"
++
++export OUT="$OUT/afl"
++export LDFLAGS="$LDFLAGS -L$OUT"
++
++"$MAGMA/build.sh"
++"$TARGET/build.sh"
++
++# NOTE: We pass $OUT directly to the target build.sh script, since the artifact
++#       itself is the fuzz target. In the case of Angora, we might need to
++#       replace $OUT by $OUT/fast and $OUT/track, for instance.
+diff --git a/fuzzers/dataflow_array_use_val/preinstall.sh b/fuzzers/dataflow_array_use_val/preinstall.sh
+new file mode 100755
+index 00000000..e5e28077
+--- /dev/null
++++ b/fuzzers/dataflow_array_use_val/preinstall.sh
+@@ -0,0 +1,43 @@
++#!/bin/bash
++set -e
++
++apt-get update && \
++    apt-get install -y make build-essential git wget libexpat1-dev
++
++apt-get install -y apt-utils apt-transport-https ca-certificates gnupg
++apt-get install -y clang-12 clangd-12 clang-tools-12 libc++1-12 libc++-12-dev \
++    libc++abi1-12 libc++abi-12-dev libclang1-12 libclang-12-dev libclang-common-12-dev \
++    libclang-cpp12 libclang-cpp12-dev liblld-12 liblld-12-dev liblldb-12 \
++    liblldb-12-dev libllvm12 libomp-12-dev libomp5-12 lld-12 lldb-12 \
++    llvm-12 llvm-12-dev llvm-12-runtime llvm-12-tools
++
++apt-get install -y cmake libz-dev python3
++
++update-alternatives \
++  --install /usr/lib/llvm              llvm             /usr/lib/llvm-12  20 \
++  --slave   /usr/bin/llvm-config       llvm-config      /usr/bin/llvm-config-12  \
++    --slave   /usr/bin/llvm-ar           llvm-ar          /usr/bin/llvm-ar-12 \
++    --slave   /usr/bin/llvm-as           llvm-as          /usr/bin/llvm-as-12 \
++    --slave   /usr/bin/llvm-bcanalyzer   llvm-bcanalyzer  /usr/bin/llvm-bcanalyzer-12 \
++    --slave   /usr/bin/llvm-c-test       llvm-c-test      /usr/bin/llvm-c-test-12 \
++    --slave   /usr/bin/llvm-cov          llvm-cov         /usr/bin/llvm-cov-12 \
++    --slave   /usr/bin/llvm-diff         llvm-diff        /usr/bin/llvm-diff-12 \
++    --slave   /usr/bin/llvm-dis          llvm-dis         /usr/bin/llvm-dis-12 \
++    --slave   /usr/bin/llvm-dwarfdump    llvm-dwarfdump   /usr/bin/llvm-dwarfdump-12 \
++    --slave   /usr/bin/llvm-extract      llvm-extract     /usr/bin/llvm-extract-12 \
++    --slave   /usr/bin/llvm-link         llvm-link        /usr/bin/llvm-link-12 \
++    --slave   /usr/bin/llvm-mc           llvm-mc          /usr/bin/llvm-mc-12 \
++    --slave   /usr/bin/llvm-nm           llvm-nm          /usr/bin/llvm-nm-12 \
++    --slave   /usr/bin/llvm-objdump      llvm-objdump     /usr/bin/llvm-objdump-12 \
++    --slave   /usr/bin/llvm-ranlib       llvm-ranlib      /usr/bin/llvm-ranlib-12 \
++    --slave   /usr/bin/llvm-readobj      llvm-readobj     /usr/bin/llvm-readobj-12 \
++    --slave   /usr/bin/llvm-rtdyld       llvm-rtdyld      /usr/bin/llvm-rtdyld-12 \
++    --slave   /usr/bin/llvm-size         llvm-size        /usr/bin/llvm-size-12 \
++    --slave   /usr/bin/llvm-stress       llvm-stress      /usr/bin/llvm-stress-12 \
++    --slave   /usr/bin/llvm-symbolizer   llvm-symbolizer  /usr/bin/llvm-symbolizer-12 \
++    --slave   /usr/bin/llvm-tblgen       llvm-tblgen      /usr/bin/llvm-tblgen-12
++
++update-alternatives \
++  --install /usr/bin/clang                 clang                  /usr/bin/clang-12     20 \
++  --slave   /usr/bin/clang++               clang++                /usr/bin/clang++-12 \
++  --slave   /usr/bin/clang-cpp             clang-cpp              /usr/bin/clang-cpp-12
+diff --git a/fuzzers/dataflow_array_use_val/run.sh b/fuzzers/dataflow_array_use_val/run.sh
+new file mode 100755
+index 00000000..18c8d6f0
+--- /dev/null
++++ b/fuzzers/dataflow_array_use_val/run.sh
+@@ -0,0 +1,28 @@
++#!/bin/bash
++
++##
++# Pre-requirements:
++# - env FUZZER: path to fuzzer work dir
++# - env TARGET: path to target work dir
++# - env OUT: path to directory where artifacts are stored
++# - env SHARED: path to directory shared with host (to store results)
++# - env PROGRAM: name of program to run (should be found in $OUT)
++# - env ARGS: extra arguments to pass to the program
++# - env FUZZARGS: extra arguments to pass to the fuzzer
++##
++
++if nm "$OUT/afl/$PROGRAM" | grep -E '^[0-9a-f]+\s+[Ww]\s+main$'; then
++    ARGS="-"
++fi
++
++mkdir -p "$SHARED/findings"
++
++export AFL_SKIP_CPUFREQ=1
++export AFL_NO_AFFINITY=1
++export AFL_NO_UI=1
++export AFL_NO_FORKSRV=1
++
++"$FUZZER/repo/ext/aflplusplus/afl-fuzz" \
++    -i "$TARGET/corpus/$PROGRAM" -o "$SHARED/findings" \
++    -m none -t 1000+ -d $FUZZARGS -- \
++    "$OUT/afl/$PROGRAM" $ARGS 2>&1
+diff --git a/fuzzers/dataflow_array_use_val/runonce.sh b/fuzzers/dataflow_array_use_val/runonce.sh
+new file mode 100755
+index 00000000..a9ebb068
+--- /dev/null
++++ b/fuzzers/dataflow_array_use_val/runonce.sh
+@@ -0,0 +1,28 @@
++#!/bin/bash -e
++
++##
++# Pre-requirements:
++# - $1: path to test case
++# - env FUZZER: path to fuzzer work dir
++# - env TARGET: path to target work dir
++# - env OUT: path to directory where artifacts are stored
++# - env PROGRAM: name of program to run (should be found in $OUT)
++# - env ARGS: extra arguments to pass to the program
++##
++
++export TIMELIMIT=0.1s
++
++run_limited()
++{
++    ${@:1}
++    test $? -lt 128
++}
++export -f run_limited
++
++args="${ARGS/@@/"$1"}"
++if [ -z "$args" ]; then
++    args="$1"
++fi
++
++timeout -s KILL --preserve-status $TIMELIMIT bash -c \
++    "run_limited '$OUT/afl/$PROGRAM' $args"
+diff --git a/fuzzers/dataflow_array_use_val/src/.gitignore b/fuzzers/dataflow_array_use_val/src/.gitignore
+new file mode 100644
+index 00000000..259148fa
+--- /dev/null
++++ b/fuzzers/dataflow_array_use_val/src/.gitignore
+@@ -0,0 +1,32 @@
++# Prerequisites
++*.d
++
++# Compiled Object files
++*.slo
++*.lo
++*.o
++*.obj
++
++# Precompiled Headers
++*.gch
++*.pch
++
++# Compiled Dynamic libraries
++*.so
++*.dylib
++*.dll
++
++# Fortran module files
++*.mod
++*.smod
++
++# Compiled Static libraries
++*.lai
++*.la
++*.a
++*.lib
++
++# Executables
++*.exe
++*.out
++*.app
+diff --git a/fuzzers/dataflow_array_use_val/src/afl_driver.cpp b/fuzzers/dataflow_array_use_val/src/afl_driver.cpp
+new file mode 100644
+index 00000000..42ef010b
+--- /dev/null
++++ b/fuzzers/dataflow_array_use_val/src/afl_driver.cpp
+@@ -0,0 +1,205 @@
++//===- afl_driver.cpp - a glue between AFL and libFuzzer --------*- C++ -* ===//
++//
++// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
++// See https://llvm.org/LICENSE.txt for license information.
++// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
++//===----------------------------------------------------------------------===//
++
++/* This file allows to fuzz libFuzzer-style target functions
++ (LLVMFuzzerTestOneInput) with AFL using AFL's persistent (in-process) mode.
++
++Usage:
++################################################################################
++cat << EOF > test_fuzzer.cc
++#include <stddef.h>
++#include <stdint.h>
++extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
++  if (size > 0 && data[0] == 'H')
++    if (size > 1 && data[1] == 'I')
++       if (size > 2 && data[2] == '!')
++       __builtin_trap();
++  return 0;
++}
++EOF
++# Build your target with -fsanitize-coverage=trace-pc-guard using fresh clang.
++clang -g -fsanitize-coverage=trace-pc-guard test_fuzzer.cc -c
++# Build afl-llvm-rt.o.c from the AFL distribution.
++clang -c -w $AFL_HOME/llvm_mode/afl-llvm-rt.o.c
++# Build this file, link it with afl-llvm-rt.o.o and the target code.
++clang++ afl_driver.cpp test_fuzzer.o afl-llvm-rt.o.o
++# Run AFL:
++rm -rf IN OUT; mkdir IN OUT; echo z > IN/z;
++$AFL_HOME/afl-fuzz -i IN -o OUT ./a.out
++################################################################################
++AFL_DRIVER_STDERR_DUPLICATE_FILENAME: Setting this *appends* stderr to the file
++specified. If the file does not exist, it is created. This is useful for getting
++stack traces (when using ASAN for example) or original error messages on hard
++to reproduce bugs. Note that any content written to stderr will be written to
++this file instead of stderr's usual location.
++
++AFL_DRIVER_CLOSE_FD_MASK: Similar to libFuzzer's -close_fd_mask behavior option.
++If 1, close stdout at startup. If 2 close stderr; if 3 close both.
++
++*/
++#include <assert.h>
++#include <errno.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++
++#include <fstream>
++#include <iostream>
++#include <vector>
++
++// libFuzzer interface is thin, so we don't include any libFuzzer headers.
++extern "C" {
++__attribute__((weak)) int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size);
++__attribute__((weak)) int LLVMFuzzerInitialize(int *argc, char ***argv);
++}
++
++// Notify AFL about persistent mode.
++static volatile char AFL_PERSISTENT[] = "##SIG_AFL_PERSISTENT##";
++extern "C" int __afl_persistent_loop(unsigned int);
++static volatile char suppress_warning = AFL_PERSISTENT[0];
++
++// Input buffer.
++static const size_t kMaxAflInputSize = 1 << 20;
++static uint8_t AflInputBuf[kMaxAflInputSize];
++
++// Keep track of where stderr content is being written to, so that
++// dup_and_close_stderr can use the correct one.
++static FILE *output_file = stderr;
++
++// If the user asks us to duplicate stderr, then do it.
++static void maybe_duplicate_stderr() {
++  char *stderr_duplicate_filename =
++      getenv("AFL_DRIVER_STDERR_DUPLICATE_FILENAME");
++
++  if (!stderr_duplicate_filename)
++    return;
++
++  FILE *stderr_duplicate_stream =
++      freopen(stderr_duplicate_filename, "a+", stderr);
++
++  if (!stderr_duplicate_stream) {
++    fprintf(
++        stderr,
++        "Failed to duplicate stderr to AFL_DRIVER_STDERR_DUPLICATE_FILENAME");
++    abort();
++  }
++  output_file = stderr_duplicate_stream;
++}
++
++// Most of these I/O functions were inspired by/copied from libFuzzer's code.
++static void discard_output(int fd) {
++  FILE *temp = fopen("/dev/null", "w");
++  if (!temp)
++    abort();
++  dup2(fileno(temp), fd);
++  fclose(temp);
++}
++
++static void close_stdout() { discard_output(STDOUT_FILENO); }
++
++// Prevent the targeted code from writing to "stderr" but allow sanitizers and
++// this driver to do so.
++static void dup_and_close_stderr() {
++  int output_fileno = fileno(output_file);
++  int output_fd = dup(output_fileno);
++  if (output_fd <= 0)
++    abort();
++  FILE *new_output_file = fdopen(output_fd, "w");
++  if (!new_output_file)
++    abort();
++  discard_output(output_fileno);
++}
++
++static void Printf(const char *Fmt, ...) {
++  va_list ap;
++  va_start(ap, Fmt);
++  vfprintf(output_file, Fmt, ap);
++  va_end(ap);
++  fflush(output_file);
++}
++
++// Close stdout and/or stderr if user asks for it.
++static void maybe_close_fd_mask() {
++  char *fd_mask_str = getenv("AFL_DRIVER_CLOSE_FD_MASK");
++  if (!fd_mask_str)
++    return;
++  int fd_mask = atoi(fd_mask_str);
++  if (fd_mask & 2)
++    dup_and_close_stderr();
++  if (fd_mask & 1)
++    close_stdout();
++}
++
++// Define LLVMFuzzerMutate to avoid link failures for targets that use it
++// with libFuzzer's LLVMFuzzerCustomMutator.
++extern "C" size_t LLVMFuzzerMutate(uint8_t *Data, size_t Size, size_t MaxSize) {
++  assert(false && "LLVMFuzzerMutate should not be called from afl_driver");
++  return 0;
++}
++
++extern "C" __attribute__((weak))
++int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
++{
++  assert(false && "LLVMFuzzerTestOneInput should not be implemented in afl_driver");
++  return 0;
++}
++
++// Execute any files provided as parameters.
++static int ExecuteFilesOnyByOne(int argc, char **argv) {
++  for (int i = 1; i < argc; i++) {
++    std::ifstream in(argv[i], std::ios::binary);
++    in.seekg(0, in.end);
++    size_t length = in.tellg();
++    in.seekg (0, in.beg);
++    if (length < 0 || length > kMaxAflInputSize) {
++      continue;
++    }
++    // Allocate exactly length bytes so that we reliably catch buffer overflows.
++    std::vector<char> bytes(length);
++    in.read(bytes.data(), bytes.size());
++    assert(in);
++    LLVMFuzzerTestOneInput(reinterpret_cast<const uint8_t *>(bytes.data()),
++                           bytes.size());
++  }
++  return 0;
++}
++
++__attribute__((weak))
++int main(int argc, char **argv) {
++  maybe_duplicate_stderr();
++  maybe_close_fd_mask();
++  if (LLVMFuzzerInitialize)
++    LLVMFuzzerInitialize(&argc, &argv);
++  // Do any other expensive one-time initialization here.
++
++  int N = 1;
++  if (argc > 1)
++    return ExecuteFilesOnyByOne(argc, argv);
++
++  assert(N > 0);
++
++  // Call LLVMFuzzerTestOneInput here so that coverage caused by initialization
++  // on the first execution of LLVMFuzzerTestOneInput is ignored.
++  uint8_t dummy_input[1] = {0};
++  LLVMFuzzerTestOneInput(dummy_input, 1);
++
++  int num_runs = 0;
++  while (__afl_persistent_loop(N)) {
++    ssize_t n_read = read(0, AflInputBuf, kMaxAflInputSize);
++    if (n_read > 0) {
++      // Copy AflInputBuf into a separate buffer to let asan find buffer
++      // overflows. Don't use unique_ptr/etc to avoid extra dependencies.
++      uint8_t *copy = new uint8_t[n_read];
++      memcpy(copy, AflInputBuf, n_read);
++      num_runs++;
++      LLVMFuzzerTestOneInput(copy, n_read);
++      delete[] copy;
++    }
++  }
++}
+diff --git a/fuzzers/dataflow_array_use_val/src/standalone_driver.c b/fuzzers/dataflow_array_use_val/src/standalone_driver.c
+new file mode 100644
+index 00000000..411894c7
+--- /dev/null
++++ b/fuzzers/dataflow_array_use_val/src/standalone_driver.c
+@@ -0,0 +1,44 @@
++/*===- StandaloneFuzzTargetMain.c - standalone main() for fuzz targets. ---===//
++//
++// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
++// See https://llvm.org/LICENSE.txt for license information.
++// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
++//
++//===----------------------------------------------------------------------===//
++// This main() function can be linked to a fuzz target (i.e. a library
++// that exports LLVMFuzzerTestOneInput() and possibly LLVMFuzzerInitialize())
++// instead of libFuzzer. This main() function will not perform any fuzzing
++// but will simply feed all input files one by one to the fuzz target.
++//
++// Use this file to provide reproducers for bugs when linking against libFuzzer
++// or other fuzzing engine is undesirable.
++//===----------------------------------------------------------------------===*/
++#include <assert.h>
++#include <stdio.h>
++#include <stdlib.h>
++
++__attribute__((weak))
++extern int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size);
++__attribute__((weak))
++extern int LLVMFuzzerInitialize(int *argc, char ***argv);
++__attribute__((weak))
++int main(int argc, char **argv) {
++  fprintf(stderr, "StandaloneFuzzTargetMain: running %d inputs\n", argc - 1);
++  if (LLVMFuzzerInitialize)
++    LLVMFuzzerInitialize(&argc, &argv);
++  for (int i = 1; i < argc; i++) {
++    fprintf(stderr, "Running: %s\n", argv[i]);
++    FILE *f = fopen(argv[i], "r");
++    assert(f);
++    fseek(f, 0, SEEK_END);
++    size_t len = ftell(f);
++    fseek(f, 0, SEEK_SET);
++    unsigned char *buf = (unsigned char*)malloc(len);
++    size_t n_read = fread(buf, 1, len, f);
++    fclose(f);
++    assert(n_read == len);
++    LLVMFuzzerTestOneInput(buf, len);
++    free(buf);
++    fprintf(stderr, "Done:    %s: (%zd bytes)\n", argv[i], n_read);
++  }
++}
 diff --git a/fuzzers/ddfuzz/preinstall.sh b/fuzzers/ddfuzz/preinstall.sh
 index e15163fe..8c7ff328 100755
 --- a/fuzzers/ddfuzz/preinstall.sh
@@ -435,6 +4359,75 @@ index 8a369e3a..27b70526 100755
 -    "${flag_cmplog[@]}" -d \
 +    -t 1000+ -m none \
      $FUZZARGS -- "$OUT/afl/$PROGRAM" $ARGS 2>&1
+diff --git a/fuzzers/ddfuzz/src/.gitkeep b/fuzzers/ddfuzz/src/.gitkeep
+new file mode 100644
+index 00000000..e69de29b
+diff --git a/fuzzers/honggfuzz/src/.gitkeep b/fuzzers/honggfuzz/src/.gitkeep
+new file mode 100644
+index 00000000..e69de29b
+diff --git a/fuzzers/honggfuzz_asan/src/.gitkeep b/fuzzers/honggfuzz_asan/src/.gitkeep
+new file mode 100644
+index 00000000..e69de29b
+diff --git a/fuzzers/llvm_analysis/findings.sh b/fuzzers/llvm_analysis/findings.sh
+new file mode 100755
+index 00000000..afc482c5
+--- /dev/null
++++ b/fuzzers/llvm_analysis/findings.sh
+@@ -0,0 +1,14 @@
++#!/bin/bash
++
++##
++# Pre-requirements:
++# - env SHARED: path to directory shared with host (to store results)
++##
++
++CRASH_DIR="$SHARED/findings/crashes"
++
++if [ ! -d "$CRASH_DIR" ]; then
++    exit 1
++fi
++
++find "$CRASH_DIR" -type f -name 'id:*'
+diff --git a/fuzzers/llvm_cov/findings.sh b/fuzzers/llvm_cov/findings.sh
+new file mode 100755
+index 00000000..afc482c5
+--- /dev/null
++++ b/fuzzers/llvm_cov/findings.sh
+@@ -0,0 +1,14 @@
++#!/bin/bash
++
++##
++# Pre-requirements:
++# - env SHARED: path to directory shared with host (to store results)
++##
++
++CRASH_DIR="$SHARED/findings/crashes"
++
++if [ ! -d "$CRASH_DIR" ]; then
++    exit 1
++fi
++
++find "$CRASH_DIR" -type f -name 'id:*'
+diff --git a/fuzzers/vanilla/findings.sh b/fuzzers/vanilla/findings.sh
+new file mode 100755
+index 00000000..afc482c5
+--- /dev/null
++++ b/fuzzers/vanilla/findings.sh
+@@ -0,0 +1,14 @@
++#!/bin/bash
++
++##
++# Pre-requirements:
++# - env SHARED: path to directory shared with host (to store results)
++##
++
++CRASH_DIR="$SHARED/findings/crashes"
++
++if [ ! -d "$CRASH_DIR" ]; then
++    exit 1
++fi
++
++find "$CRASH_DIR" -type f -name 'id:*'
 diff --git a/magma/run.sh b/magma/run.sh
 index d6fcdd53..818eae72 100755
 --- a/magma/run.sh
@@ -465,6 +4458,155 @@ index d6fcdd53..818eae72 100755
  
  shopt -s nullglob
  seeds=("$1"/*)
+diff --git a/targets/libpng/src/.gitkeep b/targets/libpng/src/.gitkeep
+new file mode 100644
+index 00000000..e69de29b
+diff --git a/targets/libpng/src/dataflow-mem-funcs.txt b/targets/libpng/src/dataflow-mem-funcs.txt
+new file mode 100644
+index 00000000..aa79ff6f
+--- /dev/null
++++ b/targets/libpng/src/dataflow-mem-funcs.txt
+@@ -0,0 +1,8 @@
++[fuzzalloc]
++fun:png_malloc*
++fun:png_calloc*
++fun:png_realloc*
++
++fun:MAGMA_png_malloc*
++fun:MAGMA_png_calloc*
++fun:MAGMA_png_realloc*
+diff --git a/targets/libsndfile/src/.gitkeep b/targets/libsndfile/src/.gitkeep
+new file mode 100644
+index 00000000..e69de29b
+diff --git a/targets/libsndfile/src/dataflow-mem-funcs.txt b/targets/libsndfile/src/dataflow-mem-funcs.txt
+new file mode 100644
+index 00000000..a133c37f
+--- /dev/null
++++ b/targets/libsndfile/src/dataflow-mem-funcs.txt
+@@ -0,0 +1 @@
++[fuzzalloc]
+diff --git a/targets/libtiff/src/dataflow-mem-funcs.txt b/targets/libtiff/src/dataflow-mem-funcs.txt
+new file mode 100644
+index 00000000..e4ad353e
+--- /dev/null
++++ b/targets/libtiff/src/dataflow-mem-funcs.txt
+@@ -0,0 +1,4 @@
++[fuzzalloc]
++fun:_TIFFmalloc
++fun:_TIFFcalloc
++fun:_TIFFrealloc
+diff --git a/targets/libxml2/src/dataflow-mem-funcs.txt b/targets/libxml2/src/dataflow-mem-funcs.txt
+new file mode 100644
+index 00000000..672727b6
+--- /dev/null
++++ b/targets/libxml2/src/dataflow-mem-funcs.txt
+@@ -0,0 +1,10 @@
++[fuzzalloc]
++fun:xmlMemMalloc
++fun:xmlMemRealloc
++fun:xmlMallocLoc
++fun:xmlReallocLoc
++fun:xmlMallocAtomicLoc
++
++fun:xmlMalloc
++fun:xmlMallocAtomic
++fun:xmlRealloc
+diff --git a/targets/lua/src/.gitkeep b/targets/lua/src/.gitkeep
+new file mode 100644
+index 00000000..e69de29b
+diff --git a/targets/lua/src/dataflow-mem-funcs.txt b/targets/lua/src/dataflow-mem-funcs.txt
+new file mode 100644
+index 00000000..05297124
+--- /dev/null
++++ b/targets/lua/src/dataflow-mem-funcs.txt
+@@ -0,0 +1,6 @@
++[fuzzalloc]
++fun:luaM_malloc_
++
++fun:luaM_new
++fun:luaM_newvector
++fun:luaM_newobject
+diff --git a/targets/openssl/src/dataflow-mem-funcs.txt b/targets/openssl/src/dataflow-mem-funcs.txt
+new file mode 100644
+index 00000000..ad318826
+--- /dev/null
++++ b/targets/openssl/src/dataflow-mem-funcs.txt
+@@ -0,0 +1,15 @@
++[fuzzalloc]
++fun:OPENSSL_malloc
++fun:OPENSSL_zalloc
++fun:OPENSSL_realloc
++fun:OPENSSL_clear_realloc
++
++fun:CRYPTO_malloc
++fun:CRYPTO_zalloc
++fun:CRYPTO_realloc
++fun:CRYPTO_clear_realloc
++
++fun:CRYPTO_secure_malloc
++fun:CRYPTO_secure_zalloc
++fun:CRYPTO_mem_debug_malloc
++fun:CRYPTO_mem_debug_realloc
+diff --git a/targets/php/src/.gitkeep b/targets/php/src/.gitkeep
+new file mode 100644
+index 00000000..e69de29b
+diff --git a/targets/php/src/dataflow-mem-funcs.txt b/targets/php/src/dataflow-mem-funcs.txt
+new file mode 100644
+index 00000000..0f8b9a01
+--- /dev/null
++++ b/targets/php/src/dataflow-mem-funcs.txt
+@@ -0,0 +1,51 @@
++[fuzzalloc]
++fun:_emalloc
++fun:_safe_emalloc
++fun:_safe_malloc
++fun:_ecalloc
++fun:_erealloc
++fun:_safe_erealloc
++fun:_safe_realloc
++
++fun:emalloc
++fun:safe_emalloc
++fun:safe_malloc
++fun:ecalloc
++fun:erealloc
++fun:safe_erealloc
++fun:safe_realloc
++
++fun:emalloc_rel
++fun:safe_emalloc_rel
++fun:safe_malloc_rel
++fun:ecalloc_rel
++fun:erealloc_rel
++fun:safe_erealloc_rel
++fun:safe_realloc_rel
++
++fun:__zend_malloc
++fun:__zend_calloc
++fun:__zend_realloc
++
++fun:pemalloc
++fun:safe_pemalloc
++fun:pecalloc
++fun:perealloc
++fun:safe_perealloc
++fun:perealloc_recoverable
++
++fun:pemalloc_rel
++fun:safe_pemalloc_rel
++fun:pecalloc_rel
++fun:perealloc_rel
++fun:safe_perealloc_rel
++fun:perealloc_recoverable_rel
++
++fun:_zend_mm_alloc
++fun:_zend_mm_realloc
++
++fun:zend_mm_alloc
++fun:zend_mm_realloc
++
++fun:zend_mm_alloc_rel
++fun:zend_mm_realloc_rel
 diff --git a/targets/poppler/fetch.sh b/targets/poppler/fetch.sh
 index 65966e99..6914407c 100755
 --- a/targets/poppler/fetch.sh
@@ -479,8 +4621,33 @@ index 65966e99..6914407c 100755
 +	"$TARGET/freetype2"
  git -C "$TARGET/freetype2" checkout 50d0033f7ee600c5f5831b28877353769d1f7d48
 \ No newline at end of file
+diff --git a/targets/sqlite3/src/.gitkeep b/targets/sqlite3/src/.gitkeep
+new file mode 100644
+index 00000000..e69de29b
+diff --git a/targets/sqlite3/src/dataflow-mem-funcs.txt b/targets/sqlite3/src/dataflow-mem-funcs.txt
+new file mode 100644
+index 00000000..92b11c11
+--- /dev/null
++++ b/targets/sqlite3/src/dataflow-mem-funcs.txt
+@@ -0,0 +1,16 @@
++[fuzzalloc]
++fun:mallocWithAlarm
++fun:sqlite3Malloc
++fun:sqlite3_malloc
++fun:sqlite3_malloc64
++fun:sqlite3Realloc
++fun:sqlite3_realloc
++fun:sqlite3_realloc64
++fun:sqlite3MallocZero
++fun:sqlite3DbMallocZero
++fun:dbMallocRawFinish
++fun:sqlite3DbMallocRaw
++fun:sqlite3DbMallocRawNN
++fun:dbReallocFinish
++fun:sqlite3DbRealloc
++fun:sqlite3DbReallocOrFree # This also frees!?!
 diff --git a/tools/captain/captainrc b/tools/captain/captainrc
-index 466d2164..daee625f 100644
+index 466d2164..c2945e6c 100644
 --- a/tools/captain/captainrc
 +++ b/tools/captain/captainrc
 @@ -10,7 +10,7 @@
@@ -492,12 +4659,19 @@ index 466d2164..daee625f 100644
  
  # [WORKER_MODE]: defines the type of CPU resources to allocate (default: 1)
  # - 1: logical cores (possibly SMT-enabled)
-@@ -71,7 +71,7 @@ POLL=5
+@@ -71,7 +71,14 @@ POLL=5
  ###
  
  # FUZZERS: an array of fuzzer names (from magma/fuzzers/*) to evaluate
 -FUZZERS=(afl aflfast moptafl aflplusplus fairfuzz honggfuzz)
-+FUZZERS=(aflplusplus_lto aflplusplus_lto_no_cmplog angora ddfuzz dataflow_array_use dataflow_array_use_offset dataflow_array_use_val dataflow_array_struct_use dataflow_array_struct_use_offset dataflow_array_struct_use_val)
++FUZZERS=(aflplusplus_lto aflplusplus_lto_no_cmplog angora ddfuzz dataflow_access dataflow_access_offset)
++
++aflplusplus_lto_TARGETS=(libpng libtiff libxml2 lua sqlite3)
++aflplusplus_lto_no_cmplog_TARGETS=(libpng libtiff libxml2 lua sqlite3)
++angora_TARGETS=(libpng libtiff libxml2 lua sqlite3)
++ddfuzz_TARGETS=(libpng libtiff libxml2 lua sqlite3)
++dataflow_access_TARGETS=(libpng libtiff libxml2 lua sqlite3)
++dataflow_access_offset_TARGETS=(libpng libtiff libxml2 lua sqlite3)
  
  # [fuzzer_TARGETS]: an array of target names (from magma/targets/*) to fuzz with
  # `fuzzer`. The `fuzzer` prefix is a fuzzer listed in the FUZZERS array
