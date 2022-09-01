@@ -103,7 +103,7 @@ void MemFuncIdentify::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 bool MemFuncIdentify::runOnModule(Module &M) {
-  if (ClMemFuncs) {
+  if (!ClMemFuncs.empty()) {
     status_stream() << "[" << M.getName()
                     << "] Using custom memory functions from " << ClMemFuncs
                     << '\n';
