@@ -6,6 +6,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <llvm/IR/Constants.h>
+#include <llvm/IR/DebugInfo.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/IntrinsicInst.h>
@@ -83,4 +84,31 @@ Instruction *insertFree(Type *Ty, Value *Ptr, Instruction *InsertPt) {
   Load->setMetadata(Mod->getMDKindID(kNoSanitizeMD), MDNode::get(Ctx, None));
 
   return CallInst::CreateFree(Load, InsertPt);
+}
+
+void logDbgDef(ConstantInt *Tag, const DIVariable *DIVar, Module *M,
+               IRBuilder<> &IRB) {
+  auto &DL = M->getDataLayout();
+  auto &Ctx = M->getContext();
+
+  auto *FileNamePtr = IRB.CreateGlobalStringPtr(DIVar->getFilename());
+  auto *FuncNamePtr = [&]() {
+    if (auto *DILocal = dyn_cast<DILocalVariable>(DIVar)) {
+      auto *SP = getDISubprogram(DILocal->getScope());
+      return IRB.CreateGlobalStringPtr(SP->getName());
+    }
+    return Constant::getNullValue(IRB.getInt8PtrTy());
+  }();
+  auto *Line = ConstantInt::get(IRB.getIntPtrTy(DL), DIVar->getLine());
+  auto *VarNamePtr = IRB.CreateGlobalStringPtr(DIVar->getName());
+
+  auto *MapFnTy = FunctionType::get(Type::getVoidTy(Ctx),
+                                    {Tag->getType(), FileNamePtr->getType(),
+                                     FuncNamePtr->getType(), Line->getType(),
+                                     VarNamePtr->getType()},
+                                    /*isVarArg=*/false);
+  auto MapFn = M->getOrInsertFunction("__dbg_def", MapFnTy);
+  assert(MapFn);
+
+  CallInst::Create(MapFn, {Tag, FileNamePtr, FuncNamePtr, Line, VarNamePtr});
 }

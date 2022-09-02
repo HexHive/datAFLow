@@ -10,6 +10,7 @@
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Pass.h>
+#include <llvm/Support/CommandLine.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/Utils/ModuleUtils.h>
 
@@ -28,6 +29,10 @@ using namespace llvm;
 namespace {
 static unsigned NumTaggedGVs = 0;
 static unsigned NumHeapifiedGVs = 0;
+
+static cl::opt<bool> ClDebugLog("fuzzalloc-global-dbg-tag",
+                                cl::desc("Insert debug log at def sites"),
+                                cl::Hidden, cl::init(false));
 } // anonymous namespace
 
 class GlobalVarTag : public ModulePass {
@@ -132,6 +137,10 @@ GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
     CallInst::Create(BBRegisterFn,
                      {NewGVCasted, ConstantInt::get(IntPtrTy, NewAllocSize)},
                      "", CtorBB);
+
+    if (ClDebugLog) {
+      // TODO insert debug log
+    }
   }
 
   // Deregister the allocation in the baggy bounds table

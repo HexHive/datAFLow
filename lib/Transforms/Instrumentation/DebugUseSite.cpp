@@ -5,6 +5,7 @@
 ///
 //===----------------------------------------------------------------------===//
 
+#include <llvm/IR/DebugInfo.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/InlineAsm.h>
 #include <llvm/IR/Instructions.h>
@@ -60,6 +61,8 @@ void DebugUseSite::doInstrument(InterestingMemoryOperand *Op) {
   }
 
   auto *Inst = Op->getInsn();
+  const auto *Func = Inst->getFunction();
+  const auto *Mod = Func->getParent();
   auto *Ptr = Op->getPtr();
 
   LLVM_DEBUG(dbgs() << "Instrumenting " << *Inst << " (ptr=" << *Ptr << ")\n");
@@ -71,10 +74,25 @@ void DebugUseSite::doInstrument(InterestingMemoryOperand *Op) {
   assert(Inst->getNextNode());
   IRBuilder<> IRB(Inst->getNextNode());
 
+  // Get debug location info
+  const auto &Loc = Inst->getDebugLoc();
+  Constant *FileNamePtr = Constant::getNullValue(Int8PtrTy);
+  Constant *FuncNamePtr = Constant::getNullValue(Int8PtrTy);
+  Constant *Line = Constant::getNullValue(IntPtrTy);
+  if (Loc) {
+    auto *SP = getDISubprogram(Loc.getScope());
+    const auto &FileName = SP->getFile()->getFilename();
+    const auto &FuncName = SP->getName();
+
+    FileNamePtr = IRB.CreateGlobalStringPtr(FileName);
+    FuncNamePtr = IRB.CreateGlobalStringPtr(FuncName);
+    Line = ConstantInt::get(IntPtrTy, Loc.getLine());
+  }
+
   auto *PtrCast = IRB.CreatePointerCast(Ptr, Int8PtrTy);
   auto *PtrElemTy = Ptr->getType()->getPointerElementType();
   auto *Size = ConstantInt::get(IntPtrTy, DL->getTypeStoreSize(PtrElemTy));
-  IRB.CreateCall(BBDebugUseFn, {PtrCast, Size});
+  IRB.CreateCall(BBDebugUseFn, {PtrCast, Size, FileNamePtr, FuncNamePtr, Line});
 }
 
 void DebugUseSite::getAnalysisUsage(AnalysisUsage &AU) const {
@@ -92,8 +110,9 @@ bool DebugUseSite::runOnModule(Module &M) {
   this->IntPtrTy = DL->getIntPtrType(*Ctx);
   this->Int8PtrTy = Type::getInt8PtrTy(*Ctx);
 
-  this->BBDebugUseFn = Mod->getOrInsertFunction(
-      "__bb_dbg_use", Type::getVoidTy(*Ctx), Int8PtrTy, IntPtrTy);
+  this->BBDebugUseFn =
+      Mod->getOrInsertFunction("__dbg_use", Type::getVoidTy(*Ctx), Int8PtrTy,
+                               IntPtrTy, Int8PtrTy, Int8PtrTy, IntPtrTy);
 
   for (auto &F : M) {
     if (F.isDeclaration() || F.getName().startswith("fuzzalloc.")) {

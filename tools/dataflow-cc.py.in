@@ -202,6 +202,8 @@ def main():
     cmd.extend([f'-L{LIB_DIR}', '-lFuzzallocRuntime'])
     if use_inst == 'afl':
         cmd.extend([f'-L{LIB_DIR}', '-lAFLRuntime'])
+    elif use_inst == 'debug':
+        cmd.extend([f'-L{LIB_DIR}', '-lDebug', '-lc++'])
 
     cmd.append('-Qunused-arguments')
 

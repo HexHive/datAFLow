@@ -8,10 +8,14 @@
 #ifndef VARIABLE_TAG_H
 #define VARIABLE_TAG_H
 
+#include <llvm/IR/IRBuilder.h>
+
 namespace llvm {
 class ConstantInt;
+class DIVariable;
 class IntegerType;
 class Instruction;
+class Module;
 class Type;
 class TypeSize;
 class Value;
@@ -29,5 +33,9 @@ llvm::Instruction *insertMalloc(llvm::Type *, llvm::Value *,
 
 /// Insert a call to `free`
 llvm::Instruction *insertFree(llvm::Type *, llvm::Value *, llvm::Instruction *);
+
+/// Insert a call the debug variable def runtime function
+void loglDbgDef(llvm::ConstantInt *, const llvm::DIVariable *, llvm::Module *,
+                llvm::IRBuilder<> &);
 
 #endif // VARIABLE_TAG_H

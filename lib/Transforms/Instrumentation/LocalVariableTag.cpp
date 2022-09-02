@@ -15,11 +15,13 @@
 #include <llvm/IR/Module.h>
 #include <llvm/IR/ValueMap.h>
 #include <llvm/Pass.h>
+#include <llvm/Support/CommandLine.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/Utils/EscapeEnumerator.h>
 #include <llvm/Transforms/Utils/Local.h>
 
 #include "fuzzalloc/Analysis/DefSiteIdentify.h"
+#include "fuzzalloc/Analysis/VariableRecovery.h"
 #include "fuzzalloc/Metadata.h"
 #include "fuzzalloc/Runtime/BaggyBounds.h"
 #include "fuzzalloc/Streams.h"
@@ -34,6 +36,10 @@ using namespace llvm;
 namespace {
 static unsigned NumTaggedLocals = 0;
 static unsigned NumHeapifiedLocals = 0;
+
+static cl::opt<bool> ClDebugLog("fuzzalloc-local-dbg-tag",
+                                cl::desc("Insert debug log at def sites"),
+                                cl::Hidden, cl::init(false));
 } // anonymous namespace
 
 class LocalVarTag : public ModulePass {
@@ -52,6 +58,7 @@ private:
   LLVMContext *Ctx;
   const DataLayout *DL;
   std::unique_ptr<DIBuilder> DbgBuilder;
+  const VariableRecovery::SrcVariables *SrcVars;
 
   IntegerType *TagTy;
   IntegerType *IntPtrTy;
@@ -101,6 +108,11 @@ AllocaInst *LocalVarTag::heapify(AllocaInst *OrigAlloca) {
 
   // Place the malloc call after the new alloca
   insertMalloc(AllocaTy, NewAlloca, OrigAlloca);
+
+  if (ClDebugLog) {
+    const auto &VarInfo = SrcVars->lookup(OrigAlloca);
+    // TODO insert debug log
+  }
 
   // Insert free calls at function exit points
   EscapeEnumerator EE(*OrigAlloca->getFunction());
@@ -167,6 +179,10 @@ AllocaInst *LocalVarTag::tagAlloca(AllocaInst *OrigAlloca) {
   CallInst::Create(BBRegisterFn,
                    {NewAllocaCasted, ConstantInt::get(IntPtrTy, NewAllocSize)},
                    "", OrigAlloca);
+  if (ClDebugLog) {
+    const auto &VarInfo = SrcVars->lookup(OrigAlloca);
+    // TODO insert debug log
+  }
 
   // Now cache and update the other users
   SmallVector<Use *, 16> Uses(
@@ -230,6 +246,7 @@ bool LocalVarTag::runOnModule(Module &M) {
   }
 
   const auto &DefSites = getAnalysis<DefSiteIdentify>().getDefSites();
+  this->SrcVars = &getAnalysis<VariableRecovery>().getVariables();
 
   if (DefSites.empty()) {
     return false;
