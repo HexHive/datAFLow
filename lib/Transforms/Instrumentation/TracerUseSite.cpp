@@ -1,7 +1,7 @@
-//===-- DebugUseSite.cpp - Instrument use sites -----------------*- C++ -*-===//
+//===-- TracerUseSite.cpp - Instrument use sites ----------------*- C++ -*-===//
 ///
 /// \file
-/// Instrument use sites using a debug function
+/// Instrument use sites using the def-use tracer
 ///
 //===----------------------------------------------------------------------===//
 
@@ -22,7 +22,7 @@
 
 using namespace llvm;
 
-#define DEBUG_TYPE "fuzzalloc-dbg-use-site"
+#define DEBUG_TYPE "fuzzalloc-tracer-use-site"
 
 namespace {
 static unsigned NumInstrumentedWrites = 0;
@@ -30,10 +30,10 @@ static unsigned NumInstrumentedReads = 0;
 } // anonymous namespace
 
 /// Instrument use sites
-class DebugUseSite : public ModulePass {
+class TracerUseSite : public ModulePass {
 public:
   static char ID;
-  DebugUseSite() : ModulePass(ID) {}
+  TracerUseSite() : ModulePass(ID) {}
 
   virtual void getAnalysisUsage(AnalysisUsage &) const override;
   virtual bool runOnModule(Module &) override;
@@ -45,15 +45,15 @@ private:
   LLVMContext *Ctx;
   const DataLayout *DL;
 
-  FunctionCallee BBDebugUseFn;
+  FunctionCallee TracerUseFn;
 
   PointerType *Int8PtrTy;
   IntegerType *IntPtrTy;
 };
 
-char DebugUseSite::ID = 0;
+char TracerUseSite::ID = 0;
 
-void DebugUseSite::doInstrument(InterestingMemoryOperand *Op) {
+void TracerUseSite::doInstrument(InterestingMemoryOperand *Op) {
   if (Op->IsWrite) {
     NumInstrumentedWrites++;
   } else {
@@ -94,15 +94,15 @@ void DebugUseSite::doInstrument(InterestingMemoryOperand *Op) {
   auto *PtrCast = IRB.CreatePointerCast(Ptr, Int8PtrTy);
   auto *PtrElemTy = Ptr->getType()->getPointerElementType();
   auto *Size = ConstantInt::get(IntPtrTy, DL->getTypeStoreSize(PtrElemTy));
-  IRB.CreateCall(BBDebugUseFn,
+  IRB.CreateCall(TracerUseFn,
                  {PtrCast, Size, FileNamePtr, FuncNamePtr, Line, Column});
 }
 
-void DebugUseSite::getAnalysisUsage(AnalysisUsage &AU) const {
+void TracerUseSite::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<UseSiteIdentify>();
 }
 
-bool DebugUseSite::runOnModule(Module &M) {
+bool TracerUseSite::runOnModule(Module &M) {
   bool Changed = false;
 
   // Initialize stuff
@@ -113,8 +113,8 @@ bool DebugUseSite::runOnModule(Module &M) {
   this->IntPtrTy = DL->getIntPtrType(*Ctx);
   this->Int8PtrTy = Type::getInt8PtrTy(*Ctx);
 
-  this->BBDebugUseFn = Mod->getOrInsertFunction(
-      "__dbg_use", Type::getVoidTy(*Ctx), Int8PtrTy, IntPtrTy, Int8PtrTy,
+  this->TracerUseFn = Mod->getOrInsertFunction(
+      "__tracer_use", Type::getVoidTy(*Ctx), Int8PtrTy, IntPtrTy, Int8PtrTy,
       Int8PtrTy, IntPtrTy, IntPtrTy);
 
   for (auto &F : M) {
@@ -145,18 +145,18 @@ bool DebugUseSite::runOnModule(Module &M) {
 // Pass registration
 //
 
-static RegisterPass<DebugUseSite> X(DEBUG_TYPE, "Instrument use sites (debug)",
+static RegisterPass<TracerUseSite> X(DEBUG_TYPE, "Instrument use sites (tracer)",
                                     false, false);
 
-static void registerDebugUseSitePass(const PassManagerBuilder &,
+static void registerTracerUseSitePass(const PassManagerBuilder &,
                                      legacy::PassManagerBase &PM) {
-  PM.add(new DebugUseSite());
+  PM.add(new TracerUseSite());
 }
 
 static RegisterStandardPasses
-    RegisterDebugUseSitePass(PassManagerBuilder::EP_OptimizerLast,
-                             registerDebugUseSitePass);
+    RegisterTracerUseSitePass(PassManagerBuilder::EP_OptimizerLast,
+                             registerTracerUseSitePass);
 
 static RegisterStandardPasses
-    RegisterDebugUseSitePass0(PassManagerBuilder::EP_EnabledOnOptLevel0,
-                              registerDebugUseSitePass);
+    RegisterTracerUseSitePass0(PassManagerBuilder::EP_EnabledOnOptLevel0,
+                              registerTracerUseSitePass);

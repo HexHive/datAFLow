@@ -109,7 +109,7 @@ void logDbgDef(const DIVariable *DIVar, Module *M, IRBuilder<> &IRB) {
                                      FuncNamePtr->getType(), Line->getType(),
                                      Column->getType(), VarNamePtr->getType()},
                                     /*isVarArg=*/false);
-  auto MapFn = M->getOrInsertFunction("__dbg_def", MapFnTy);
+  auto MapFn = M->getOrInsertFunction("__tracer_def", MapFnTy);
   assert(MapFn);
 
   CallInst::Create(MapFn, {FileNamePtr, FuncNamePtr, Line, Column, VarNamePtr});

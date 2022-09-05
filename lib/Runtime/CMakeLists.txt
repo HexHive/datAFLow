@@ -8,11 +8,11 @@ add_library(FuzzallocRuntime STATIC
 )
 install(TARGETS FuzzallocRuntime LIBRARY DESTINATION lib)
 
-add_library(DebugRuntime STATIC
+add_library(TracerRuntime STATIC
   BaggyBounds.c
-  Debug.cpp
+  Tracer.cpp
 )
-target_link_libraries(DebugRuntime PUBLIC
+target_link_libraries(TracerRuntime PUBLIC
   ${LLVM_LIBS}
 )
-install(TARGETS DebugRuntime LIBRARY DESTINATION lib)
+install(TARGETS TracerRuntime LIBRARY DESTINATION lib)

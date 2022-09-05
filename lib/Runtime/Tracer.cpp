@@ -1,7 +1,7 @@
-//===-- Debug.cpp - Debug runtime -------------------------------*- C++ -*-===//
+//===-- Tracer.cpp - Tracer runtime -----------------------------*- C++ -*-===//
 ///
 /// \file
-/// Debug runtime for analysing def-use chains
+/// Tracer runtime for analysing def-use chains
 ///
 //===----------------------------------------------------------------------===//
 
@@ -211,20 +211,20 @@ __attribute__((constructor)) static void initializeTimeout() {
 //
 
 extern "C" {
-void __dbg_def(tag_t Tag, const char *File, const char *Func, size_t Line,
+void __tracer_def(tag_t Tag, const char *File, const char *Func, size_t Line,
                size_t Column, const char *Var) {
   Log.addDef(Tag, File, Func, Line, Column,
              (uintptr_t)__builtin_return_address(0), Var);
 }
 
-void __dbg_use(void *Ptr, size_t Size, const char *File, const char *Func,
+void __tracer_use(void *Ptr, size_t Size, const char *File, const char *Func,
                size_t Line, size_t Column) {
   uintptr_t Base;
   DefInfo *Def = (DefInfo *)__bb_lookup(Ptr, &Base, sizeof(DefInfo));
-//  if (likely(Def != nullptr)) {
-//    ptrdiff_t Offset = (uintptr_t)Ptr - Base;
-//    SrcLocation Loc = mkSrcLocation(File, Func, Line, Column);
+  if (likely(Def != nullptr)) {
+    ptrdiff_t Offset = (uintptr_t)Ptr - Base;
+    SrcLocation Loc = mkSrcLocation(File, Func, Line, Column);
 //    Log.addUse(*Def, Offset, Loc, (uintptr_t)__builtin_return_address(0));
-//  }
+  }
 }
 }

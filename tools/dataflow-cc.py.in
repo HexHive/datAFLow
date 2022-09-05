@@ -42,7 +42,7 @@ def parse_args():
     use_arg_group.add_argument('--use-capture',
                                 choices=('use', 'offset', 'value'),
                                 help='what to capture at the use site')
-    use_arg_group.add_argument('--use-inst', choices=('afl', 'debug'),
+    use_arg_group.add_argument('--use-inst', choices=('afl', 'tracer'),
                                help='use site instrumentation type')
 
     return parser.parse_known_args()
@@ -189,10 +189,10 @@ def main():
         ])
         if check_lto():
             cmd.append('-flto')
-    elif use_inst == 'debug':
+    elif use_inst == 'tracer':
         cmd.extend([
             '-O0',
-            '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libDebugUseSite.so',
+            '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libTracerUseSite.so',
         ])
 
     # Clang args
@@ -202,10 +202,10 @@ def main():
     cmd.extend([f'-L{LIB_DIR}', '-lFuzzallocRuntime'])
     if use_inst == 'afl':
         cmd.extend([f'-L{LIB_DIR}', '-lAFLRuntime'])
-    elif use_inst == 'debug':
+    elif use_inst == 'tracer':
         # TODO move this into `get_llvm_args`
         cmd.extend(['-mllvm', '-fuzzalloc-local-dbg-tag'])
-        cmd.extend([f'-L{LIB_DIR}', '-lDebugRuntime', '-lstdc++',
+        cmd.extend([f'-L{LIB_DIR}', '-lTracerRuntime', '-lstdc++',
                     '-L@LLVM_LIBRARY_DIR@', '-lLLVMSupport',
                     '@LLVM_PTHREAD_LIB@', '-lm', '-ltinfo'])
 

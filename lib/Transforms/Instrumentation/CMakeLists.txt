@@ -6,13 +6,13 @@ target_link_libraries(AFLUseSite PUBLIC
 )
 install(TARGETS AFLUseSite LIBRARY DESTINATION lib)
 
-add_library(DebugUseSite SHARED
-  DebugUseSite.cpp
+add_library(TracerUseSite SHARED
+  TracerUseSite.cpp
 )
-target_link_libraries(DebugUseSite PUBLIC
+target_link_libraries(TracerUseSite PUBLIC
   UseSiteIdentify
 )
-install(TARGETS DebugUseSite LIBRARY DESTINATION lib)
+install(TARGETS TracerUseSite LIBRARY DESTINATION lib)
 
 add_library(GlobalVariableTag SHARED
   GlobalVariableTag.cpp
