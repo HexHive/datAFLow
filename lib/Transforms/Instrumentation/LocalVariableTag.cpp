@@ -52,16 +52,16 @@ public:
 
 private:
   AllocaInst *heapify(AllocaInst *);
-  AllocaInst *tagAlloca(AllocaInst *);
+  AllocaInst *tag(AllocaInst *, Constant *);
 
   Module *Mod;
   LLVMContext *Ctx;
   const DataLayout *DL;
   std::unique_ptr<DIBuilder> DbgBuilder;
-  const VariableRecovery::SrcVariables *SrcVars;
 
-  IntegerType *TagTy;
   IntegerType *IntPtrTy;
+  PointerType *Int8PtrTy;
+
   FunctionCallee BBRegisterFn;
   FunctionCallee BBDeregisterFn;
 };
@@ -109,11 +109,6 @@ AllocaInst *LocalVarTag::heapify(AllocaInst *OrigAlloca) {
   // Place the malloc call after the new alloca
   insertMalloc(AllocaTy, NewAlloca, OrigAlloca);
 
-  if (ClDebugLog) {
-    const auto &VarInfo = SrcVars->lookup(OrigAlloca);
-    // TODO insert debug log
-  }
-
   // Insert free calls at function exit points
   EscapeEnumerator EE(*OrigAlloca->getFunction());
   while (auto *AtExit = EE.Next()) {
@@ -132,9 +127,11 @@ AllocaInst *LocalVarTag::heapify(AllocaInst *OrigAlloca) {
   return NewAlloca;
 }
 
-AllocaInst *LocalVarTag::tagAlloca(AllocaInst *OrigAlloca) {
+AllocaInst *LocalVarTag::tag(AllocaInst *OrigAlloca, Constant *Metadata) {
   auto *OrigTy = OrigAlloca->getAllocatedType();
-  auto NewAllocSize = getTaggedVarSize(DL->getTypeAllocSize(OrigTy));
+  auto *MetaTy = Metadata->getType();
+  auto MetaSize = DL->getTypeAllocSize(MetaTy);
+  auto NewAllocSize = getTaggedVarSize(DL->getTypeAllocSize(OrigTy), MetaSize);
 
   if (NewAllocSize > IntegerType::MAX_INT_BITS) {
     warning_stream() << "Unable to tag alloca `" << OrigAlloca->getName()
@@ -144,11 +141,11 @@ AllocaInst *LocalVarTag::tagAlloca(AllocaInst *OrigAlloca) {
   }
 
   auto OrigSize = DL->getTypeAllocSize(OrigTy);
-  auto PaddingSize = NewAllocSize - OrigSize - kMetaSize;
+  auto PaddingSize = NewAllocSize - OrigSize - MetaSize;
   auto *PaddingTy = ArrayType::get(Type::getInt8Ty(*Ctx), PaddingSize);
 
   auto *NewAllocaTy =
-      StructType::get(*Ctx, {OrigTy, PaddingTy, TagTy}, /*isPacked=*/true);
+      StructType::get(*Ctx, {OrigTy, PaddingTy, MetaTy}, /*isPacked=*/true);
   auto *NewAlloca = new AllocaInst(
       NewAllocaTy, OrigAlloca->getType()->getPointerAddressSpace(),
       OrigAlloca->hasName() ? OrigAlloca->getName().str() + ".tagged" : "",
@@ -162,12 +159,11 @@ AllocaInst *LocalVarTag::tagAlloca(AllocaInst *OrigAlloca) {
   auto *Int32Ty = IntegerType::getInt32Ty(*Ctx);
   auto *Zero = ConstantInt::getNullValue(Int32Ty);
 
-  // Store the tag
-  auto *Tag = generateTag(TagTy);
+  // Store the metadata
   auto *InitGEP = GetElementPtrInst::CreateInBounds(
       NewAllocaTy, NewAlloca, {Zero, ConstantInt::get(Int32Ty, 2)}, "",
       OrigAlloca);
-  auto *InitStore = new StoreInst(Tag, InitGEP, OrigAlloca);
+  auto *InitStore = new StoreInst(Metadata, InitGEP, OrigAlloca);
   InitStore->setMetadata(Mod->getMDKindID(kFuzzallocNoInstrumentMD),
                          MDNode::get(*Ctx, None));
   InitStore->setMetadata(Mod->getMDKindID(kNoSanitizeMD),
@@ -179,10 +175,6 @@ AllocaInst *LocalVarTag::tagAlloca(AllocaInst *OrigAlloca) {
   CallInst::Create(BBRegisterFn,
                    {NewAllocaCasted, ConstantInt::get(IntPtrTy, NewAllocSize)},
                    "", OrigAlloca);
-  if (ClDebugLog) {
-    const auto &VarInfo = SrcVars->lookup(OrigAlloca);
-    // TODO insert debug log
-  }
 
   // Now cache and update the other users
   SmallVector<Use *, 16> Uses(
@@ -219,6 +211,7 @@ AllocaInst *LocalVarTag::tagAlloca(AllocaInst *OrigAlloca) {
 
 void LocalVarTag::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<DefSiteIdentify>();
+  AU.addRequired<VariableRecovery>();
 }
 
 bool LocalVarTag::runOnModule(Module &M) {
@@ -227,12 +220,13 @@ bool LocalVarTag::runOnModule(Module &M) {
   this->DL = &M.getDataLayout();
   this->DbgBuilder = std::make_unique<DIBuilder>(M);
 
-  this->TagTy = Type::getIntNTy(*Ctx, kNumTagBits);
   this->IntPtrTy = DL->getIntPtrType(*Ctx);
+  this->Int8PtrTy = Type::getInt8PtrTy(*Ctx);
+
+  auto *TagTy = Type::getIntNTy(*Ctx, kNumTagBits);
 
   {
     auto *VoidTy = Type::getVoidTy(*Ctx);
-    auto *Int8PtrTy = Type::getInt8PtrTy(*Ctx);
 
     this->BBRegisterFn =
         M.getOrInsertFunction("__bb_register", VoidTy, Int8PtrTy, IntPtrTy);
@@ -246,7 +240,7 @@ bool LocalVarTag::runOnModule(Module &M) {
   }
 
   const auto &DefSites = getAnalysis<DefSiteIdentify>().getDefSites();
-  this->SrcVars = &getAnalysis<VariableRecovery>().getVariables();
+  const auto &SrcVars = getAnalysis<VariableRecovery>().getVariables();
 
   if (DefSites.empty()) {
     return false;
@@ -259,7 +253,16 @@ bool LocalVarTag::runOnModule(Module &M) {
                                              AllocaDefs.end());
 
   for (auto *Alloca : AllocaDefs) {
-    tagAlloca(Alloca);
+    auto *Metadata = [&]() -> Constant * {
+      if (ClDebugLog) {
+        const auto &SrcVar = SrcVars.lookup(Alloca);
+        return createDebugMetadata(SrcVar, &M);
+      } else {
+        return generateTag(TagTy);
+      }
+    }();
+
+    tag(Alloca, Metadata);
     NumTaggedLocals++;
   }
 

@@ -10,6 +10,8 @@
 
 #include <llvm/IR/IRBuilder.h>
 
+#include "fuzzalloc/Analysis/VariableRecovery.h"
+
 namespace llvm {
 class ConstantInt;
 class DIVariable;
@@ -25,7 +27,7 @@ class Value;
 llvm::ConstantInt *generateTag(llvm::IntegerType *);
 
 /// Compute the adjusted size for a tagged variable
-size_t getTaggedVarSize(const llvm::TypeSize &);
+size_t getTaggedVarSize(const llvm::TypeSize &, size_t);
 
 /// Insert a call to `malloc`
 llvm::Instruction *insertMalloc(llvm::Type *, llvm::Value *,
@@ -37,5 +39,9 @@ llvm::Instruction *insertFree(llvm::Type *, llvm::Value *, llvm::Instruction *);
 /// Insert a call the debug variable def runtime function
 void loglDbgDef(llvm::ConstantInt *, const llvm::DIVariable *, llvm::Module *,
                 llvm::IRBuilder<> &);
+
+/// Create a global `DefInfo` variable for debug tracking of variable
+/// definitions
+llvm::Constant *createDebugMetadata(const VarInfo &, llvm::Module *);
 
 #endif // VARIABLE_TAG_H

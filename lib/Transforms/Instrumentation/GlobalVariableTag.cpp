@@ -44,39 +44,38 @@ public:
   virtual bool runOnModule(Module &) override;
 
 private:
-  GlobalVariable *tagGlobalVariable(GlobalVariable *, BasicBlock *,
-                                    BasicBlock *);
+  GlobalVariable *tag(GlobalVariable *, Constant *, BasicBlock *, BasicBlock *);
 
   Module *Mod;
   LLVMContext *Ctx;
   const DataLayout *DL;
 
-  IntegerType *TagTy;
   IntegerType *IntPtrTy;
+  PointerType *Int8PtrTy;
+
   FunctionCallee BBRegisterFn;
   FunctionCallee BBDeregisterFn;
 };
 
 char GlobalVarTag::ID = 0;
 
-GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
-                                                BasicBlock *CtorBB,
-                                                BasicBlock *DtorBB) {
-  auto *Int8PtrTy = Type::getInt8PtrTy(*Ctx);
+GlobalVariable *GlobalVarTag::tag(GlobalVariable *OrigGV, Constant *Metadata,
+                                  BasicBlock *CtorBB, BasicBlock *DtorBB) {
   auto *OrigTy = OrigGV->getValueType();
-  auto NewAllocSize = getTaggedVarSize(DL->getTypeAllocSize(OrigTy));
+  auto *MetaTy = Metadata->getType();
+  auto MetaSize = DL->getTypeAllocSize(MetaTy);
+  auto NewAllocSize = getTaggedVarSize(DL->getTypeAllocSize(OrigTy), MetaSize);
 
   auto OrigSize = DL->getTypeAllocSize(OrigTy);
-  auto PaddingSize = NewAllocSize - OrigSize - kMetaSize;
+  auto PaddingSize = NewAllocSize - OrigSize - MetaSize;
   auto *PaddingTy = ArrayType::get(Type::getInt8Ty(*Ctx), PaddingSize);
 
   auto *NewGVTy =
-      StructType::get(*Ctx, {OrigTy, PaddingTy, TagTy}, /*isPacked=*/true);
-  auto *Tag = generateTag(TagTy);
+      StructType::get(*Ctx, {OrigTy, PaddingTy, MetaTy}, /*isPacked=*/true);
   auto *NewInit = ConstantStruct::get(
       NewGVTy, {OrigGV->hasInitializer() ? OrigGV->getInitializer()
                                          : ConstantAggregateZero::get(OrigTy),
-                ConstantAggregateZero::get(PaddingTy), Tag});
+                ConstantAggregateZero::get(PaddingTy), Metadata});
 
   // Create a tagged version of the global variable (only visible in this
   // module)
@@ -169,6 +168,7 @@ GlobalVariable *GlobalVarTag::tagGlobalVariable(GlobalVariable *OrigGV,
 
 void GlobalVarTag::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<DefSiteIdentify>();
+  AU.addRequired<VariableRecovery>();
 }
 
 bool GlobalVarTag::runOnModule(Module &M) {
@@ -176,12 +176,13 @@ bool GlobalVarTag::runOnModule(Module &M) {
   this->Ctx = &M.getContext();
   this->DL = &M.getDataLayout();
 
-  this->TagTy = Type::getIntNTy(*Ctx, kNumTagBits);
   this->IntPtrTy = DL->getIntPtrType(*Ctx);
+  this->Int8PtrTy = Type::getInt8PtrTy(*Ctx);
+
+  auto *TagTy = Type::getIntNTy(*Ctx, kNumTagBits);
 
   {
     auto *VoidTy = Type::getVoidTy(*Ctx);
-    auto *Int8PtrTy = Type::getInt8PtrTy(*Ctx);
 
     this->BBRegisterFn =
         M.getOrInsertFunction("__bb_register", VoidTy, Int8PtrTy, IntPtrTy);
@@ -195,6 +196,7 @@ bool GlobalVarTag::runOnModule(Module &M) {
   }
 
   const auto &DefSites = getAnalysis<DefSiteIdentify>().getDefSites();
+  const auto &SrcVars = getAnalysis<VariableRecovery>().getVariables();
 
   if (DefSites.empty()) {
     return false;
@@ -216,11 +218,23 @@ bool GlobalVarTag::runOnModule(Module &M) {
   auto *DtorEntryBB = BasicBlock::Create(*Ctx, "entry", GlobalDtorF);
   appendToGlobalDtors(*Mod, GlobalDtorF, /*Priority=*/0);
 
-  for (auto *Def : DefSites) {
-    if (auto *GV = dyn_cast<GlobalVariable>(Def)) {
-      tagGlobalVariable(GV, CtorEntryBB, DtorEntryBB);
-      NumTaggedGVs++;
-    }
+  const auto &GVDefs =
+      map_range(make_filter_range(
+                    DefSites, [](Value *V) { return isa<GlobalVariable>(V); }),
+                [](Value *V) { return cast<GlobalVariable>(V); });
+
+  for (auto *GV : GVDefs) {
+    auto *Metadata = [&]() -> Constant * {
+      if (ClDebugLog) {
+        const auto &SrcVar = SrcVars.lookup(GV);
+        return createDebugMetadata(SrcVar, &M);
+      } else {
+        return generateTag(TagTy);
+      }
+    }();
+
+    tag(GV, Metadata, CtorEntryBB, DtorEntryBB);
+    NumTaggedGVs++;
   }
 
   ReturnInst::Create(*Ctx, CtorEntryBB);

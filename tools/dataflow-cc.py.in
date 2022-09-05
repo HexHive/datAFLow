@@ -61,7 +61,7 @@ def check_if_assembler(args):
 
 
 def check_lto():
-    return Path('@LLVM_TOOLS_BINARY_DIR', 'lld').exists()
+    return Path('@LLVM_TOOLS_BINARY_DIR@', 'lld').exists()
 
 
 def get_llvm_args(args):
@@ -203,7 +203,11 @@ def main():
     if use_inst == 'afl':
         cmd.extend([f'-L{LIB_DIR}', '-lAFLRuntime'])
     elif use_inst == 'debug':
-        cmd.extend([f'-L{LIB_DIR}', '-lDebug', '-lc++'])
+        # TODO move this into `get_llvm_args`
+        cmd.extend(['-mllvm', '-fuzzalloc-local-dbg-tag'])
+        cmd.extend([f'-L{LIB_DIR}', '-lDebugRuntime', '-lstdc++',
+                    '-L@LLVM_LIBRARY_DIR@', '-lLLVMSupport',
+                    '@LLVM_PTHREAD_LIB@', '-lm', '-ltinfo'])
 
     cmd.append('-Qunused-arguments')
 

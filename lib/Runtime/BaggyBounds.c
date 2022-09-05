@@ -47,8 +47,8 @@ static void initBaggyBounds() {
 }
 
 /// Calculate an allocation size
-static uint64_t calculateAllocSize(size_t Size) {
-  size_t AdjustedSize = Size + kMetaSize;
+static uint64_t calculateAllocSize(size_t Size, size_t MetaSize) {
+  size_t AdjustedSize = Size + MetaSize;
   if (AdjustedSize < kSlotSize) {
     AdjustedSize = kSlotSize;
   }
@@ -99,11 +99,11 @@ void __bb_free(void *Ptr) {
 }
 
 void *__bb_malloc(tag_t Tag, size_t Size) {
-  size_t AllocSize = calculateAllocSize(Size);
+  size_t AllocSize = calculateAllocSize(Size, sizeof(Tag));
   void *Ptr;
   posix_memalign(&Ptr, AllocSize, AllocSize);
   __bb_register(Ptr, AllocSize);
-  tag_t *TagAddr = (tag_t *)((uintptr_t)Ptr + AllocSize - kMetaSize);
+  tag_t *TagAddr = (tag_t *)((uintptr_t)Ptr + AllocSize - sizeof(Tag));
   *TagAddr = Tag;
   return Ptr;
 }
@@ -158,10 +158,10 @@ char *__bb_strdup(tag_t Tag, const char *S) {
   return Ptr;
 }
 
-tag_t __bb_lookup(void *Ptr, uintptr_t *Base) {
+void *__bb_lookup(void *Ptr, uintptr_t *Base, size_t MetaSize) {
   if (!Ptr) {
     *Base = 0;
-    return kFuzzallocDefaultTag;
+    return NULL;
   }
 
   if (unlikely(!Initialized)) {
@@ -173,14 +173,13 @@ tag_t __bb_lookup(void *Ptr, uintptr_t *Base) {
   const unsigned E = __baggy_bounds_table[Index];
   if (!E) {
     *Base = 0;
-    return kFuzzallocDefaultTag;
+    return NULL;
   }
 
   const size_t AllocSize = 1 << E;
   *Base = P & ~(AllocSize - 1);
 
-  tag_t *TagAddr = (tag_t *)(*Base + AllocSize - kMetaSize);
-  return *TagAddr;
+  return *Base + AllocSize - MetaSize;
 }
 
 void *malloc(size_t Size) { return __bb_malloc(kFuzzallocDefaultTag, Size); }

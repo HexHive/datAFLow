@@ -19,9 +19,6 @@ extern "C" {
 /// Slot size (in bytes)
 #define kSlotSize (16)
 
-/// Size of metadata
-#define kMetaSize (sizeof(tag_t))
-
 /// Efficiently calculate the next power-of-2 of `X`
 uint64_t bb_nextPow2(uint64_t X);
 
@@ -35,7 +32,7 @@ void __bb_free(void *Ptr);
 
 void __bb_register(void *Obj, size_t Size);
 void __bb_deregister(void *Obj);
-tag_t __bb_lookup(void *Ptr, uintptr_t *Base);
+void *__bb_lookup(void *Ptr, uintptr_t *Base, size_t MetaSize);
 
 #if defined(__cplusplus)
 }

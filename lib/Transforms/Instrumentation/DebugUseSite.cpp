@@ -79,6 +79,7 @@ void DebugUseSite::doInstrument(InterestingMemoryOperand *Op) {
   Constant *FileNamePtr = Constant::getNullValue(Int8PtrTy);
   Constant *FuncNamePtr = Constant::getNullValue(Int8PtrTy);
   Constant *Line = Constant::getNullValue(IntPtrTy);
+  Constant *Column = Constant::getNullValue(IntPtrTy);
   if (Loc) {
     auto *SP = getDISubprogram(Loc.getScope());
     const auto &FileName = SP->getFile()->getFilename();
@@ -87,12 +88,14 @@ void DebugUseSite::doInstrument(InterestingMemoryOperand *Op) {
     FileNamePtr = IRB.CreateGlobalStringPtr(FileName);
     FuncNamePtr = IRB.CreateGlobalStringPtr(FuncName);
     Line = ConstantInt::get(IntPtrTy, Loc.getLine());
+    Column = ConstantInt::get(IntPtrTy, Loc.getCol());
   }
 
   auto *PtrCast = IRB.CreatePointerCast(Ptr, Int8PtrTy);
   auto *PtrElemTy = Ptr->getType()->getPointerElementType();
   auto *Size = ConstantInt::get(IntPtrTy, DL->getTypeStoreSize(PtrElemTy));
-  IRB.CreateCall(BBDebugUseFn, {PtrCast, Size, FileNamePtr, FuncNamePtr, Line});
+  IRB.CreateCall(BBDebugUseFn,
+                 {PtrCast, Size, FileNamePtr, FuncNamePtr, Line, Column});
 }
 
 void DebugUseSite::getAnalysisUsage(AnalysisUsage &AU) const {
@@ -110,9 +113,9 @@ bool DebugUseSite::runOnModule(Module &M) {
   this->IntPtrTy = DL->getIntPtrType(*Ctx);
   this->Int8PtrTy = Type::getInt8PtrTy(*Ctx);
 
-  this->BBDebugUseFn =
-      Mod->getOrInsertFunction("__dbg_use", Type::getVoidTy(*Ctx), Int8PtrTy,
-                               IntPtrTy, Int8PtrTy, Int8PtrTy, IntPtrTy);
+  this->BBDebugUseFn = Mod->getOrInsertFunction(
+      "__dbg_use", Type::getVoidTy(*Ctx), Int8PtrTy, IntPtrTy, Int8PtrTy,
+      Int8PtrTy, IntPtrTy, IntPtrTy);
 
   for (auto &F : M) {
     if (F.isDeclaration() || F.getName().startswith("fuzzalloc.")) {

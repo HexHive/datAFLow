@@ -13,6 +13,7 @@
 #include <llvm/Pass.h>
 
 namespace llvm {
+class DebugLoc;
 class Type;
 } // namespace llvm
 
@@ -20,10 +21,15 @@ class Type;
 class VarInfo {
 public:
   VarInfo() = default;
-  VarInfo(const llvm::DIVariable *V, const llvm::Type *T) : DbgVar(V), Ty(T) {}
+  VarInfo(const llvm::DIVariable *V, const llvm::DebugLoc *DL,
+          const llvm::Type *T)
+      : DbgVar(V), Loc(DL), Ty(T) {}
+  VarInfo(const llvm::DIVariable *V, const llvm::Type *T)
+      : VarInfo(V, nullptr, T) {}
 
   const llvm::DIVariable *getDbgVar() const { return DbgVar; }
   const llvm::Type *getType() const { return Ty; }
+  const llvm::DebugLoc *getLoc() const { return Loc; }
 
   void dump(llvm::raw_ostream &OS) const {
     if (!DbgVar || !Ty) {
@@ -40,13 +46,11 @@ public:
 
 private:
   const llvm::DIVariable *DbgVar; ///< The debug variable
+  const llvm::DebugLoc *Loc;      ///< The debug location
   const llvm::Type *Ty;           ///< The actual type
 };
 
-llvm::raw_ostream &operator<<(llvm::raw_ostream &OS, const VarInfo &VI) {
-  VI.dump(OS);
-  return OS;
-}
+llvm::raw_ostream &operator<<(llvm::raw_ostream &OS, const VarInfo &VI);
 
 /// Recover source-level debug variables
 class VariableRecovery : public llvm::ModulePass {

@@ -1,5 +1,4 @@
 llvm_map_components_to_libnames(LLVM_LIBS
-  core
   support
 )
 
@@ -13,7 +12,7 @@ add_library(DebugRuntime STATIC
   BaggyBounds.c
   Debug.cpp
 )
-target_link_libraries(DebugRuntime PRIVATE
+target_link_libraries(DebugRuntime PUBLIC
   ${LLVM_LIBS}
 )
 install(TARGETS DebugRuntime LIBRARY DESTINATION lib)

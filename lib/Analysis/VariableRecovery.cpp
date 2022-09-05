@@ -77,6 +77,11 @@ static FuncIgnoreList getFuncIgnoreList() {
 }
 } // anonymous namespace
 
+raw_ostream &operator<<(raw_ostream &OS, const VarInfo &VI) {
+  VI.dump(OS);
+  return OS;
+}
+
 char VariableRecovery::ID = 0;
 
 void VariableRecovery::getAnalysisUsage(AnalysisUsage &AU) const {
@@ -99,6 +104,7 @@ bool VariableRecovery::runOnModule(Module &M) {
       }
 
       auto *Var = cast<DbgVariableIntrinsic>(&I)->getVariable();
+      const auto *Loc = I.getDebugLoc() ? &I.getDebugLoc() : nullptr;
       LLVM_DEBUG(dbgs() << "Handling local variable `" << Var->getName()
                         << "`\n");
 
@@ -108,7 +114,7 @@ bool VariableRecovery::runOnModule(Module &M) {
           continue;
         }
         auto *Ty = V->getType();
-        VarInfo VI(Var, Ty);
+        VarInfo VI(Var, Loc, Ty);
         if (Vars.insert({V, VI}).second) {
           NumLocalVars++;
         }
@@ -120,7 +126,7 @@ bool VariableRecovery::runOnModule(Module &M) {
         auto *Ty = Addr->getType()->isPointerTy()
                        ? Addr->getType()->getPointerElementType()
                        : Addr->getType();
-        VarInfo VI(Var, Ty);
+        VarInfo VI(Var, Loc, Ty);
         if (Vars.insert({Addr, VI}).second) {
           NumLocalVars++;
         }

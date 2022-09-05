@@ -30,47 +30,64 @@
 
 using namespace llvm;
 
-namespace {
+extern "C" {
 /// Source code location
-struct Location {
+struct __attribute__((packed)) SrcLocation {
   const char *File;    ///< File name
   const char *Func;    ///< Function name
-  const size_t LineNo; ///< Line number
-  const uintptr_t PC;  ///< Program counter
-
-  Location(const char *File, const char *Func, size_t Line, uintptr_t PC)
-      : File(File), Func(Func), LineNo(Line), PC(PC) {}
-  Location() = delete;
-
-  bool operator<(const Location &Other) const { return PC < Other.PC; }
+  const size_t Line;   ///< Line number
+  const size_t Column; ///< Column number
 };
-
-static json::Value toJSON(const Location &Loc) {
-  return {Loc.File, Loc.Func, Loc.LineNo, Loc.PC};
-}
 
 /// Variable def site
-struct DefInfo {
-  const Location Loc; ///< Location
-  const char *Var;    ///< Variable name
+struct __attribute__((packed)) DefInfo {
+  const SrcLocation Loc; ///< Location
+  const char *Var;       ///< Variable name
+};
+}
 
-  DefInfo(const Location &Loc, const char *Var) : Loc(Loc), Var(Var) {}
-  DefInfo() = delete;
-
-  bool operator<(const DefInfo &Other) const { return Loc < Other.Loc; }
+namespace std {
+template <> struct less<SrcLocation> {
+  constexpr bool operator()(const SrcLocation &LHS,
+                            const SrcLocation &RHS) const {
+    return LHS.File < RHS.File;
+  }
 };
 
-static json::Value toJSON(const DefInfo &Def) { return {Def.Loc, Def.Var}; }
+template <> struct less<DefInfo> {
+  constexpr bool operator()(const DefInfo &LHS, const DefInfo &RHS) const {
+    return std::less<SrcLocation>{}(LHS.Loc, RHS.Loc);
+  }
+};
+} // namespace std
+
+namespace {
+static inline SrcLocation mkSrcLocation(const char *File, const char *Func,
+                                        size_t Line, size_t Column) {
+  return {File, Func, Line, Column};
+}
+
+static inline DefInfo mkDefInfo(const SrcLocation &Loc, const char *Var) {
+  return {Loc, Var};
+}
+
+static json::Value toJSON(const SrcLocation &Loc) {
+  return {Loc.File, Loc.Func, Loc.Line, Loc.Column};
+}
+
+static json::Value toJSON(const DefInfo &Def) {
+  return {toJSON(Def.Loc), Def.Var};
+}
 
 using DefMap = std::map<tag_t, std::set<DefInfo>>;
-using LocationCountMap = std::map<Location, size_t>;
-using UseMap = std::map<DefInfo, LocationCountMap>;
+using SrcLocationCountMap = std::map<SrcLocation, size_t>;
+using UseMap = std::map<DefInfo, SrcLocationCountMap>;
 
-static json::Value toJSON(const LocationCountMap &Locs) {
+static json::Value toJSON(const SrcLocationCountMap &Locs) {
   json::Array Arr;
 
   for (const auto &[Loc, Count] : Locs) {
-    Arr.push_back({Loc, Count});
+    Arr.push_back({toJSON(Loc), Count});
   }
 
   return std::move(Arr);
@@ -80,7 +97,7 @@ static json::Value toJSON(const UseMap &Uses) {
   json::Array Arr;
 
   for (const auto &[Def, Locs] : Uses) {
-    Arr.push_back({Def, Locs});
+    Arr.push_back({toJSON(Def), toJSON(Locs)});
   }
 
   return std::move(Arr);
@@ -122,7 +139,7 @@ public:
 
     json::Value V = [&]() -> json::Value {
       std::scoped_lock SL(Lock);
-      return Uses;
+      return toJSON(Uses);
     }();
 
     *OS << std::move(V);
@@ -133,23 +150,29 @@ public:
     OS.reset();
   }
 
-  void addDef(tag_t Tag, const char *File, const char *Func, size_t LineNo,
+  void addDef(const char *File, const char *Func, size_t Line, size_t Column,
               uintptr_t PC, const char *Var) {
-    Location Loc(File, Func, LineNo, PC);
-    DefInfo Def(Loc, Var);
+    SrcLocation Loc = mkSrcLocation(File, Func, Line, Column);
+    DefInfo Def = mkDefInfo(Loc, Var);
+
+    std::scoped_lock SL(Lock);
+  }
+
+  void addDef(tag_t Tag, const char *File, const char *Func, size_t Line,
+              size_t Column, uintptr_t PC, const char *Var) {
+    SrcLocation Loc = mkSrcLocation(File, Func, Line, Column);
+    DefInfo Def = mkDefInfo(Loc, Var);
 
     std::scoped_lock SL(Lock);
     Defs[Tag].insert(Def);
   }
 
-  void addUse(tag_t Tag, ptrdiff_t Offset, const char *File, const char *Func,
-              size_t LineNo, uintptr_t PC) {
-    Location Loc(File, Func, LineNo, PC);
-
+  void addUse(const DefInfo *Def, ptrdiff_t Offset, SrcLocation &Loc,
+              uintptr_t PC) {
     std::scoped_lock SL(Lock);
-    for (auto &Def : Defs.at(Tag)) {
-      Uses[Def][Loc]++;
-    }
+    // for (auto &Def : Defs.at(Tag)) {
+    // Uses[Def][Loc]++;
+    //}
   }
 
 private:
@@ -188,20 +211,20 @@ __attribute__((constructor)) static void initializeTimeout() {
 //
 
 extern "C" {
-void __dbg_def(tag_t Tag, const char *File, const char *Func, size_t LineNo,
-               const char *Var) {
-  Log.addDef(Tag, File, Func, LineNo, (uintptr_t)__builtin_return_address(0),
-             Var);
+void __dbg_def(tag_t Tag, const char *File, const char *Func, size_t Line,
+               size_t Column, const char *Var) {
+  Log.addDef(Tag, File, Func, Line, Column,
+             (uintptr_t)__builtin_return_address(0), Var);
 }
 
 void __dbg_use(void *Ptr, size_t Size, const char *File, const char *Func,
-               size_t LineNo) {
+               size_t Line, size_t Column) {
   uintptr_t Base;
-  tag_t DefTag = __bb_lookup(Ptr, &Base);
-  if (likely(DefTag != kFuzzallocDefaultTag)) {
+  DefInfo **Def = (DefInfo **)__bb_lookup(Ptr, &Base, sizeof(DefInfo *));
+  if (likely(Def != nullptr)) {
     ptrdiff_t Offset = (uintptr_t)Ptr - Base;
-    Log.addUse(DefTag, Offset, File, Func, LineNo,
-               (uintptr_t)__builtin_return_address(0));
+    SrcLocation Loc = mkSrcLocation(File, Func, Line, Column);
+    Log.addUse(*Def, Offset, Loc, (uintptr_t)__builtin_return_address(0));
   }
 }
 }

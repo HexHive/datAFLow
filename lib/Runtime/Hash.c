@@ -37,12 +37,12 @@ static inline void __afl_update_cov(tag_t Idx) {
 
 void __afl_hash_def_use(tag_t UseTag, void *Ptr, size_t Size) {
   uintptr_t Base;
-  tag_t DefTag = __bb_lookup(Ptr, &Base);
+  tag_t *DefTag = __bb_lookup(Ptr, &Base, sizeof(tag_t));
   tag_t Hash = 0;
 
-  if (likely(DefTag != kFuzzallocDefaultTag)) {
+  if (likely(DefTag != NULL)) {
     // Compute the hash
-    Hash = (DefTag - kFuzzallocDefaultTag) ^ UseTag;
+    Hash = (*DefTag - kFuzzallocDefaultTag) ^ UseTag;
 
 #ifdef _DEBUG
     fprintf(stderr,
@@ -57,13 +57,13 @@ void __afl_hash_def_use(tag_t UseTag, void *Ptr, size_t Size) {
 
 void __afl_hash_def_use_offset(tag_t UseTag, void *Ptr, size_t Size) {
   uintptr_t Base;
-  tag_t DefTag = __bb_lookup(Ptr, &Base);
+  tag_t *DefTag = __bb_lookup(Ptr, &Base, sizeof(tag_t));
   tag_t Hash = 0;
 
-  if (likely(DefTag != kFuzzallocDefaultTag)) {
+  if (likely(DefTag != NULL)) {
     // Compute the hash
     const ptrdiff_t Offset = (uintptr_t)Ptr - Base;
-    Hash = (DefTag - kFuzzallocDefaultTag) ^ (UseTag + Offset);
+    Hash = (*DefTag - kFuzzallocDefaultTag) ^ (UseTag + Offset);
 
 #ifdef _DEBUG
     fprintf(stderr,
@@ -78,14 +78,14 @@ void __afl_hash_def_use_offset(tag_t UseTag, void *Ptr, size_t Size) {
 
 void __afl_hash_def_use_value(tag_t UseTag, void *Ptr, size_t Size) {
   uintptr_t Base;
-  tag_t DefTag = __bb_lookup(Ptr, &Base);
+  tag_t *DefTag = __bb_lookup(Ptr, &Base, sizeof(tag_t));
   tag_t Hash = 0;
 
-  if (likely(DefTag != kFuzzallocDefaultTag)) {
+  if (likely(DefTag != NULL)) {
     // Compute the hash
     const ptrdiff_t Offset = (uintptr_t)Ptr - Base;
 
-    Hash = (DefTag - kFuzzallocDefaultTag) ^ (UseTag + Offset);
+    Hash = (*DefTag - kFuzzallocDefaultTag) ^ (UseTag + Offset);
     if (MAP_SIZE_POW2 > 16) {
       Hash <<= 4;
     }
