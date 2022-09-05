@@ -40,7 +40,7 @@ llvm::Instruction *insertFree(llvm::Type *, llvm::Value *, llvm::Instruction *);
 void loglDbgDef(llvm::ConstantInt *, const llvm::DIVariable *, llvm::Module *,
                 llvm::IRBuilder<> &);
 
-/// Create a global `DefInfo` variable for debug tracking of variable
+/// Create a constant `DefInfo` struct for debug tracking of variable
 /// definitions
 llvm::Constant *createDebugMetadata(const VarInfo &, llvm::Module *);
 

@@ -175,9 +175,5 @@ Constant *createDebugMetadata(const VarInfo &SrcVar, Module *M) {
   auto *DefInfo = ConstantStruct::get(
       DbgDefInfoTy, {Location, createGlobalVariablePtr(VarNameGV)});
 
-  auto *GV = new GlobalVariable(*M, DbgDefInfoTy, /*isConstant=*/true,
-                                GlobalValue::PrivateLinkage, DefInfo);
-  GV->setUnnamedAddr(GlobalValue::UnnamedAddr::Global);
-
-  return GV;
+  return DefInfo;
 }

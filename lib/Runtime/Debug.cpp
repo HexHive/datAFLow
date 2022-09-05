@@ -220,11 +220,11 @@ void __dbg_def(tag_t Tag, const char *File, const char *Func, size_t Line,
 void __dbg_use(void *Ptr, size_t Size, const char *File, const char *Func,
                size_t Line, size_t Column) {
   uintptr_t Base;
-  DefInfo **Def = (DefInfo **)__bb_lookup(Ptr, &Base, sizeof(DefInfo *));
-  if (likely(Def != nullptr)) {
-    ptrdiff_t Offset = (uintptr_t)Ptr - Base;
-    SrcLocation Loc = mkSrcLocation(File, Func, Line, Column);
-    Log.addUse(*Def, Offset, Loc, (uintptr_t)__builtin_return_address(0));
-  }
+  DefInfo *Def = (DefInfo *)__bb_lookup(Ptr, &Base, sizeof(DefInfo));
+//  if (likely(Def != nullptr)) {
+//    ptrdiff_t Offset = (uintptr_t)Ptr - Base;
+//    SrcLocation Loc = mkSrcLocation(File, Func, Line, Column);
+//    Log.addUse(*Def, Offset, Loc, (uintptr_t)__builtin_return_address(0));
+//  }
 }
 }
