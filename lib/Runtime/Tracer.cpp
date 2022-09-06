@@ -68,69 +68,35 @@ template <> struct less<SrcDef> {
 } // namespace std
 
 namespace {
-/// Runtime location
-struct RuntimeLocation {
-  const std::string File; ///< File name
-  const std::string Func; ///< Function name
-  const size_t Line;      ///< Line number
-  const size_t Column;    ///< Column number
-
-  RuntimeLocation() = delete;
-  RuntimeLocation(const SrcLocation &SrcLoc)
-      : File(SrcLoc.File), Func(SrcLoc.Func), Line(SrcLoc.Line),
-        Column(SrcLoc.Column) {}
-
-  bool operator<(const RuntimeLocation &Other) const {
-    if (File == Other.File) {
-      if (Line == Other.Line) {
-        return Column < Other.Column;
-      }
-      return Line < Other.Line;
-    }
-    return File < Other.File;
-  }
-};
-
-/// Runtime variable def site
-struct RuntimeDef {
-  const RuntimeLocation Loc; ///< Runtime location
-  const std::string Var;     ///< Variable name
-
-  RuntimeDef() = delete;
-  RuntimeDef(const SrcDef &Def) : Loc(Def.Loc), Var(Def.Var) {}
-
-  bool operator<(const RuntimeDef &Other) const { return Loc < Other.Loc; }
-};
-
-static json::Value toJSON(const RuntimeLocation &Loc) {
+static json::Value toJSON(const SrcLocation &Loc) {
   return {Loc.File, Loc.Func, Loc.Line, Loc.Column};
 }
 
-static json::Value toJSON(const RuntimeDef &Def) {
+static json::Value toJSON(const SrcDef &Def) {
   return {toJSON(Def.Loc), Def.Var};
 }
 
-using LocationCountMap = std::map<RuntimeLocation, size_t>;
-using DefUseMap = std::map<RuntimeDef, LocationCountMap>;
+using LocationCountMap = std::map<SrcLocation, size_t>;
+using DefUseMap = std::map<SrcDef, LocationCountMap>;
 
 static json::Value toJSON(const LocationCountMap &Locs) {
-  json::Array Arr;
+  std::vector<json::Value> Vec;
 
   for (const auto &[Loc, Count] : Locs) {
-    Arr.push_back({toJSON(Loc), Count});
+    Vec.push_back({toJSON(Loc), Count});
   }
 
-  return std::move(Arr);
+  return Vec;
 }
 
 static json::Value toJSON(const DefUseMap &DefUses) {
-  json::Array Arr;
+  std::vector<json::Value> Vec;
 
   for (const auto &[Def, Locs] : DefUses) {
-    Arr.push_back({toJSON(Def), toJSON(Locs)});
+    Vec.push_back({toJSON(Def), toJSON(Locs)});
   }
 
-  return std::move(Arr);
+  return Vec;
 }
 
 class VarLogger {
