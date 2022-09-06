@@ -192,13 +192,12 @@ def main():
             '-O3',
             '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libAFLUseSite.so',
         ])
-        if check_lto():
-            cmd.append('-flto')
     elif use_inst == 'tracer':
         cmd.extend([
-            '-O0',
             '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libTracerUseSite.so',
         ])
+    if check_lto():
+        cmd.append('-flto')
 
     # Clang args
     cmd.extend(clang_args)
