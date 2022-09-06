@@ -76,14 +76,14 @@ static json::Value toJSON(const SrcDef &Def) {
   return {toJSON(Def.Loc), Def.Var};
 }
 
-using LocationCountMap = std::map<SrcLocation, size_t>;
-using DefUseMap = std::map<SrcDef, LocationCountMap>;
+using LocationCountMap = std::map<const SrcLocation *, size_t>;
+using DefUseMap = std::map<const SrcDef *, LocationCountMap>;
 
 static json::Value toJSON(const LocationCountMap &Locs) {
   std::vector<json::Value> Vec;
 
   for (const auto &[Loc, Count] : Locs) {
-    Vec.push_back({toJSON(Loc), Count});
+    Vec.push_back({toJSON(*Loc), Count});
   }
 
   return Vec;
@@ -93,7 +93,7 @@ static json::Value toJSON(const DefUseMap &DefUses) {
   std::vector<json::Value> Vec;
 
   for (const auto &[Def, Locs] : DefUses) {
-    Vec.push_back({toJSON(Def), toJSON(Locs)});
+    Vec.push_back({toJSON(*Def), toJSON(Locs)});
   }
 
   return Vec;
@@ -148,12 +148,12 @@ public:
 
   void addDef(const SrcDef *Def) {
     std::scoped_lock SL(Lock);
-    DefUses.emplace(*Def, LocationCountMap());
+    DefUses.emplace(Def, LocationCountMap());
   }
 
   void addUse(const SrcDef *Def, ptrdiff_t Offset, const SrcLocation *Loc) {
     std::scoped_lock SL(Lock);
-    DefUses[*Def][*Loc]++;
+    DefUses[Def][Loc]++;
   }
 
 private:

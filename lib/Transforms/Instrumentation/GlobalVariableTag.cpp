@@ -133,11 +133,6 @@ GlobalVariable *GlobalVarTag::tag(GlobalVariable *OrigGV, Constant *Metadata,
     auto *BBRegisterCall = CallInst::Create(
         BBRegisterFn, {NewGVCasted, ConstantInt::get(IntPtrTy, NewAllocSize)},
         "", CtorBB);
-
-    // Tracer: log variable definition
-    if (ClUseTracer) {
-      tracerLogDef(Metadata, BBRegisterCall);
-    }
   }
 
   // Deregister the allocation in the baggy bounds table

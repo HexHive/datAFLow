@@ -87,13 +87,15 @@ Constant *tracerCreateDef(const VarInfo &SrcVar, Module *M) {
   auto *FilenameGV = createTracerGlobalVariable(Filename, M);
   auto *FilenamePtr = createGlobalVariablePtr(FilenameGV);
 
-  auto *FuncName = [&]() {
+  auto *FuncName = [&]() -> Constant * {
     if (auto *DILocal = dyn_cast<DILocalVariable>(DIVar)) {
       auto *SP = getDISubprogram(DILocal->getScope());
       return ConstantDataArray::getString(Ctx, SP->getName());
+    } else {
+      return ConstantDataArray::getString(Ctx, "");
     }
-    return Constant::getNullValue(Int8PtrTy);
   }();
+
   auto *FuncNameGV = createTracerGlobalVariable(FuncName, M);
   auto *FuncNamePtr = createGlobalVariablePtr(FuncNameGV);
 
