@@ -9,6 +9,7 @@ Author: Adrian Herrera
 from argparse import ArgumentParser
 from itertools import chain
 from pathlib import Path
+from shutil import which
 from subprocess import run
 import os
 import sys
@@ -58,8 +59,8 @@ def check_if_assembler(args):
     return False
 
 
-def check_lto():
-    return Path('@LLVM_TOOLS_BINARY_DIR@', 'lld').exists()
+def can_lto():
+    return which('ld.gold') is not None
 
 
 def get_llvm_args(args):
@@ -196,8 +197,8 @@ def main():
         cmd.extend([
             '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libTracerUseSite.so',
         ])
-    if check_lto():
-        cmd.append('-flto')
+#    if can_lto():
+#        cmd.extend(['-fuse-ld=gold', '-flto'])
 
     # Clang args
     cmd.extend(clang_args)
