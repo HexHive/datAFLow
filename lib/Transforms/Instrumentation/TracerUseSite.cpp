@@ -46,6 +46,7 @@ private:
   LLVMContext *Ctx;
   const DataLayout *DL;
 
+  StructType *TracerSrcLocationTy;
   FunctionCallee TracerUseFn;
 
   PointerType *Int8PtrTy;
@@ -76,7 +77,8 @@ void TracerUseSite::doInstrument(InterestingMemoryOperand *Op) {
   auto *PtrCast = IRB.CreatePointerCast(Ptr, Int8PtrTy);
   auto *PtrElemTy = Ptr->getType()->getPointerElementType();
   auto *Size = ConstantInt::get(IntPtrTy, DL->getTypeStoreSize(PtrElemTy));
-  auto *UseLoc = tracerCreateUse(Inst, Mod);
+  auto *UseLoc = IRB.CreatePointerCast(tracerCreateUse(Inst, Mod),
+                                       TracerSrcLocationTy->getPointerTo());
   IRB.CreateCall(TracerUseFn, {PtrCast, Size, UseLoc});
 }
 
@@ -95,14 +97,12 @@ bool TracerUseSite::runOnModule(Module &M) {
   this->IntPtrTy = DL->getIntPtrType(*Ctx);
   this->Int8PtrTy = Type::getInt8PtrTy(*Ctx);
 
-  {
-    auto *TracerSrcLocationTy =
-        StructType::create({Int8PtrTy, Int8PtrTy, IntPtrTy, IntPtrTy},
-                           "fuzzalloc.SrcLocation", /*isPacked=*/true);
-    this->TracerUseFn = Mod->getOrInsertFunction(
-        "__tracer_use", Type::getVoidTy(*Ctx), Int8PtrTy, IntPtrTy,
-        TracerSrcLocationTy->getPointerTo());
-  }
+  this->TracerSrcLocationTy =
+      StructType::create({Int8PtrTy, Int8PtrTy, IntPtrTy, IntPtrTy},
+                         "fuzzalloc.SrcLocation", /*isPacked=*/true);
+  this->TracerUseFn =
+      Mod->getOrInsertFunction("__tracer_use", Type::getVoidTy(*Ctx), Int8PtrTy,
+                               IntPtrTy, TracerSrcLocationTy->getPointerTo());
 
   for (auto &F : M) {
     if (F.isDeclaration() || F.getName().startswith("fuzzalloc.")) {

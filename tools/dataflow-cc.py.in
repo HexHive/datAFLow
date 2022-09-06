@@ -137,7 +137,7 @@ def get_llvm_args(args):
     else:
         use_inst = None
 
-    if use_inst:
+    if use_inst == 'tracer':
         llvm_args.extend(['-mllvm', '-fuzzalloc-use-tracer'])
 
     return llvm_args
