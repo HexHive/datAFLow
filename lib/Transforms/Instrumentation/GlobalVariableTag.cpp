@@ -130,9 +130,9 @@ GlobalVariable *GlobalVarTag::tag(GlobalVariable *OrigGV, Constant *Metadata,
   // Register the allocation in the baggy bounds table
   {
     auto *NewGVCasted = new BitCastInst(NewGV, Int8PtrTy, "", CtorBB);
-    auto *BBRegisterCall = CallInst::Create(
-        BBRegisterFn, {NewGVCasted, ConstantInt::get(IntPtrTy, NewAllocSize)},
-        "", CtorBB);
+    CallInst::Create(BBRegisterFn,
+                     {NewGVCasted, ConstantInt::get(IntPtrTy, NewAllocSize)},
+                     "", CtorBB);
   }
 
   // Deregister the allocation in the baggy bounds table

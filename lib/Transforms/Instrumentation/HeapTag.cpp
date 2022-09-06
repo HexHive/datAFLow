@@ -162,6 +162,8 @@ Function *HeapTag::tagFunction(const Function *OrigF) const {
     TaggedF->addFnAttr(Attribute::getWithAllocSizeArgs(
         TaggedF->getContext(), Args.first, Args.second));
   }
+  TaggedF->setMetadata(Mod->getMDKindID(kFuzzallocDynAllocFnMD),
+                       MDNode::get(*Ctx, None));
 
   NumTaggedFuncs++;
   return TaggedF;

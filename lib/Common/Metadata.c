@@ -7,11 +7,13 @@
 
 #include "fuzzalloc/Metadata.h"
 
-const char *kFuzzallocHeapifiedAllocaMD = "fuzzalloc.heapified_alloca";
-const char *kFuzzallocHeapifiedGlobalMD = "fuzzalloc.heapified_global";
+const char *kFuzzallocTagVarMD = "fuzzalloc.tagged_var";
 const char *kFuzzallocInstrumentedUseSiteMD = "fuzzalloc.instrumented_use";
 const char *kFuzzallocNoInstrumentMD = "fuzzalloc.noinstrument";
-const char *kFuzzallocTagVarMD = "fuzzalloc.tagged_var";
+
+const char *kFuzzallocDynAllocFnMD = "fuzzalloc.dynamic_memory_function";
+const char *kFuzzallocHeapifiedAllocaMD = "fuzzalloc.heapified_alloca";
+
 const char *kFuzzallocLoweredNewMD = "fuzzalloc.lowered_new";
 const char *kFuzzallocLoweredDeleteMD = "fuzzalloc.lowered_delete";
 

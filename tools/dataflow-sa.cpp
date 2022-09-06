@@ -198,7 +198,7 @@ static bool isTaggedAlloc(const Value *V) {
     return false;
   }
   if (const auto *I = dyn_cast<Instruction>(V)) {
-    return I->hasMetadata() && I->getMetadata(kFuzzallocTaggVarMD);
+    return I->hasMetadata() && I->getMetadata(kFuzzallocTagVarMD);
   }
   return false;
 }
