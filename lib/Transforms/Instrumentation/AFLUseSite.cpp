@@ -6,7 +6,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <llvm/IR/IRBuilder.h>
-#include <llvm/IR/InlineAsm.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/Pass.h>
@@ -19,7 +18,7 @@
 #include "fuzzalloc/Runtime/BaggyBounds.h"
 #include "fuzzalloc/Streams.h"
 
-#include "VariableTag.h"
+#include "TagUtils.h"
 
 using namespace llvm;
 
@@ -46,10 +45,6 @@ static cl::opt<UseSiteCapture> ClUseCapture(
                clEnumValN(UseSiteCapture::UseWithValue,
                           "fuzzalloc-capture-value",
                           "Record the value of the def")));
-static cl::opt<bool>
-    ClUsePCAddr("fuzzalloc-use-pc",
-                cl::desc("Use the program counter to identify a use site"),
-                cl::Hidden, cl::init(false));
 
 //
 // Global variables
@@ -76,7 +71,6 @@ private:
   const DataLayout *DL;
 
   FunctionCallee HashFn;
-  FunctionCallee ReadPCAsm;
 
   IntegerType *TagTy;
   PointerType *Int8PtrTy;
@@ -111,14 +105,7 @@ void AFLUseSite::doInstrument(InterestingMemoryOperand *Op) {
   auto *PtrCast = IRB.CreatePointerCast(Ptr, Int8PtrTy);
   auto *PtrElemTy = Ptr->getType()->getPointerElementType();
   auto *Size = ConstantInt::get(IntPtrTy, DL->getTypeStoreSize(PtrElemTy));
-  auto *UseSite = [&]() -> Value * {
-    if (ClUsePCAddr) {
-      return IRB.CreateIntCast(IRB.CreateCall(ReadPCAsm), TagTy,
-                               /*isSigned=*/false);
-    } else {
-      return generateTag(TagTy);
-    }
-  }();
+  auto *UseSite = generateTag(TagTy);
 
   IRB.CreateCall(HashFn, {UseSite, PtrCast, Size});
 }
@@ -154,16 +141,6 @@ bool AFLUseSite::runOnModule(Module &M) {
     }();
     this->HashFn = Mod->getOrInsertFunction(HashFnName, VoidTy, TagTy,
                                             Int8PtrTy, IntPtrTy);
-  }
-
-  // Configure the assembly to read the PC
-  {
-    auto *ReadAsmPCTy =
-        FunctionType::get(Type::getInt64Ty(*Ctx), /*isVarArg=*/false);
-    this->ReadPCAsm = FunctionCallee(
-        ReadAsmPCTy,
-        InlineAsm::get(ReadAsmPCTy, "leaq (%rip), $0", /*Constraints=*/"=r",
-                       /*hasSideEffects=*/false));
   }
 
   // Instrument all the things

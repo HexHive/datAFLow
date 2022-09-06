@@ -20,7 +20,8 @@
 #include "fuzzalloc/Streams.h"
 #include "fuzzalloc/Transforms/Utils.h"
 
-#include "VariableTag.h"
+#include "TagUtils.h"
+#include "TracerUtils.h"
 
 using namespace llvm;
 
@@ -29,10 +30,6 @@ using namespace llvm;
 namespace {
 static unsigned NumTaggedGVs = 0;
 static unsigned NumHeapifiedGVs = 0;
-
-static cl::opt<bool> ClDebugLog("fuzzalloc-global-dbg-tag",
-                                cl::desc("Insert debug log at def sites"),
-                                cl::Hidden, cl::init(false));
 } // anonymous namespace
 
 class GlobalVarTag : public ModulePass {
@@ -133,12 +130,13 @@ GlobalVariable *GlobalVarTag::tag(GlobalVariable *OrigGV, Constant *Metadata,
   // Register the allocation in the baggy bounds table
   {
     auto *NewGVCasted = new BitCastInst(NewGV, Int8PtrTy, "", CtorBB);
-    CallInst::Create(BBRegisterFn,
-                     {NewGVCasted, ConstantInt::get(IntPtrTy, NewAllocSize)},
-                     "", CtorBB);
+    auto *BBRegisterCall = CallInst::Create(
+        BBRegisterFn, {NewGVCasted, ConstantInt::get(IntPtrTy, NewAllocSize)},
+        "", CtorBB);
 
-    if (ClDebugLog) {
-      // TODO insert debug log
+    // Tracer: log variable definition
+    if (ClUseTracer) {
+      tracerLogDef(Metadata, BBRegisterCall);
     }
   }
 
@@ -225,9 +223,9 @@ bool GlobalVarTag::runOnModule(Module &M) {
 
   for (auto *GV : GVDefs) {
     auto *Metadata = [&]() -> Constant * {
-      if (ClDebugLog) {
+      if (ClUseTracer) {
         const auto &SrcVar = SrcVars.lookup(GV);
-        return createDebugMetadata(SrcVar, &M);
+        return tracerCreateDef(SrcVar, &M);
       } else {
         return generateTag(TagTy);
       }

@@ -27,7 +27,8 @@
 #include "fuzzalloc/Streams.h"
 #include "fuzzalloc/Transforms/Utils.h"
 
-#include "VariableTag.h"
+#include "TagUtils.h"
+#include "TracerUtils.h"
 
 using namespace llvm;
 
@@ -36,10 +37,6 @@ using namespace llvm;
 namespace {
 static unsigned NumTaggedLocals = 0;
 static unsigned NumHeapifiedLocals = 0;
-
-static cl::opt<bool> ClDebugLog("fuzzalloc-local-dbg-tag",
-                                cl::desc("Insert debug log at def sites"),
-                                cl::Hidden, cl::init(false));
 } // anonymous namespace
 
 class LocalVarTag : public ModulePass {
@@ -172,9 +169,14 @@ AllocaInst *LocalVarTag::tag(AllocaInst *OrigAlloca, Constant *Metadata) {
   // Register the allocation in the baggy bounds table
   auto *Int8PtrTy = Type::getInt8PtrTy(*Ctx);
   auto *NewAllocaCasted = new BitCastInst(NewAlloca, Int8PtrTy, "", OrigAlloca);
-  CallInst::Create(BBRegisterFn,
-                   {NewAllocaCasted, ConstantInt::get(IntPtrTy, NewAllocSize)},
-                   "", OrigAlloca);
+  auto *BBRegisterCall = CallInst::Create(
+      BBRegisterFn, {NewAllocaCasted, ConstantInt::get(IntPtrTy, NewAllocSize)},
+      "", OrigAlloca);
+
+  // Tracer: log variable definition
+  if (ClUseTracer) {
+    tracerLogDef(Metadata, BBRegisterCall);
+  }
 
   // Now cache and update the other users
   SmallVector<Use *, 16> Uses(
@@ -254,9 +256,9 @@ bool LocalVarTag::runOnModule(Module &M) {
 
   for (auto *Alloca : AllocaDefs) {
     auto *Metadata = [&]() -> Constant * {
-      if (ClDebugLog) {
+      if (ClUseTracer) {
         const auto &SrcVar = SrcVars.lookup(Alloca);
-        return createDebugMetadata(SrcVar, &M);
+        return tracerCreateDef(SrcVar, &M);
       } else {
         return generateTag(TagTy);
       }

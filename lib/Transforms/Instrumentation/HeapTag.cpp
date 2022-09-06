@@ -22,7 +22,8 @@
 #include "fuzzalloc/Transforms/Utils.h"
 #include "fuzzalloc/fuzzalloc.h"
 
-#include "VariableTag.h"
+#include "TagUtils.h"
+#include "TracerUtils.h"
 
 using namespace llvm;
 

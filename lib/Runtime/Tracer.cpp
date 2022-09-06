@@ -31,7 +31,7 @@
 using namespace llvm;
 
 extern "C" {
-/// Source code location
+/// Source-level location
 struct __attribute__((packed)) SrcLocation {
   const char *File;    ///< File name
   const char *Func;    ///< Function name
@@ -39,51 +39,81 @@ struct __attribute__((packed)) SrcLocation {
   const size_t Column; ///< Column number
 };
 
-/// Variable def site
-struct __attribute__((packed)) DefInfo {
+/// Source-level variable def site
+struct __attribute__((packed)) SrcDef {
   const SrcLocation Loc; ///< Location
   const char *Var;       ///< Variable name
 };
-}
+} // extern "C"
 
 namespace std {
 template <> struct less<SrcLocation> {
-  constexpr bool operator()(const SrcLocation &LHS,
-                            const SrcLocation &RHS) const {
-    return LHS.File < RHS.File;
+  bool operator()(const SrcLocation &LHS, const SrcLocation &RHS) const {
+    int FileCmp = strcmp(LHS.File, RHS.File);
+    if (FileCmp == 0) {
+      if (LHS.Line == RHS.Line) {
+        return LHS.Column < RHS.Column;
+      }
+      return LHS.Line < RHS.Line;
+    }
+    return FileCmp < 0;
   }
 };
 
-template <> struct less<DefInfo> {
-  constexpr bool operator()(const DefInfo &LHS, const DefInfo &RHS) const {
+template <> struct less<SrcDef> {
+  constexpr bool operator()(const SrcDef &LHS, const SrcDef &RHS) const {
     return std::less<SrcLocation>{}(LHS.Loc, RHS.Loc);
   }
 };
 } // namespace std
 
 namespace {
-static inline SrcLocation mkSrcLocation(const char *File, const char *Func,
-                                        size_t Line, size_t Column) {
-  return {File, Func, Line, Column};
-}
+/// Runtime location
+struct RuntimeLocation {
+  const std::string File; ///< File name
+  const std::string Func; ///< Function name
+  const size_t Line;      ///< Line number
+  const size_t Column;    ///< Column number
 
-static inline DefInfo mkDefInfo(const SrcLocation &Loc, const char *Var) {
-  return {Loc, Var};
-}
+  RuntimeLocation() = delete;
+  RuntimeLocation(const SrcLocation &SrcLoc)
+      : File(SrcLoc.File), Func(SrcLoc.Func), Line(SrcLoc.Line),
+        Column(SrcLoc.Column) {}
 
-static json::Value toJSON(const SrcLocation &Loc) {
+  bool operator<(const RuntimeLocation &Other) const {
+    if (File == Other.File) {
+      if (Line == Other.Line) {
+        return Column < Other.Column;
+      }
+      return Line < Other.Line;
+    }
+    return File < Other.File;
+  }
+};
+
+/// Runtime variable def site
+struct RuntimeDef {
+  const RuntimeLocation Loc; ///< Runtime location
+  const std::string Var;     ///< Variable name
+
+  RuntimeDef() = delete;
+  RuntimeDef(const SrcDef &Def) : Loc(Def.Loc), Var(Def.Var) {}
+
+  bool operator<(const RuntimeDef &Other) const { return Loc < Other.Loc; }
+};
+
+static json::Value toJSON(const RuntimeLocation &Loc) {
   return {Loc.File, Loc.Func, Loc.Line, Loc.Column};
 }
 
-static json::Value toJSON(const DefInfo &Def) {
+static json::Value toJSON(const RuntimeDef &Def) {
   return {toJSON(Def.Loc), Def.Var};
 }
 
-using DefMap = std::map<tag_t, std::set<DefInfo>>;
-using SrcLocationCountMap = std::map<SrcLocation, size_t>;
-using UseMap = std::map<DefInfo, SrcLocationCountMap>;
+using LocationCountMap = std::map<RuntimeLocation, size_t>;
+using DefUseMap = std::map<RuntimeDef, LocationCountMap>;
 
-static json::Value toJSON(const SrcLocationCountMap &Locs) {
+static json::Value toJSON(const LocationCountMap &Locs) {
   json::Array Arr;
 
   for (const auto &[Loc, Count] : Locs) {
@@ -93,10 +123,10 @@ static json::Value toJSON(const SrcLocationCountMap &Locs) {
   return std::move(Arr);
 }
 
-static json::Value toJSON(const UseMap &Uses) {
+static json::Value toJSON(const DefUseMap &DefUses) {
   json::Array Arr;
 
-  for (const auto &[Def, Locs] : Uses) {
+  for (const auto &[Def, Locs] : DefUses) {
     Arr.push_back({toJSON(Def), toJSON(Locs)});
   }
 
@@ -139,7 +169,7 @@ public:
 
     json::Value V = [&]() -> json::Value {
       std::scoped_lock SL(Lock);
-      return toJSON(Uses);
+      return toJSON(DefUses);
     }();
 
     *OS << std::move(V);
@@ -150,35 +180,19 @@ public:
     OS.reset();
   }
 
-  void addDef(const char *File, const char *Func, size_t Line, size_t Column,
-              uintptr_t PC, const char *Var) {
-    SrcLocation Loc = mkSrcLocation(File, Func, Line, Column);
-    DefInfo Def = mkDefInfo(Loc, Var);
-
+  void addDef(const SrcDef *Def) {
     std::scoped_lock SL(Lock);
+    DefUses.emplace(*Def, LocationCountMap());
   }
 
-  void addDef(tag_t Tag, const char *File, const char *Func, size_t Line,
-              size_t Column, uintptr_t PC, const char *Var) {
-    SrcLocation Loc = mkSrcLocation(File, Func, Line, Column);
-    DefInfo Def = mkDefInfo(Loc, Var);
-
+  void addUse(const SrcDef *Def, ptrdiff_t Offset, const SrcLocation *Loc) {
     std::scoped_lock SL(Lock);
-    Defs[Tag].insert(Def);
-  }
-
-  void addUse(const DefInfo *Def, ptrdiff_t Offset, SrcLocation &Loc,
-              uintptr_t PC) {
-    std::scoped_lock SL(Lock);
-    // for (auto &Def : Defs.at(Tag)) {
-    // Uses[Def][Loc]++;
-    //}
+    DefUses[*Def][*Loc]++;
   }
 
 private:
   Optional<raw_fd_ostream> OS;
-  DefMap Defs;
-  UseMap Uses;
+  DefUseMap DefUses;
   std::mutex Lock;
 };
 
@@ -211,20 +225,15 @@ __attribute__((constructor)) static void initializeTimeout() {
 //
 
 extern "C" {
-void __tracer_def(tag_t Tag, const char *File, const char *Func, size_t Line,
-               size_t Column, const char *Var) {
-  Log.addDef(Tag, File, Func, Line, Column,
-             (uintptr_t)__builtin_return_address(0), Var);
-}
+void __tracer_def(const SrcDef *Def) { Log.addDef(Def); }
 
-void __tracer_use(void *Ptr, size_t Size, const char *File, const char *Func,
-               size_t Line, size_t Column) {
+void __tracer_use(void *Ptr, size_t Size, const SrcLocation *Loc) {
   uintptr_t Base;
-  DefInfo *Def = (DefInfo *)__bb_lookup(Ptr, &Base, sizeof(DefInfo));
+  SrcDef **Def = (SrcDef **)__bb_lookup(Ptr, &Base, sizeof(SrcDef *));
+
   if (likely(Def != nullptr)) {
     ptrdiff_t Offset = (uintptr_t)Ptr - Base;
-    SrcLocation Loc = mkSrcLocation(File, Func, Line, Column);
-//    Log.addUse(*Def, Offset, Loc, (uintptr_t)__builtin_return_address(0));
+    Log.addUse(*Def, Offset, Loc);
   }
 }
 }

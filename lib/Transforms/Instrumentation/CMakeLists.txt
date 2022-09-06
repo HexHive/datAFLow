@@ -1,3 +1,7 @@
+add_library(TagUtils OBJECT
+  TagUtils.cpp
+)
+
 add_library(AFLUseSite SHARED
   AFLUseSite.cpp
 )
@@ -6,37 +10,46 @@ target_link_libraries(AFLUseSite PUBLIC
 )
 install(TARGETS AFLUseSite LIBRARY DESTINATION lib)
 
+add_library(TracerUtils SHARED
+  TracerUtils.cpp
+)
+install(TARGETS TracerUtils LIBRARY DESTINATION lib)
+
 add_library(TracerUseSite SHARED
   TracerUseSite.cpp
 )
 target_link_libraries(TracerUseSite PUBLIC
   UseSiteIdentify
+  TracerUtils
 )
 install(TARGETS TracerUseSite LIBRARY DESTINATION lib)
 
 add_library(GlobalVariableTag SHARED
   GlobalVariableTag.cpp
-  VariableTag.cpp
 )
 target_link_libraries(GlobalVariableTag PUBLIC
   DefSiteIdentify
+  TagUtils
+  TracerUtils
 )
 install(TARGETS GlobalVariableTag LIBRARY DESTINATION lib)
 
 add_library(HeapTag SHARED
   HeapTag.cpp
-  VariableTag.cpp
 )
 target_link_libraries(HeapTag PUBLIC
   MemFuncIdentify
+  TagUtils
+  TracerUtils
 )
 install(TARGETS HeapTag LIBRARY DESTINATION lib)
 
 add_library(LocalVariableTag SHARED
   LocalVariableTag.cpp
-  VariableTag.cpp
 )
 target_link_libraries(LocalVariableTag PUBLIC
   DefSiteIdentify
+  TagUtils
+  TracerUtils
 )
 install(TARGETS LocalVariableTag LIBRARY DESTINATION lib)

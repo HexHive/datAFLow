@@ -5,7 +5,6 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include <llvm/IR/DebugInfo.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/InlineAsm.h>
 #include <llvm/IR/Instructions.h>
@@ -19,6 +18,8 @@
 #include "fuzzalloc/Metadata.h"
 #include "fuzzalloc/Runtime/BaggyBounds.h"
 #include "fuzzalloc/Streams.h"
+
+#include "TracerUtils.h"
 
 using namespace llvm;
 
@@ -61,8 +62,6 @@ void TracerUseSite::doInstrument(InterestingMemoryOperand *Op) {
   }
 
   auto *Inst = Op->getInsn();
-  const auto *Func = Inst->getFunction();
-  const auto *Mod = Func->getParent();
   auto *Ptr = Op->getPtr();
 
   LLVM_DEBUG(dbgs() << "Instrumenting " << *Inst << " (ptr=" << *Ptr << ")\n");
@@ -74,28 +73,11 @@ void TracerUseSite::doInstrument(InterestingMemoryOperand *Op) {
   assert(Inst->getNextNode());
   IRBuilder<> IRB(Inst->getNextNode());
 
-  // Get debug location info
-  const auto &Loc = Inst->getDebugLoc();
-  Constant *FileNamePtr = Constant::getNullValue(Int8PtrTy);
-  Constant *FuncNamePtr = Constant::getNullValue(Int8PtrTy);
-  Constant *Line = Constant::getNullValue(IntPtrTy);
-  Constant *Column = Constant::getNullValue(IntPtrTy);
-  if (Loc) {
-    auto *SP = getDISubprogram(Loc.getScope());
-    const auto &FileName = SP->getFile()->getFilename();
-    const auto &FuncName = SP->getName();
-
-    FileNamePtr = IRB.CreateGlobalStringPtr(FileName);
-    FuncNamePtr = IRB.CreateGlobalStringPtr(FuncName);
-    Line = ConstantInt::get(IntPtrTy, Loc.getLine());
-    Column = ConstantInt::get(IntPtrTy, Loc.getCol());
-  }
-
   auto *PtrCast = IRB.CreatePointerCast(Ptr, Int8PtrTy);
   auto *PtrElemTy = Ptr->getType()->getPointerElementType();
   auto *Size = ConstantInt::get(IntPtrTy, DL->getTypeStoreSize(PtrElemTy));
-  IRB.CreateCall(TracerUseFn,
-                 {PtrCast, Size, FileNamePtr, FuncNamePtr, Line, Column});
+  auto *UseLoc = tracerCreateUse(Inst, Mod);
+  IRB.CreateCall(TracerUseFn, {PtrCast, Size, UseLoc});
 }
 
 void TracerUseSite::getAnalysisUsage(AnalysisUsage &AU) const {
@@ -113,9 +95,14 @@ bool TracerUseSite::runOnModule(Module &M) {
   this->IntPtrTy = DL->getIntPtrType(*Ctx);
   this->Int8PtrTy = Type::getInt8PtrTy(*Ctx);
 
-  this->TracerUseFn = Mod->getOrInsertFunction(
-      "__tracer_use", Type::getVoidTy(*Ctx), Int8PtrTy, IntPtrTy, Int8PtrTy,
-      Int8PtrTy, IntPtrTy, IntPtrTy);
+  {
+    auto *TracerSrcLocationTy =
+        StructType::create({Int8PtrTy, Int8PtrTy, IntPtrTy, IntPtrTy},
+                           "fuzzalloc.SrcLocation", /*isPacked=*/true);
+    this->TracerUseFn = Mod->getOrInsertFunction(
+        "__tracer_use", Type::getVoidTy(*Ctx), Int8PtrTy, IntPtrTy,
+        TracerSrcLocationTy->getPointerTo());
+  }
 
   for (auto &F : M) {
     if (F.isDeclaration() || F.getName().startswith("fuzzalloc.")) {
@@ -145,18 +132,18 @@ bool TracerUseSite::runOnModule(Module &M) {
 // Pass registration
 //
 
-static RegisterPass<TracerUseSite> X(DEBUG_TYPE, "Instrument use sites (tracer)",
-                                    false, false);
+static RegisterPass<TracerUseSite>
+    X(DEBUG_TYPE, "Instrument use sites (tracer)", false, false);
 
 static void registerTracerUseSitePass(const PassManagerBuilder &,
-                                     legacy::PassManagerBase &PM) {
+                                      legacy::PassManagerBase &PM) {
   PM.add(new TracerUseSite());
 }
 
 static RegisterStandardPasses
     RegisterTracerUseSitePass(PassManagerBuilder::EP_OptimizerLast,
-                             registerTracerUseSitePass);
+                              registerTracerUseSitePass);
 
 static RegisterStandardPasses
     RegisterTracerUseSitePass0(PassManagerBuilder::EP_EnabledOnOptLevel0,
-                              registerTracerUseSitePass);
+                               registerTracerUseSitePass);

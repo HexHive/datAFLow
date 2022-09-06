@@ -40,7 +40,7 @@ void __afl_hash_def_use(tag_t UseTag, void *Ptr, size_t Size) {
   tag_t *DefTag = __bb_lookup(Ptr, &Base, sizeof(tag_t));
   tag_t Hash = 0;
 
-  if (likely(*DefTag != kFuzzallocDefaultTag)) {
+  if (likely(DefTag != NULL)) {
     // Compute the hash
     Hash = (*DefTag - kFuzzallocDefaultTag) ^ UseTag;
 
@@ -60,7 +60,7 @@ void __afl_hash_def_use_offset(tag_t UseTag, void *Ptr, size_t Size) {
   tag_t *DefTag = __bb_lookup(Ptr, &Base, sizeof(tag_t));
   tag_t Hash = 0;
 
-  if (likely(*DefTag != kFuzzallocDefaultTag)) {
+  if (likely(DefTag != NULL)) {
     // Compute the hash
     const ptrdiff_t Offset = (uintptr_t)Ptr - Base;
     Hash = (*DefTag - kFuzzallocDefaultTag) ^ (UseTag + Offset);
@@ -81,7 +81,7 @@ void __afl_hash_def_use_value(tag_t UseTag, void *Ptr, size_t Size) {
   tag_t *DefTag = __bb_lookup(Ptr, &Base, sizeof(tag_t));
   tag_t Hash = 0;
 
-  if (likely(*DefTag != kFuzzallocDefaultTag)) {
+  if (likely(DefTag != NULL)) {
     // Compute the hash
     const ptrdiff_t Offset = (uintptr_t)Ptr - Base;
 
