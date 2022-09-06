@@ -61,7 +61,7 @@ bool CollectStats::runOnModule(Module &M) {
       NumBasicBlocks++;
 
       for (auto &I : BB) {
-        if (I.getMetadata(M.getMDKindID(kFuzzallocTaggVarMD))) {
+        if (I.getMetadata(M.getMDKindID(kFuzzallocTagVarMD))) {
           NumTaggedLocalVars++;
         } else if (I.getMetadata(
                        M.getMDKindID(kFuzzallocInstrumentedUseSiteMD))) {
@@ -73,7 +73,7 @@ bool CollectStats::runOnModule(Module &M) {
 
   for (const auto &G : M.globals()) {
     if (auto *GV = dyn_cast<GlobalVariable>(&G)) {
-      if (GV->getMetadata(M.getMDKindID(kFuzzallocTaggVarMD))) {
+      if (GV->getMetadata(M.getMDKindID(kFuzzallocTagVarMD))) {
         NumTaggedGlobalVars++;
       }
     }

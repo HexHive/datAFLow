@@ -82,7 +82,7 @@ GlobalVariable *GlobalVarTag::tag(GlobalVariable *OrigGV, Constant *Metadata,
       OrigGV->getThreadLocalMode(), OrigGV->getType()->getPointerAddressSpace(),
       OrigGV->isExternallyInitialized());
   NewGV->copyAttributesFrom(OrigGV);
-  NewGV->setMetadata(Mod->getMDKindID(kFuzzallocTaggVarMD),
+  NewGV->setMetadata(Mod->getMDKindID(kFuzzallocTagVarMD),
                      MDNode::get(*Ctx, None));
   NewGV->setAlignment(MaybeAlign(NewAllocSize));
   NewGV->setLinkage(GlobalValue::PrivateLinkage);
