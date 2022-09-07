@@ -57,48 +57,48 @@ namespace dataflow {
 
 /// A variable definition
 struct Def {
-  Def(const VFGNode *Node, const DIVariable *Var, const DebugLoc *Loc)
-      : Node(Node), Val(Node->getValue()), Var(Var), Loc(Loc) {}
+  Def(const VFGNode *Node, const DIVariable *DIVar, const DebugLoc *Loc)
+      : Node(Node), Val(Node->getValue()), DIVar(DIVar), Loc(Loc) {}
 
   bool operator==(const Def &Other) const { return Node == Other.Node; }
 
   const VFGNode *Node;
   const Value *Val;
-  const DIVariable *Var;
+  const DIVariable *DIVar;
   const DebugLoc *Loc;
 };
 
 /// A variable use
 struct Use {
-  Use(const VFGNode *Node, const DIVariable *Var)
-      : Node(Node), Val(Node->getValue()), Var(Var),
+  Use(const VFGNode *Node, const DIVariable *DIVar)
+      : Node(Node), Val(Node->getValue()), DIVar(DIVar),
         Loc(cast<Instruction>(Val)->getDebugLoc()) {}
 
   bool operator==(const Use &Other) const { return Node == Other.Node; }
 
   const VFGNode *Node;
   const Value *Val;
-  const DIVariable *Var;
+  const DIVariable *DIVar;
   const DebugLoc &Loc;
 };
 
 static json::Value toJSON(const dataflow::Def &Def) {
   const auto &VarName = [&]() -> std::string {
-    if (const auto *Var = Def.Var) {
-      return Var->getName().str();
+    if (const auto *DIVar = Def.DIVar) {
+      return DIVar->getName().str();
     }
     return getNameOrAsOperand(Def.Val);
   }();
 
   const auto &File = [&]() -> Optional<StringRef> {
-    if (const auto *Loc = Def.Loc) {
-      return Loc->get()->getFile()->getName();
+    if (const auto *DIVar = Def.DIVar) {
+      return DIVar->getFilename();
     }
     return None;
   }();
 
   const auto &Func = [&]() -> Optional<StringRef> {
-    if (const auto *Local = dyn_cast_or_null<DILocalVariable>(Def.Var)) {
+    if (const auto *Local = dyn_cast_or_null<DILocalVariable>(Def.DIVar)) {
       return getDISubprogram(Local->getScope())->getName();
     } else if (const auto *Inst = dyn_cast<Instruction>(Def.Val)) {
       return Inst->getFunction()->getName();
@@ -107,8 +107,8 @@ static json::Value toJSON(const dataflow::Def &Def) {
   }();
 
   const auto &Line = [&]() -> Optional<unsigned int> {
-    if (const auto *Loc = Def.Loc) {
-      return Loc->getLine();
+    if (const auto *DIVar = Def.DIVar) {
+      return DIVar->getLine();
     }
     return None;
   }();
@@ -125,8 +125,8 @@ static json::Value toJSON(const dataflow::Def &Def) {
 
 static json::Value toJSON(const dataflow::Use &Use) {
   const auto &VarName = [&]() -> std::string {
-    if (const auto *Var = Use.Var) {
-      return Var->getName().str();
+    if (const auto *DIVar = Use.DIVar) {
+      return DIVar->getName().str();
     }
     if (const auto *Load = dyn_cast<LoadInst>(Use.Val)) {
       return getNameOrAsOperand(Load->getPointerOperand());
@@ -138,7 +138,8 @@ static json::Value toJSON(const dataflow::Use &Use) {
 
   const auto &File = [&]() -> Optional<StringRef> {
     if (const auto &Loc = Use.Loc) {
-      return Loc->getFile()->getName();
+      auto *SP = getDISubprogram(Loc.getScope());
+      return SP->getFile()->getFilename();
     }
     return None;
   }();
