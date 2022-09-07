@@ -20,8 +20,7 @@
 #include "fuzzalloc/Streams.h"
 #include "fuzzalloc/Transforms/Utils.h"
 
-#include "TagUtils.h"
-#include "TracerUtils.h"
+#include "Utils.h"
 
 using namespace llvm;
 
@@ -156,6 +155,7 @@ GlobalVariable *GlobalVarTag::tag(GlobalVariable *OrigGV, Constant *Metadata,
   }
 
   OrigGV->eraseFromParent();
+  NumTaggedGVs++;
   return NewGV;
 }
 
@@ -221,17 +221,17 @@ bool GlobalVarTag::runOnModule(Module &M) {
                 [](Value *V) { return cast<GlobalVariable>(V); });
 
   for (auto *GV : GVDefs) {
-    auto *Metadata = [&]() -> Constant * {
-      if (ClUseTracer) {
-        const auto &SrcVar = SrcVars.lookup(GV);
-        return tracerCreateDef(SrcVar, &M);
-      } else {
-        return generateTag(TagTy);
-      }
-    }();
-
-    tag(GV, Metadata, CtorEntryBB, DtorEntryBB);
-    NumTaggedGVs++;
+    if (ClInstType == InstType::InstAFL) {
+      auto *Metadata = generateTag(TagTy);
+      tag(GV, Metadata, CtorEntryBB, DtorEntryBB);
+    } else if (ClInstType == InstType::InstTrace) {
+      const auto &SrcVar = SrcVars.lookup(GV);
+      auto *Metadata = tracerCreateDef(SrcVar, Mod);
+      tag(GV, Metadata, CtorEntryBB, DtorEntryBB);
+    } else {
+      GV->setMetadata(Mod->getMDKindID(kFuzzallocTagVarMD),
+                      MDNode::get(*Ctx, None));
+    }
   }
 
   ReturnInst::Create(*Ctx, CtorEntryBB);

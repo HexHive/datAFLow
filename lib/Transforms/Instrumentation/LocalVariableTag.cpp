@@ -27,8 +27,7 @@
 #include "fuzzalloc/Streams.h"
 #include "fuzzalloc/Transforms/Utils.h"
 
-#include "TagUtils.h"
-#include "TracerUtils.h"
+#include "Utils.h"
 
 using namespace llvm;
 
@@ -133,8 +132,14 @@ AllocaInst *LocalVarTag::tag(AllocaInst *OrigAlloca, Constant *Metadata) {
   if (NewAllocSize > IntegerType::MAX_INT_BITS) {
     warning_stream() << "Unable to tag alloca `" << OrigAlloca->getName()
                      << "`: new allocation size " << NewAllocSize
-                     << " is greater than the max. Heapifying instead.\n";
-    return heapify(OrigAlloca);
+                     << " is greater than the max.";
+    if (ClInstType == InstAFL) {
+      errs() << " Heapifying instead.\n";
+      return heapify(OrigAlloca);
+    } else {
+      errs() << " Skipping.\n";
+      return OrigAlloca;
+    }
   }
 
   auto OrigSize = DL->getTypeAllocSize(OrigTy);
@@ -174,7 +179,7 @@ AllocaInst *LocalVarTag::tag(AllocaInst *OrigAlloca, Constant *Metadata) {
       "", OrigAlloca);
 
   // Tracer: log variable definition
-  if (ClUseTracer) {
+  if (ClInstType == InstType::InstTrace) {
     tracerLogDef(Metadata, BBRegisterCall);
   }
 
@@ -208,6 +213,7 @@ AllocaInst *LocalVarTag::tag(AllocaInst *OrigAlloca, Constant *Metadata) {
   }
 
   OrigAlloca->eraseFromParent();
+  NumTaggedLocals++;
   return NewAlloca;
 }
 
@@ -259,17 +265,17 @@ bool LocalVarTag::runOnModule(Module &M) {
                                              AllocaDefs.end());
 
   for (auto *Alloca : AllocaDefs) {
-    auto *Metadata = [&]() -> Constant * {
-      if (ClUseTracer) {
-        const auto &SrcVar = SrcVars.lookup(Alloca);
-        return tracerCreateDef(SrcVar, &M);
-      } else {
-        return generateTag(TagTy);
-      }
-    }();
-
-    tag(Alloca, Metadata);
-    NumTaggedLocals++;
+    if (ClInstType == InstType::InstAFL) {
+      auto *Metadata = generateTag(TagTy);
+      tag(Alloca, Metadata);
+    } else if (ClInstType == InstType::InstTrace) {
+      const auto &SrcVar = SrcVars.lookup(Alloca);
+      auto *Metadata = tracerCreateDef(SrcVar, Mod);
+      tag(Alloca, Metadata);
+    } else {
+      Alloca->setMetadata(Mod->getMDKindID(kFuzzallocTagVarMD),
+                          MDNode::get(*Ctx, None));
+    }
   }
 
   success_stream() << "[" << M.getName()

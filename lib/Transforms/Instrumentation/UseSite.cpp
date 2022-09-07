@@ -18,8 +18,7 @@
 #include "fuzzalloc/Runtime/BaggyBounds.h"
 #include "fuzzalloc/Streams.h"
 
-#include "TagUtils.h"
-#include "TracerUtils.h"
+#include "Utils.h"
 
 using namespace llvm;
 
@@ -106,15 +105,14 @@ void UseSite::doInstrument(InterestingMemoryOperand *Op) {
   auto *PtrElemTy = Ptr->getType()->getPointerElementType();
   auto *Size = ConstantInt::get(IntPtrTy, DL->getTypeStoreSize(PtrElemTy));
 
-  auto *Metadata = [&]() -> Constant * {
-    if (ClUseTracer) {
-      return ConstantExpr::getPointerCast(tracerCreateUse(Inst, Mod),
-                                          TracerSrcLocationTy->getPointerTo());
-    } else {
-      return generateTag(TagTy);
-    }
-  }();
-  IRB.CreateCall(InstFn, {Metadata, PtrCast, Size});
+  if (ClInstType == InstType::InstAFL) {
+    auto *Metadata = generateTag(TagTy);
+    IRB.CreateCall(InstFn, {Metadata, PtrCast, Size});
+  } else if (ClInstType == InstType::InstTrace) {
+    auto *Metadata = ConstantExpr::getPointerCast(
+        tracerCreateUse(Inst, Mod), TracerSrcLocationTy->getPointerTo());
+    IRB.CreateCall(InstFn, {Metadata, PtrCast, Size});
+  }
 }
 
 void UseSite::getAnalysisUsage(AnalysisUsage &AU) const {
@@ -140,17 +138,7 @@ bool UseSite::runOnModule(Module &M) {
   this->InstFn = [&]() -> FunctionCallee {
     auto *VoidTy = Type::getVoidTy(*Ctx);
 
-    if (ClUseTracer) {
-      auto Fn = Mod->getOrInsertFunction("__tracer_use", VoidTy,
-                                         TracerSrcLocationTy->getPointerTo(),
-                                         Int8PtrTy, IntPtrTy);
-      assert(isa_and_nonnull<Function>(Fn.getCallee()));
-      cast<Function>(Fn.getCallee())->setDoesNotThrow();
-      cast<Function>(Fn.getCallee())->addParamAttr(0, Attribute::NonNull);
-      cast<Function>(Fn.getCallee())->addParamAttr(0, Attribute::ReadOnly);
-
-      return Fn;
-    } else {
+    if (ClInstType == InstType::InstAFL) {
       auto InstFnName = [&]() -> std::string {
         if (ClUseCapture == UseOnly) {
           return "__afl_hash_def_use";
@@ -164,6 +152,18 @@ bool UseSite::runOnModule(Module &M) {
       auto Fn = Mod->getOrInsertFunction(InstFnName, VoidTy, TagTy, Int8PtrTy,
                                          IntPtrTy);
       return Fn;
+    } else if (ClInstType == InstType::InstTrace) {
+      auto Fn = Mod->getOrInsertFunction("__tracer_use", VoidTy,
+                                         TracerSrcLocationTy->getPointerTo(),
+                                         Int8PtrTy, IntPtrTy);
+      assert(isa_and_nonnull<Function>(Fn.getCallee()));
+      cast<Function>(Fn.getCallee())->setDoesNotThrow();
+      cast<Function>(Fn.getCallee())->addParamAttr(0, Attribute::NonNull);
+      cast<Function>(Fn.getCallee())->addParamAttr(0, Attribute::ReadOnly);
+
+      return Fn;
+    } else {
+      return FunctionCallee();
     }
   }();
 

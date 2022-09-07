@@ -41,7 +41,7 @@ def parse_args():
     use_arg_group.add_argument('--use-capture',
                                 choices=('use', 'offset', 'value'),
                                 help='what to capture at the use site')
-    use_arg_group.add_argument('--use-inst', choices=('afl', 'tracer'),
+    use_arg_group.add_argument('--use-inst', choices=('none', 'afl', 'tracer'),
                                help='use site instrumentation type')
 
     return parser.parse_known_args()
@@ -137,8 +137,8 @@ def get_llvm_args(args):
     else:
         use_inst = None
 
-    if use_inst == 'tracer':
-        llvm_args.extend(['-mllvm', '-fuzzalloc-use-tracer'])
+    if use_inst:
+        llvm_args.extend(['-mllvm', f'-fuzzalloc-use-inst-{use_inst}'])
 
     return llvm_args
 
@@ -172,13 +172,7 @@ def main():
 
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libGlobalVariableTag.so',
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libLocalVariableTag.so',
-        '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libHeapTag.so',
     ])
-
-    is_assembler = check_if_assembler(clang_args)
-    if not is_assembler:
-        llvm_args = get_llvm_args(args)
-        cmd.extend(llvm_args)
 
     # Use site instrumentation
     if 'FUZZALLOC_USE_INST' in env:
@@ -187,6 +181,15 @@ def main():
         use_inst = args.use_inst
     else:
         use_inst = None
+
+    # Only heapify when fuzzing
+    if use_inst == 'afl':
+        cmd.extend(['-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libHeapTag.so'])
+
+    is_assembler = check_if_assembler(clang_args)
+    if not is_assembler:
+        llvm_args = get_llvm_args(args)
+        cmd.extend(llvm_args)
 
     cmd.extend(['-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libUseSite.so'])
 #    if can_lto():
