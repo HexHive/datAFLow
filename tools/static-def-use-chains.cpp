@@ -70,15 +70,14 @@ struct Def {
 
 /// A variable use
 struct Use {
-  Use(const VFGNode *Node, const DIVariable *DIVar)
-      : Node(Node), Val(Node->getValue()), DIVar(DIVar),
+  Use(const VFGNode *Node)
+      : Node(Node), Val(Node->getValue()),
         Loc(cast<Instruction>(Val)->getDebugLoc()) {}
 
   bool operator==(const Use &Other) const { return Node == Other.Node; }
 
   const VFGNode *Node;
   const Value *Val;
-  const DIVariable *DIVar;
   const DebugLoc &Loc;
 };
 } // namespace dataflow
@@ -152,18 +151,6 @@ static json::Value toJSON(const dataflow::Def &Def) {
 }
 
 static json::Value toJSON(const dataflow::Use &Use) {
-  const auto &VarName = [&]() -> std::string {
-    if (const auto *DIVar = Use.DIVar) {
-      return DIVar->getName().str();
-    }
-    if (const auto *Load = dyn_cast<LoadInst>(Use.Val)) {
-      return getNameOrAsOperand(Load->getPointerOperand());
-    } else if (const auto *Store = dyn_cast<StoreInst>(Use.Val)) {
-      return getNameOrAsOperand(Store->getPointerOperand());
-    }
-    llvm_unreachable("use must be a load or store");
-  }();
-
   const auto &File = [&]() -> Optional<StringRef> {
     if (const auto &Loc = Use.Loc) {
       auto *SP = getDISubprogram(Loc.getScope());
@@ -195,7 +182,7 @@ static json::Value toJSON(const dataflow::Use &Use) {
     return None;
   }();
 
-  return {VarName, {File, Func, Line, Col}};
+  return {File, Func, Line, Col};
 }
 
 static json::Value toJSON(const UseSet &Uses) {
@@ -366,13 +353,14 @@ int main(int argc, char *argv[]) {
     ::exit(1);
   }
 
-  // Collect uses
+  // Collect def-use chains
   FIFOWorkList<const VFGNode *> Worklist;
   Set<const VFGNode *> Visited;
   dataflow::DefUseMap DefUseChains;
   dataflow::UseSet Uses;
+  size_t NumDefUseChains = 0;
 
-  status_stream() << "Collecting uses...\n";
+  status_stream() << "Collecting def-use chains...\n";
   for (const auto &Def : Defs) {
     Worklist.clear();
     Visited.clear();
@@ -404,12 +392,14 @@ int main(int argc, char *argv[]) {
         llvm_unreachable("use must be a load or store");
       }();
 
-      const auto &Var = SrcVars.lookup(const_cast<Value *>(V));
-      DefUseChains[Def].emplace(Use, Var.getDbgVar());
-      Uses.emplace(Use, Var.getDbgVar());
+      Uses.emplace(Use);
+      if (DefUseChains[Def].emplace(Use).second) {
+        NumDefUseChains++;
+      }
     }
   }
-  success_stream() << "Collected " << Uses.size() << " uses\n";
+  success_stream() << "Collected " << Uses.size() << " unique uses\n";
+  success_stream() << "Collected " << NumDefUseChains << " def-use chains\n";
 
   // Save Output JSON
   if (!OutJSON.empty()) {

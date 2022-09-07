@@ -50,6 +50,7 @@ private:
   Function *tagFunction(const Function *) const;
   Instruction *tagCall(CallBase *, FunctionCallee) const;
   void tagUse(Use *) const;
+  void doAFLTag(MemFuncIdentify::DynamicMemoryFunctions &);
 
   Module *Mod;
   LLVMContext *Ctx;
@@ -238,8 +239,10 @@ void HeapTag::tagUse(Use *U) const {
 
   if (auto *CB = dyn_cast<CallBase>(User)) {
     if (CB->isArgOperand(U)) {
+      // The use is a function call argument
       phiSafeReplaceUses(U, TrampolineFn);
     } else {
+      // The use is the function callee
       tagCall(CB, FunctionCallee(TaggedFn));
     }
   } else if (auto *BC = dyn_cast<BitCastInst>(User)) {
@@ -296,24 +299,7 @@ void HeapTag::tagUse(Use *U) const {
   NumTaggedFuncUsers++;
 }
 
-void HeapTag::getAnalysisUsage(AnalysisUsage &AU) const {
-  AU.addRequired<MemFuncIdentify>();
-}
-
-bool HeapTag::runOnModule(Module &M) {
-  auto &MemFuncs = getAnalysis<MemFuncIdentify>().getFuncs();
-
-  if (MemFuncs.empty()) {
-    return false;
-  }
-
-  // Initialize stuff
-  this->Mod = &M;
-  this->Ctx = &M.getContext();
-  this->TagTy = Type::getIntNTy(*Ctx, kNumTagBits);
-  this->IntPtrTy = Mod->getDataLayout().getIntPtrType(*Ctx);
-  this->ReturnAddrFn = Intrinsic::getDeclaration(Mod, Intrinsic::returnaddress);
-
+void HeapTag::doAFLTag(MemFuncIdentify::DynamicMemoryFunctions &MemFuncs) {
   // Create the tagged memory allocation functions. These functions take the
   // same arguments as the original dynamic memory allocation function, except
   // the first argument is a tag identifying the allocation site
@@ -358,6 +344,45 @@ bool HeapTag::runOnModule(Module &M) {
         U->replaceUsesOfWith(FreeF, BBFreeF.getCallee());
       }
       FreeF->eraseFromParent();
+    }
+  }
+}
+
+void HeapTag::getAnalysisUsage(AnalysisUsage &AU) const {
+  AU.addRequired<MemFuncIdentify>();
+}
+
+bool HeapTag::runOnModule(Module &M) {
+  auto &MemFuncs = getAnalysis<MemFuncIdentify>().getFuncs();
+
+  if (MemFuncs.empty()) {
+    return false;
+  }
+
+  // Initialize stuff
+  this->Mod = &M;
+  this->Ctx = &M.getContext();
+  this->TagTy = Type::getIntNTy(*Ctx, kNumTagBits);
+  this->IntPtrTy = Mod->getDataLayout().getIntPtrType(*Ctx);
+  this->ReturnAddrFn = Intrinsic::getDeclaration(Mod, Intrinsic::returnaddress);
+
+  if (ClInstType == InstType::InstAFL) {
+    doAFLTag(MemFuncs);
+  } else {
+    for (auto *F : MemFuncs) {
+      F->setMetadata(Mod->getMDKindID(kFuzzallocDynAllocFnMD),
+                     MDNode::get(*Ctx, None));
+
+      SmallVector<User *, 16> Users(F->users());
+      while (!Users.empty()) {
+        auto *U = Users.pop_back_val();
+        if (auto *CB = dyn_cast<CallBase>(U)) {
+          CB->setMetadata(Mod->getMDKindID(kFuzzallocTagVarMD),
+                          MDNode::get(*Ctx, None));
+        } else if (isa<BitCastInst>(U)) {
+          Users.append(U->users().begin(), U->users().end());
+        }
+      }
     }
   }
 
