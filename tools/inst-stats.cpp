@@ -1,7 +1,7 @@
-//===-- dataflow-stats.cpp - Collect useful statistics ----------*- C++ -*-===//
+//===-- inst-stats.cpp - Collect instrumentation statistics -----*- C++ -*-===//
 ///
 /// \file
-/// Get some datAFLow stats
+/// Get some instrumentation stats
 ///
 //===----------------------------------------------------------------------===//
 

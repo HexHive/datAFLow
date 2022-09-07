@@ -1,4 +1,4 @@
-//===-- dataflow-sa.cpp - Static dev/use chain analysis ---------*- C++ -*-===//
+//===-- static-def-use-chains.cpp - Static dev/use analysis -----*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
