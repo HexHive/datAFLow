@@ -141,9 +141,15 @@ bool UseSite::runOnModule(Module &M) {
     auto *VoidTy = Type::getVoidTy(*Ctx);
 
     if (ClUseTracer) {
-      return Mod->getOrInsertFunction("__tracer_use", VoidTy,
-                                      TracerSrcLocationTy->getPointerTo(),
-                                      Int8PtrTy, IntPtrTy);
+      auto Fn = Mod->getOrInsertFunction("__tracer_use", VoidTy,
+                                         TracerSrcLocationTy->getPointerTo(),
+                                         Int8PtrTy, IntPtrTy);
+      assert(isa_and_nonnull<Function>(Fn.getCallee()));
+      cast<Function>(Fn.getCallee())->setDoesNotThrow();
+      cast<Function>(Fn.getCallee())->addParamAttr(0, Attribute::NonNull);
+      cast<Function>(Fn.getCallee())->addParamAttr(0, Attribute::ReadOnly);
+
+      return Fn;
     } else {
       auto InstFnName = [&]() -> std::string {
         if (ClUseCapture == UseOnly) {
@@ -155,8 +161,9 @@ bool UseSite::runOnModule(Module &M) {
         }
         llvm_unreachable("Invalid use capture option");
       }();
-      return Mod->getOrInsertFunction(InstFnName, VoidTy, TagTy, Int8PtrTy,
-                                      IntPtrTy);
+      auto Fn = Mod->getOrInsertFunction(InstFnName, VoidTy, TagTy, Int8PtrTy,
+                                         IntPtrTy);
+      return Fn;
     }
   }();
 
