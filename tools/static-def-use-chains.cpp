@@ -81,6 +81,34 @@ struct Use {
   const DIVariable *DIVar;
   const DebugLoc &Loc;
 };
+} // namespace dataflow
+
+namespace std {
+template <> struct hash<dataflow::Def> {
+  size_t operator()(const dataflow::Def &Def) const {
+    return hash<const VFGNode *>()(Def.Node);
+  }
+};
+
+template <> struct hash<dataflow::Use> {
+  size_t operator()(const dataflow::Use &Use) const {
+    return hash<const VFGNode *>()(Use.Node);
+  }
+};
+} // namespace std
+
+namespace dataflow {
+//
+// Aliases
+//
+
+using DefSet = std::unordered_set<dataflow::Def>;
+using UseSet = std::unordered_set<dataflow::Use>;
+using DefUseMap = std::unordered_map<dataflow::Def, UseSet>;
+
+//
+// JSON helpers
+//
 
 static json::Value toJSON(const dataflow::Def &Def) {
   const auto &VarName = [&]() -> std::string {
@@ -169,6 +197,17 @@ static json::Value toJSON(const dataflow::Use &Use) {
 
   return {VarName, {File, Func, Line, Col}};
 }
+
+static json::Value toJSON(const UseSet &Uses) {
+  std::vector<json::Value> J;
+  J.reserve(Uses.size());
+
+  for (const auto &U : Uses) {
+    J.push_back(U);
+  }
+
+  return J;
+}
 } // namespace dataflow
 
 namespace {
@@ -219,20 +258,6 @@ static bool isInstrumentedDeref(const Value *V) {
   return false;
 }
 } // anonymous namespace
-
-namespace std {
-template <> struct hash<dataflow::Def> {
-  size_t operator()(const dataflow::Def &Def) const {
-    return hash<const VFGNode *>()(Def.Node);
-  }
-};
-
-template <> struct hash<dataflow::Use> {
-  size_t operator()(const dataflow::Use &Use) const {
-    return hash<const VFGNode *>()(Use.Node);
-  }
-};
-} // namespace std
 
 int main(int argc, char *argv[]) {
   cl::HideUnrelatedOptions(Cat);
@@ -288,7 +313,7 @@ int main(int argc, char *argv[]) {
   // Get definitions
   //
 
-  SmallVector<dataflow::Def, 0> Defs;
+  dataflow::DefSet Defs;
 
   status_stream() << "Collecting static definitions...\n";
   for (const auto &[ID, PAGNode] : *IR) {
@@ -300,7 +325,7 @@ int main(int argc, char *argv[]) {
     if (isTaggedVar(Val)) {
       const auto *VNode = VFG->getDefSVFGNode(PAGNode);
       const auto &SrcVar = SrcVars.lookup(const_cast<Value *>(Val));
-      Defs.emplace_back(VNode, SrcVar.getDbgVar(), SrcVar.getLoc());
+      Defs.emplace(VNode, SrcVar.getDbgVar(), SrcVar.getLoc());
     }
   }
 
@@ -328,7 +353,7 @@ int main(int argc, char *argv[]) {
       const auto *VNode = VFG->getDefSVFGNode(PAGNode);
       const auto &SrcVar =
           SrcVars.lookup(const_cast<Value *>(VNode->getValue()));
-      Defs.emplace_back(VNode, SrcVar.getDbgVar(), SrcVar.getLoc());
+      Defs.emplace(VNode, SrcVar.getDbgVar(), SrcVar.getLoc());
     }
   }
 
@@ -344,9 +369,8 @@ int main(int argc, char *argv[]) {
   // Collect uses
   FIFOWorkList<const VFGNode *> Worklist;
   Set<const VFGNode *> Visited;
-  std::unordered_map<dataflow::Def, std::unordered_set<dataflow::Use>>
-      DefUseChains;
-  unsigned NumUses = 0;
+  dataflow::DefUseMap DefUseChains;
+  dataflow::UseSet Uses;
 
   status_stream() << "Collecting uses...\n";
   for (const auto &Def : Defs) {
@@ -382,31 +406,34 @@ int main(int argc, char *argv[]) {
 
       const auto &Var = SrcVars.lookup(const_cast<Value *>(V));
       DefUseChains[Def].emplace(Use, Var.getDbgVar());
-      NumUses++;
+      Uses.emplace(Use, Var.getDbgVar());
     }
   }
-  success_stream() << "Collected " << NumUses << " uses\n";
+  success_stream() << "Collected " << Uses.size() << " uses\n";
 
   // Save Output JSON
   if (!OutJSON.empty()) {
+    const auto &NumDefs = DefUseChains.size();
     json::Array J;
-    std::vector<json::Value> JUses;
-    J.reserve(DefUseChains.size());
+    J.reserve(NumDefs);
 
     status_stream() << "Serializing def/use chains to JSON...\n";
-    for (const auto &[Def, Uses] : DefUseChains) {
-      JUses.clear();
-      JUses.reserve(Uses.size());
+    for (const auto &DUEnum : enumerate(DefUseChains)) {
+      const auto &[Def, Uses] = DUEnum.value();
 
-      for (const auto &Use : Uses) {
-        JUses.push_back(Use);
+      J.push_back({Def, Uses});
+
+      const auto &Idx = DUEnum.index();
+      if (Idx % (NumDefs / 10) == 0) {
+        status_stream() << "  ";
+        write_double(outs(), static_cast<float>(Idx) / NumDefs,
+                     FloatStyle::Percent);
+        outs() << " defs serialized\r";
       }
-
-      J.push_back({Def, JUses});
     }
 
     std::error_code EC;
-    raw_fd_ostream OS{OutJSON, EC, sys::fs::OF_Text};
+    raw_fd_ostream OS(OutJSON, EC, sys::fs::OF_Text);
     if (EC) {
       error_stream() << "Unable to open " << OutJSON << '\n';
       ::exit(1);
