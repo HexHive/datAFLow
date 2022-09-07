@@ -1,7 +1,7 @@
-//===-- AFLUseSite.cpp - Instrument use sites -------------------*- C++ -*-===//
+//===-- UseSite.cpp - Instrument use sites ----------------------*- C++ -*-===//
 ///
 /// \file
-/// Instrument use sites using an AFL-style bitmap
+/// Instrument use sites
 ///
 //===----------------------------------------------------------------------===//
 
@@ -19,10 +19,11 @@
 #include "fuzzalloc/Streams.h"
 
 #include "TagUtils.h"
+#include "TracerUtils.h"
 
 using namespace llvm;
 
-#define DEBUG_TYPE "fuzzalloc-afl-use-site"
+#define DEBUG_TYPE "fuzzalloc-use-site"
 
 namespace {
 enum UseSiteCapture {
@@ -55,10 +56,10 @@ static unsigned NumInstrumentedWrites = 0;
 } // anonymous namespace
 
 /// Instrument use sites
-class AFLUseSite : public ModulePass {
+class UseSite : public ModulePass {
 public:
   static char ID;
-  AFLUseSite() : ModulePass(ID) {}
+  UseSite() : ModulePass(ID) {}
 
   virtual void getAnalysisUsage(AnalysisUsage &) const override;
   virtual bool runOnModule(Module &) override;
@@ -70,16 +71,17 @@ private:
   LLVMContext *Ctx;
   const DataLayout *DL;
 
-  FunctionCallee HashFn;
+  FunctionCallee InstFn;
 
   IntegerType *TagTy;
   PointerType *Int8PtrTy;
   IntegerType *IntPtrTy;
+  StructType *TracerSrcLocationTy;
 };
 
-char AFLUseSite::ID = 0;
+char UseSite::ID = 0;
 
-void AFLUseSite::doInstrument(InterestingMemoryOperand *Op) {
+void UseSite::doInstrument(InterestingMemoryOperand *Op) {
   if (Op->IsWrite) {
     NumInstrumentedWrites++;
   } else {
@@ -100,21 +102,26 @@ void AFLUseSite::doInstrument(InterestingMemoryOperand *Op) {
   assert(Inst->getNextNode());
   IRBuilder<> IRB(Inst->getNextNode());
 
-  // Compute the AFL coverage bitmap index based on the def-use chain and update
-  // the AFL coverage bitmap (done inside the hash function)
   auto *PtrCast = IRB.CreatePointerCast(Ptr, Int8PtrTy);
   auto *PtrElemTy = Ptr->getType()->getPointerElementType();
   auto *Size = ConstantInt::get(IntPtrTy, DL->getTypeStoreSize(PtrElemTy));
-  auto *UseSite = generateTag(TagTy);
 
-  IRB.CreateCall(HashFn, {UseSite, PtrCast, Size});
+  auto *Metadata = [&]() -> Constant * {
+    if (ClUseTracer) {
+      return ConstantExpr::getPointerCast(tracerCreateUse(Inst, Mod),
+                                          TracerSrcLocationTy->getPointerTo());
+    } else {
+      return generateTag(TagTy);
+    }
+  }();
+  IRB.CreateCall(InstFn, {Metadata, PtrCast, Size});
 }
 
-void AFLUseSite::getAnalysisUsage(AnalysisUsage &AU) const {
+void UseSite::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<UseSiteIdentify>();
 }
 
-bool AFLUseSite::runOnModule(Module &M) {
+bool UseSite::runOnModule(Module &M) {
   bool Changed = false;
 
   // Initialize stuff
@@ -125,23 +132,33 @@ bool AFLUseSite::runOnModule(Module &M) {
   this->TagTy = Type::getIntNTy(*Ctx, kNumTagBits);
   this->IntPtrTy = DL->getIntPtrType(*Ctx);
   this->Int8PtrTy = Type::getInt8PtrTy(*Ctx);
+  this->TracerSrcLocationTy =
+      StructType::create({Int8PtrTy, Int8PtrTy, IntPtrTy, IntPtrTy},
+                         "fuzzalloc.SrcLocation", /*isPacked=*/true);
 
-  // Select the hash function to use
-  {
+  // Select the instrumentation to use
+  this->InstFn = [&]() -> FunctionCallee {
     auto *VoidTy = Type::getVoidTy(*Ctx);
-    auto HashFnName = [&]() {
-      if (ClUseCapture == UseOnly) {
-        return "__afl_hash_def_use";
-      } else if (ClUseCapture == UseWithOffset) {
-        return "__afl_hash_def_use_offset";
-      } else if (ClUseCapture == UseWithValue) {
-        return "__afl_hash_def_use_value";
-      }
-      llvm_unreachable("Invalid use capture option");
-    }();
-    this->HashFn = Mod->getOrInsertFunction(HashFnName, VoidTy, TagTy,
-                                            Int8PtrTy, IntPtrTy);
-  }
+
+    if (ClUseTracer) {
+      return Mod->getOrInsertFunction("__tracer_use", VoidTy,
+                                      TracerSrcLocationTy->getPointerTo(),
+                                      Int8PtrTy, IntPtrTy);
+    } else {
+      auto InstFnName = [&]() -> std::string {
+        if (ClUseCapture == UseOnly) {
+          return "__afl_hash_def_use";
+        } else if (ClUseCapture == UseWithOffset) {
+          return "__afl_hash_def_use_offset";
+        } else if (ClUseCapture == UseWithValue) {
+          return "__afl_hash_def_use_value";
+        }
+        llvm_unreachable("Invalid use capture option");
+      }();
+      return Mod->getOrInsertFunction(InstFnName, VoidTy, TagTy, Int8PtrTy,
+                                      IntPtrTy);
+    }
+  }();
 
   // Instrument all the things
   for (auto &F : M) {
@@ -184,18 +201,18 @@ bool AFLUseSite::runOnModule(Module &M) {
 // Pass registration
 //
 
-static RegisterPass<AFLUseSite> X(DEBUG_TYPE, "Instrument use sites (AFL)",
-                                  false, false);
+static RegisterPass<UseSite> X(DEBUG_TYPE, "Instrument use sites", false,
+                               false);
 
-static void registerAFLUseSitePass(const PassManagerBuilder &,
-                                   legacy::PassManagerBase &PM) {
-  PM.add(new AFLUseSite());
+static void registerUseSitePass(const PassManagerBuilder &,
+                                legacy::PassManagerBase &PM) {
+  PM.add(new UseSite());
 }
 
 static RegisterStandardPasses
-    RegisterAFLUseSitePass(PassManagerBuilder::EP_OptimizerLast,
-                           registerAFLUseSitePass);
+    RegisterUseSitePass(PassManagerBuilder::EP_OptimizerLast,
+                        registerUseSitePass);
 
 static RegisterStandardPasses
-    RegisterAFLUseSitePass0(PassManagerBuilder::EP_EnabledOnOptLevel0,
-                            registerAFLUseSitePass);
+    RegisterUseSitePass0(PassManagerBuilder::EP_EnabledOnOptLevel0,
+                         registerUseSitePass);

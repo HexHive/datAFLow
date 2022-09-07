@@ -188,15 +188,7 @@ def main():
     else:
         use_inst = None
 
-    if use_inst == 'afl':
-        cmd.extend([
-            '-O3',
-            '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libAFLUseSite.so',
-        ])
-    elif use_inst == 'tracer':
-        cmd.extend([
-            '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libTracerUseSite.so',
-        ])
+    cmd.extend(['-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libUseSite.so'])
 #    if can_lto():
 #        cmd.extend(['-fuse-ld=gold', '-flto'])
 
@@ -206,7 +198,7 @@ def main():
     # Linker args
     cmd.extend([f'-L{LIB_DIR}', '-lFuzzallocRuntime'])
     if use_inst == 'afl':
-        cmd.extend([f'-L{LIB_DIR}', '-lAFLRuntime'])
+        cmd.extend(['-O3', f'-L{LIB_DIR}', '-lAFLRuntime'])
     elif use_inst == 'tracer':
         cmd.extend([f'-L{LIB_DIR}', '-lTracerRuntime', '-lstdc++',
                     '-L@LLVM_LIBRARY_DIR@', '-lLLVMSupport',

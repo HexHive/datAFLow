@@ -193,7 +193,7 @@ __attribute__((constructor)) static void initializeTimeout() {
 extern "C" {
 void __tracer_def(const SrcDef *Def) { Log.addDef(Def); }
 
-void __tracer_use(void *Ptr, size_t Size, const SrcLocation *Loc) {
+void __tracer_use(const SrcLocation *Loc, void *Ptr, size_t Size) {
   uintptr_t Base;
   SrcDef **Def = (SrcDef **)__bb_lookup(Ptr, &Base, sizeof(SrcDef *));
 

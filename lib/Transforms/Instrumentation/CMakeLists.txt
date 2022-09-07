@@ -2,27 +2,18 @@ add_library(TagUtils OBJECT
   TagUtils.cpp
 )
 
-add_library(AFLUseSite SHARED
-  AFLUseSite.cpp
+add_library(UseSite SHARED
+  UseSite.cpp
 )
-target_link_libraries(AFLUseSite PUBLIC
+target_link_libraries(UseSite PUBLIC
   UseSiteIdentify
 )
-install(TARGETS AFLUseSite LIBRARY DESTINATION lib)
+install(TARGETS UseSite LIBRARY DESTINATION lib)
 
 add_library(TracerUtils SHARED
   TracerUtils.cpp
 )
 install(TARGETS TracerUtils LIBRARY DESTINATION lib)
-
-add_library(TracerUseSite SHARED
-  TracerUseSite.cpp
-)
-target_link_libraries(TracerUseSite PUBLIC
-  UseSiteIdentify
-  TracerUtils
-)
-install(TARGETS TracerUseSite LIBRARY DESTINATION lib)
 
 add_library(GlobalVariableTag SHARED
   GlobalVariableTag.cpp
