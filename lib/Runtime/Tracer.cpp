@@ -73,7 +73,7 @@ static json::Value toJSON(const SrcLocation &Loc) {
 }
 
 static json::Value toJSON(const SrcDef &Def) {
-  return {toJSON(Def.Loc), Def.Var};
+  return {Def.Var, toJSON(Def.Loc)};
 }
 
 using LocationCountMap = std::map<const SrcLocation *, size_t>;

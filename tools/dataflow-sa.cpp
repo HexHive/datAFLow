@@ -57,15 +57,15 @@ namespace dataflow {
 
 /// A variable definition
 struct Def {
-  Def(tag_t Tag, const VFGNode *Node, const DIVariable *Var)
-      : Tag(Tag), Node(Node), Val(Node->getValue()), Var(Var) {}
+  Def(const VFGNode *Node, const DIVariable *Var, const DebugLoc *Loc)
+      : Node(Node), Val(Node->getValue()), Var(Var), Loc(Loc) {}
 
   bool operator==(const Def &Other) const { return Node == Other.Node; }
 
-  const tag_t Tag;
   const VFGNode *Node;
   const Value *Val;
   const DIVariable *Var;
+  const DebugLoc *Loc;
 };
 
 /// A variable use
@@ -79,16 +79,10 @@ struct Use {
   const VFGNode *Node;
   const Value *Val;
   const DIVariable *Var;
-  const DILocation *Loc;
+  const DebugLoc &Loc;
 };
 
 static json::Value toJSON(const dataflow::Def &Def) {
-  std::string IR;
-  raw_string_ostream SS{IR};
-
-  Def.Val->print(SS, /*IsForDebug=*/true);
-  SS.flush();
-
   const auto &VarName = [&]() -> std::string {
     if (const auto *Var = Def.Var) {
       return Var->getName().str();
@@ -96,9 +90,9 @@ static json::Value toJSON(const dataflow::Def &Def) {
     return getNameOrAsOperand(Def.Val);
   }();
 
-  const auto &Filename = [&]() -> Optional<StringRef> {
-    if (const auto *Var = Def.Var) {
-      return Var->getFile()->getName();
+  const auto &File = [&]() -> Optional<StringRef> {
+    if (const auto *Loc = Def.Loc) {
+      return Loc->get()->getFile()->getName();
     }
     return None;
   }();
@@ -113,22 +107,23 @@ static json::Value toJSON(const dataflow::Def &Def) {
   }();
 
   const auto &Line = [&]() -> Optional<unsigned int> {
-    if (const auto *Var = Def.Var) {
-      return Var->getLine();
+    if (const auto *Loc = Def.Loc) {
+      return Loc->getLine();
     }
     return None;
   }();
 
-  return {IR, Def.Tag, {VarName, Filename, Func, Line}};
+  const auto &Col = [&]() -> Optional<unsigned int> {
+    if (const auto *Loc = Def.Loc) {
+      return Loc->get()->getColumn();
+    }
+    return None;
+  }();
+
+  return {VarName, {File, Func, Line, Col}};
 }
 
 static json::Value toJSON(const dataflow::Use &Use) {
-  std::string IR;
-  raw_string_ostream SS{IR};
-
-  Use.Val->print(SS, /*IsForDebug=*/true);
-  SS.flush();
-
   const auto &VarName = [&]() -> std::string {
     if (const auto *Var = Use.Var) {
       return Var->getName().str();
@@ -141,15 +136,15 @@ static json::Value toJSON(const dataflow::Use &Use) {
     llvm_unreachable("use must be a load or store");
   }();
 
-  const auto &Filename = [&]() -> Optional<StringRef> {
-    if (const auto *Loc = Use.Loc) {
+  const auto &File = [&]() -> Optional<StringRef> {
+    if (const auto &Loc = Use.Loc) {
       return Loc->getFile()->getName();
     }
     return None;
   }();
 
   const auto &Func = [&]() -> Optional<StringRef> {
-    if (const auto *Loc = Use.Loc) {
+    if (const auto &Loc = Use.Loc) {
       return getDISubprogram(Loc->getScope())->getName();
     } else if (const auto *Inst = dyn_cast<Instruction>(Use.Val)) {
       return Inst->getFunction()->getName();
@@ -158,13 +153,20 @@ static json::Value toJSON(const dataflow::Use &Use) {
   }();
 
   const auto &Line = [&]() -> Optional<unsigned int> {
-    if (const auto *Loc = Use.Loc) {
+    if (const auto &Loc = Use.Loc) {
       return Loc->getLine();
     }
     return None;
   }();
 
-  return {IR, {VarName, Filename, Func, Line}};
+  const auto &Col = [&]() -> Optional<unsigned int> {
+    if (const auto &Loc = Use.Loc) {
+      return Loc->getColumn();
+    }
+    return None;
+  }();
+
+  return {VarName, {File, Func, Line, Col}};
 }
 } // namespace dataflow
 
@@ -176,6 +178,7 @@ namespace {
 static constexpr const char *kBBMalloc = "__bb_malloc";
 static constexpr const char *kBBCalloc = "__bb_calloc";
 static constexpr const char *kBBRealloc = "__bb_realloc";
+static constexpr const char *kBBStrdup = "__bb_strdup";
 static constexpr const char *kBBFree = "__bb_free";
 
 //
@@ -193,12 +196,14 @@ static cl::opt<std::string> OutJSON("out", cl::desc("Output JSON"),
 // Helper functions
 //
 
-static bool isTaggedAlloc(const Value *V) {
+static bool isTaggedVar(const Value *V) {
   if (!V) {
     return false;
   }
   if (const auto *I = dyn_cast<Instruction>(V)) {
-    return I->hasMetadata() && I->getMetadata(kFuzzallocTagVarMD);
+    return I->getMetadata(kFuzzallocTagVarMD) != nullptr;
+  } else if (const auto *GO = dyn_cast<GlobalObject>(V)) {
+    return GO->getMetadata(kFuzzallocTagVarMD) != nullptr;
   }
   return false;
 }
@@ -208,7 +213,7 @@ static bool isInstrumentedDeref(const Value *V) {
     return false;
   }
   if (const auto *I = dyn_cast<Instruction>(V)) {
-    return I->hasMetadata() && I->getMetadata(kFuzzallocInstrumentedUseSiteMD);
+    return I->getMetadata(kFuzzallocInstrumentedUseSiteMD) != nullptr;
   }
   return false;
 }
@@ -259,6 +264,7 @@ int main(int argc, char *argv[]) {
   Externals->add_entry(kBBMalloc, ExtAPI::extType::EFT_ALLOC, true);
   Externals->add_entry(kBBCalloc, ExtAPI::extType::EFT_ALLOC, true);
   Externals->add_entry(kBBRealloc, ExtAPI::extType::EFT_REALLOC, true);
+  Externals->add_entry(kBBStrdup, ExtAPI::extType::EFT_NOSTRUCT_ALLOC, true);
   Externals->add_entry(kBBFree, ExtAPI::extType::EFT_FREE, true);
 
   auto *SVFMod = LLVMModuleSet::getLLVMModuleSet()->buildSVFModule(*Mod);
@@ -277,40 +283,62 @@ int main(int argc, char *argv[]) {
     return Builder.buildFullSVFG(Ander);
   }();
 
+  //
   // Get definitions
+  //
+
   SmallVector<dataflow::Def, 0> Defs;
 
-  status_stream() << "Collecting definitions...\n";
+  status_stream() << "Collecting static definitions...\n";
+  for (const auto &[ID, PAGNode] : *IR) {
+    if (!(isa<ValVar>(PAGNode) && PAGNode->hasValue())) {
+      continue;
+    }
+
+    auto *Val = PAGNode->getValue();
+    if (isTaggedVar(Val)) {
+      const auto *VNode = VFG->getDefSVFGNode(PAGNode);
+      const auto &SrcVar = SrcVars.lookup(const_cast<Value *>(Val));
+      Defs.emplace_back(VNode, SrcVar.getDbgVar(), SrcVar.getLoc());
+    }
+  }
+
+  const auto &NumStaticDefSites = Defs.size();
+  success_stream() << "Collected " << NumStaticDefSites
+                   << " static def sites\n";
+
+  status_stream() << "Collecting dynamic definitions...\n";
   for (const auto *SVFCallSite : IR->getCallSiteSet()) {
     const auto *CS = SVFCallSite->getCallSite();
     const auto *F = SVFUtil::getCallee(CS);
     if (!F) {
       continue;
     }
+
     if (F->getName() == kBBMalloc || F->getName() == kBBCalloc ||
-        F->getName() == kBBRealloc) {
-      (void)isTaggedAlloc;
-      assert(isTaggedAlloc(CS) &&
+        F->getName() == kBBRealloc || F->getName() == kBBStrdup) {
+      (void)isTaggedVar;
+      assert(isTaggedVar(CS) &&
              "BaggyBounds alloc must have fuzzalloc metadata");
       assert((Externals->is_alloc(F) || Externals->is_realloc(F)) &&
              "BaggyBounds function must (re)allocate");
 
-      // Extract the tag from the tagged allocation call. This is always the
-      // first actual argument
-      const auto *TagV = cast<CallBase>(CS)->getArgOperand(0);
-      const auto &Tag = cast<ConstantInt>(TagV)->getZExtValue();
-
       const auto *PAGNode = IR->getGNode(IR->getValueNode(CS));
       const auto *VNode = VFG->getDefSVFGNode(PAGNode);
-      const auto &Var = SrcVars.lookup(const_cast<Value *>(VNode->getValue()));
-      Defs.emplace_back(Tag, VNode, Var.getDbgVar());
+      const auto &SrcVar =
+          SrcVars.lookup(const_cast<Value *>(VNode->getValue()));
+      Defs.emplace_back(VNode, SrcVar.getDbgVar(), SrcVar.getLoc());
     }
   }
+
+  const auto &NumDynamicDefSites = Defs.size() - NumStaticDefSites;
+  success_stream() << "Collected " << NumDynamicDefSites
+                   << " dynamic def sites\n";
+
   if (Defs.empty()) {
     error_stream() << "Failed to collect any def sites\n";
     ::exit(1);
   }
-  success_stream() << "Collected " << Defs.size() << " def sites\n";
 
   // Collect uses
   FIFOWorkList<const VFGNode *> Worklist;
