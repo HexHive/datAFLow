@@ -1,4 +1,10 @@
 #
+# Abseil
+#
+
+add_subdirectory(abseil)
+
+#
 # AFL++
 #
 

@@ -4,3 +4,6 @@
 [submodule "ext/svf"]
 	path = ext/svf
 	url = https://github.com/svf-tools/svf
+[submodule "ext/abseil-cpp"]
+	path = ext/abseil
+	url = https://github.com/abseil/abseil-cpp
