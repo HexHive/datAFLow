@@ -12,8 +12,6 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 #include <llvm/IR/LLVMContext.h>
@@ -24,6 +22,9 @@
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/JSON.h>
 #include <llvm/Support/WithColor.h>
+
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 
 #include "SVF-FE/LLVMModule.h"
 #include "SVF-FE/SVFIRBuilder.h"
@@ -103,9 +104,9 @@ namespace dataflow {
 // Aliases
 //
 
-using DefSet = std::unordered_set<dataflow::Def>;
-using UseSet = std::unordered_set<dataflow::Use>;
-using DefUseMap = std::unordered_map<dataflow::Def, UseSet>;
+using DefSet = absl::flat_hash_set<dataflow::Def>;
+using UseSet = absl::flat_hash_set<dataflow::Use>;
+using DefUseMap = absl::flat_hash_map<dataflow::Def, UseSet>;
 
 //
 // JSON helpers
