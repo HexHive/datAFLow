@@ -19,6 +19,7 @@
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IRReader/IRReader.h>
+#include <llvm/InitializePasses.h>
 #include <llvm/Pass.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/JSON.h>
@@ -29,6 +30,7 @@
 #include "Util/config.h"
 #include "WPA/Andersen.h"
 
+#include "fuzzalloc/Analysis/MemFuncIdentify.h"
 #include "fuzzalloc/Analysis/VariableRecovery.h"
 #include "fuzzalloc/Metadata.h"
 #include "fuzzalloc/Streams.h"
@@ -199,16 +201,6 @@ static json::Value toJSON(const UseSet &Uses) {
 
 namespace {
 //
-// Constants
-//
-
-static constexpr const char *kBBMalloc = "__bb_malloc";
-static constexpr const char *kBBCalloc = "__bb_calloc";
-static constexpr const char *kBBRealloc = "__bb_realloc";
-static constexpr const char *kBBStrdup = "__bb_strdup";
-static constexpr const char *kBBFree = "__bb_free";
-
-//
 // Command-line options
 //
 
@@ -264,21 +256,43 @@ int main(int argc, char *argv[]) {
   // Recover source-level variables
   status_stream() << "Running variable recovery pass...\n";
 
+  auto &Registry = *PassRegistry::getPassRegistry();
+  initializeCore(Registry);
+  initializeAnalysis(Registry);
+
   legacy::PassManager PM;
   auto *RecoverVars = new VariableRecovery;
+  auto *MemFuncId = new MemFuncIdentify;
   PM.add(RecoverVars);
+  PM.add(MemFuncId);
   PM.run(*Mod);
-  const auto &SrcVars = RecoverVars->getVariables();
 
-  status_stream() << "Doing pointer analysis...\n";
+  const auto &SrcVars = RecoverVars->getVariables();
+  const auto &MemFuncs = MemFuncId->getFuncs();
 
   // Initialize external API
   auto *Externals = ExtAPI::getExtAPI();
-  Externals->add_entry(kBBMalloc, ExtAPI::extType::EFT_ALLOC, true);
-  Externals->add_entry(kBBCalloc, ExtAPI::extType::EFT_ALLOC, true);
-  Externals->add_entry(kBBRealloc, ExtAPI::extType::EFT_REALLOC, true);
-  Externals->add_entry(kBBStrdup, ExtAPI::extType::EFT_NOSTRUCT_ALLOC, true);
-  Externals->add_entry(kBBFree, ExtAPI::extType::EFT_FREE, true);
+  for (const auto *MemFn : MemFuncs) {
+    const auto &Name = MemFn->getName();
+    if (Externals->get_type(Name.str()) != ExtAPI::extType::EFT_NULL) {
+      continue;
+    }
+
+    // XXX This is very hacky
+    const StringRef NameLower = Name.lower();
+    if (NameLower.contains("malloc") || NameLower.contains("calloc")) {
+      Externals->add_entry(Name.str().c_str(), ExtAPI::extType::EFT_ALLOC,
+                           true);
+    } else if (NameLower.contains("realloc")) {
+      Externals->add_entry(Name.str().c_str(), ExtAPI::extType::EFT_REALLOC,
+                           true);
+    } else if (NameLower.contains("strdup")) {
+      Externals->add_entry(Name.str().c_str(),
+                           ExtAPI::extType::EFT_NOSTRUCT_ALLOC, true);
+    }
+  }
+
+  status_stream() << "Doing pointer analysis...\n";
 
   auto *SVFMod = LLVMModuleSet::getLLVMModuleSet()->buildSVFModule(*Mod);
   SVFMod->buildSymbolTableInfo();
@@ -302,7 +316,7 @@ int main(int argc, char *argv[]) {
 
   dataflow::DefSet Defs;
 
-  status_stream() << "Collecting static definitions...\n";
+  status_stream() << "Collecting definitions...\n";
   for (const auto &[ID, PAGNode] : *IR) {
     if (!(isa<ValVar>(PAGNode) && PAGNode->hasValue())) {
       continue;
@@ -316,42 +330,12 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  const auto &NumStaticDefSites = Defs.size();
-  success_stream() << "Collected " << NumStaticDefSites
-                   << " static def sites\n";
-
-  status_stream() << "Collecting dynamic definitions...\n";
-  for (const auto *SVFCallSite : IR->getCallSiteSet()) {
-    const auto *CS = SVFCallSite->getCallSite();
-    const auto *F = SVFUtil::getCallee(CS);
-    if (!F) {
-      continue;
-    }
-
-    if (F->getName() == kBBMalloc || F->getName() == kBBCalloc ||
-        F->getName() == kBBRealloc || F->getName() == kBBStrdup) {
-      (void)isTaggedVar;
-      assert(isTaggedVar(CS) &&
-             "BaggyBounds alloc must have fuzzalloc metadata");
-      assert((Externals->is_alloc(F) || Externals->is_realloc(F)) &&
-             "BaggyBounds function must (re)allocate");
-
-      const auto *PAGNode = IR->getGNode(IR->getValueNode(CS));
-      const auto *VNode = VFG->getDefSVFGNode(PAGNode);
-      const auto &SrcVar =
-          SrcVars.lookup(const_cast<Value *>(VNode->getValue()));
-      Defs.emplace(VNode, SrcVar.getDbgVar(), SrcVar.getLoc());
-    }
-  }
-
-  const auto &NumDynamicDefSites = Defs.size() - NumStaticDefSites;
-  success_stream() << "Collected " << NumDynamicDefSites
-                   << " dynamic def sites\n";
-
   if (Defs.empty()) {
     error_stream() << "Failed to collect any def sites\n";
     ::exit(1);
   }
+
+  success_stream() << "Collected " << Defs.size() << " def sites\n";
 
   // Collect def-use chains
   FIFOWorkList<const VFGNode *> Worklist;
@@ -414,7 +398,7 @@ int main(int argc, char *argv[]) {
       J.push_back({Def, Uses});
 
       const auto &Idx = DUEnum.index();
-      if (Idx % (NumDefs / 10) == 0) {
+      if (Idx % ((NumDefs + (10 - 1)) / 10) == 0) {
         status_stream() << "  ";
         write_double(outs(), static_cast<float>(Idx) / NumDefs,
                      FloatStyle::Percent);

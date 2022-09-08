@@ -172,19 +172,8 @@ def main():
 
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libGlobalVariableTag.so',
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libLocalVariableTag.so',
+        '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libHeapTag.so',
     ])
-
-    # Use site instrumentation
-    if 'FUZZALLOC_USE_INST' in env:
-        use_inst = env['FUZZALLOC_USE_INST']
-    elif args.use_inst:
-        use_inst = args.use_inst
-    else:
-        use_inst = None
-
-    # Only heapify when fuzzing
-    if use_inst == 'afl':
-        cmd.extend(['-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libHeapTag.so'])
 
     is_assembler = check_if_assembler(clang_args)
     if not is_assembler:
@@ -197,6 +186,14 @@ def main():
 
     # Clang args
     cmd.extend(clang_args)
+
+    # Use site instrumentation
+    if 'FUZZALLOC_USE_INST' in env:
+        use_inst = env['FUZZALLOC_USE_INST']
+    elif args.use_inst:
+        use_inst = args.use_inst
+    else:
+        use_inst = None
 
     # Linker args
     cmd.extend([f'-L{LIB_DIR}', '-lFuzzallocRuntime'])

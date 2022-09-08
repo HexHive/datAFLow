@@ -22,6 +22,7 @@ install(PROGRAMS "${CMAKE_CURRENT_BINARY_DIR}/dataflow-c++" TYPE BIN)
 
 add_executable(static-def-use-chains static-def-use-chains.cpp)
 target_link_libraries(static-def-use-chains PRIVATE
+  MemFuncIdentify
   VariableRecovery
   Svf
   ${LLVM_LIBS}

@@ -370,15 +370,19 @@ bool HeapTag::runOnModule(Module &M) {
     doAFLTag(MemFuncs);
   } else {
     for (auto *F : MemFuncs) {
+      // Tag the function as a memory allocation routine
       F->setMetadata(Mod->getMDKindID(kFuzzallocDynAllocFnMD),
                      MDNode::get(*Ctx, None));
+      NumTaggedFuncs++;
 
+      // Tag calls as producing a new def site
       SmallVector<User *, 16> Users(F->users());
       while (!Users.empty()) {
         auto *U = Users.pop_back_val();
         if (auto *CB = dyn_cast<CallBase>(U)) {
           CB->setMetadata(Mod->getMDKindID(kFuzzallocTagVarMD),
                           MDNode::get(*Ctx, None));
+          NumTaggedFuncs++;
         } else if (isa<BitCastInst>(U)) {
           Users.append(U->users().begin(), U->users().end());
         }
