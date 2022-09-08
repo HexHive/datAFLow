@@ -36,8 +36,8 @@ target_link_libraries(inst-stats PRIVATE
 )
 install(TARGETS inst-stats RUNTIME DESTINATION bin)
 
-add_executable(region-cov region-cov.cpp)
-target_link_libraries(region-cov PRIVATE
+add_executable(static-region-cov static-region-cov.cpp)
+target_link_libraries(static-region-cov PRIVATE
   ${LLVM_LIBS}
 )
-install(TARGETS region-cov RUNTIME DESTINATION bin)
+install(TARGETS static-region-cov RUNTIME DESTINATION bin)
