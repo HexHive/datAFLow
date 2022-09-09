@@ -23,6 +23,8 @@ LIB_DIR = Path(THIS_DIR.parent) / 'lib'
 def parse_args():
     """Parse command-line options."""
     parser = ArgumentParser(description='datAFLow C compiler')
+    parser.add_argument('--inst', choices=('none', 'afl', 'tracer'),
+                        help='def/use site instrumentation type')
 
     # def site options
     def_arg_group = parser.add_argument_group('def sites', 'Def site options')
@@ -41,8 +43,6 @@ def parse_args():
     use_arg_group.add_argument('--use-capture',
                                 choices=('use', 'offset', 'value'),
                                 help='what to capture at the use site')
-    use_arg_group.add_argument('--use-inst', choices=('none', 'afl', 'tracer'),
-                               help='use site instrumentation type')
 
     return parser.parse_known_args()
 
@@ -129,16 +129,16 @@ def get_llvm_args(args):
     if use_capture:
         llvm_args.extend(['-mllvm', f'-fuzzalloc-capture-{use_capture}'])
 
-    # Use site instrumentation
-    if 'FUZZALLOC_USE_INST' in env:
-        use_inst = env['FUZZALLOC_USE_INST']
-    elif args.use_inst:
-        use_inst = args.use_inst
+    # Instrumentation
+    if 'FUZZALLOC_INST' in env:
+        inst = env['FUZZALLOC_INST']
+    elif args.inst:
+        inst = args.inst
     else:
-        use_inst = None
+        inst = None
 
-    if use_inst:
-        llvm_args.extend(['-mllvm', f'-fuzzalloc-use-inst-{use_inst}'])
+    if inst:
+        llvm_args.extend(['-mllvm', f'-fuzzalloc-inst-{inst}'])
 
     return llvm_args
 
@@ -187,19 +187,19 @@ def main():
     # Clang args
     cmd.extend(clang_args)
 
-    # Use site instrumentation
-    if 'FUZZALLOC_USE_INST' in env:
-        use_inst = env['FUZZALLOC_USE_INST']
-    elif args.use_inst:
-        use_inst = args.use_inst
+    # Instrumentation
+    if 'FUZZALLOC_INST' in env:
+        inst = env['FUZZALLOC_INST']
+    elif args.inst:
+        inst = args.inst
     else:
-        use_inst = None
+        inst = None
 
     # Linker args
     cmd.extend([f'-L{LIB_DIR}', '-lFuzzallocRuntime'])
-    if use_inst == 'afl':
+    if inst == 'afl':
         cmd.extend(['-O3', f'-L{LIB_DIR}', '-lAFLRuntime'])
-    elif use_inst == 'tracer':
+    elif inst == 'tracer':
         cmd.extend([f'-L{LIB_DIR}', '-lTracerRuntime', '-lstdc++',
                     '-L@LLVM_LIBRARY_DIR@', '-lLLVMSupport',
                     '@LLVM_PTHREAD_LIB@', '-lm', '-ltinfo'])

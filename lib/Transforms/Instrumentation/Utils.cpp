@@ -25,12 +25,12 @@ using namespace llvm;
 #define RAND(x, y) ((tag_t)((x) + random() / (RAND_MAX / ((y) - (x) + 1) + 1)))
 
 cl::opt<InstType> ClInstType(
-    cl::desc("Use site instrumentation"),
-    cl::values(clEnumValN(InstType::InstNone, "fuzzalloc-use-inst-none",
+    cl::desc("Instrumentation type"),
+    cl::values(clEnumValN(InstType::InstNone, "fuzzalloc-inst-none",
                           "No instrumentation"),
-               clEnumValN(InstType::InstAFL, "fuzzalloc-use-inst-afl",
+               clEnumValN(InstType::InstAFL, "fuzzalloc-inst-afl",
                           "AFL instrumentation"),
-               clEnumValN(InstType::InstTrace, "fuzzalloc-use-inst-tracer",
+               clEnumValN(InstType::InstTrace, "fuzzalloc-inst-tracer",
                           "Tracer instrumentation")));
 
 ConstantInt *generateTag(IntegerType *TagTy) {

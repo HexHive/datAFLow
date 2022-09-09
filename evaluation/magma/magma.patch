@@ -810,7 +810,7 @@ index 00000000..5ee9ab95
 +export FUZZALLOC_DEF_SENSITIVITY="array:struct"
 +export FUZZALLOC_USE_SENSITIVITY="read:write"
 +export FUZZALLOC_USE_CAPTURE="use"
-+export FUZZALLOC_USE_INST="afl"
++export FUZZALLOC_INST="afl"
 +
 +export CC="$FUZZER/dataflow/bin/dataflow-cc"
 +export CXX="$FUZZER/dataflow/bin/dataflow-c++"
@@ -1415,7 +1415,7 @@ index 00000000..be7c5d03
 +export FUZZALLOC_DEF_SENSITIVITY="array:struct"
 +export FUZZALLOC_USE_SENSITIVITY="read:write"
 +export FUZZALLOC_USE_CAPTURE="offset"
-+export FUZZALLOC_USE_INST="afl"
++export FUZZALLOC_INST="afl"
 +
 +export CC="$FUZZER/dataflow/bin/dataflow-cc"
 +export CXX="$FUZZER/dataflow/bin/dataflow-c++"
@@ -2020,7 +2020,7 @@ index 00000000..4485562c
 +export FUZZALLOC_DEF_SENSITIVITY="array:struct"
 +export FUZZALLOC_USE_SENSITIVITY="read:write"
 +export FUZZALLOC_USE_CAPTURE="value"
-+export FUZZALLOC_USE_INST="afl"
++export FUZZALLOC_INST="afl"
 +
 +export CC="$FUZZER/dataflow/bin/dataflow-cc"
 +export CXX="$FUZZER/dataflow/bin/dataflow-c++"
@@ -2625,7 +2625,7 @@ index 00000000..aa1817f1
 +export FUZZALLOC_DEF_SENSITIVITY="array"
 +export FUZZALLOC_USE_SENSITIVITY="read:write"
 +export FUZZALLOC_USE_CAPTURE="use"
-+export FUZZALLOC_USE_INST="afl"
++export FUZZALLOC_INST="afl"
 +
 +export CC="$FUZZER/dataflow/bin/dataflow-cc"
 +export CXX="$FUZZER/dataflow/bin/dataflow-c++"
@@ -3230,7 +3230,7 @@ index 00000000..b3a83ff8
 +export FUZZALLOC_DEF_SENSITIVITY="array"
 +export FUZZALLOC_USE_SENSITIVITY="read:write"
 +export FUZZALLOC_USE_CAPTURE="offset"
-+export FUZZALLOC_USE_INST="afl"
++export FUZZALLOC_INST="afl"
 +
 +export CC="$FUZZER/dataflow/bin/dataflow-cc"
 +export CXX="$FUZZER/dataflow/bin/dataflow-c++"
@@ -3835,7 +3835,7 @@ index 00000000..f7dab29b
 +export FUZZALLOC_DEF_SENSITIVITY="array"
 +export FUZZALLOC_USE_SENSITIVITY="read:write"
 +export FUZZALLOC_USE_CAPTURE="value"
-+export FUZZALLOC_USE_INST="afl"
++export FUZZALLOC_INST="afl"
 +
 +export CC="$FUZZER/dataflow/bin/dataflow-cc"
 +export CXX="$FUZZER/dataflow/bin/dataflow-c++"
