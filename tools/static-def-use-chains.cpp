@@ -255,7 +255,7 @@ int main(int argc, char *argv[]) {
   }
 
   // Recover source-level variables
-  status_stream() << "Running variable recovery pass...\n";
+  status_stream() << "Running LLVM passes...\n";
 
   auto &Registry = *PassRegistry::getPassRegistry();
   initializeCore(Registry);
