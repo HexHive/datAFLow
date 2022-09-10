@@ -31,12 +31,13 @@ def main(args):
     num_insts = []
     num_bbs = []
     for line in proc.stderr.split(b'\n'):
+        print(line.decode('utf-8'), file=sys.stderr, end='')
         match = DDG_RE.search(line)
         if match:
             num_insts.append(int(match[1]))
             num_bbs.append(int(match[2]))
 
-    print(proc.stderr, file=sys.stderr)
+    sys.stderr.flush()
     ddg_ratio = sum(num_insts) / sum(num_bbs)
     print(f'\n==== DDG ratio: {ddg_ratio:.2%} ====')
 
