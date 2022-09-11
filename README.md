@@ -104,7 +104,7 @@ fun:realloc_wrapper
 
 In addition to `dataflow-cc` and `dataflow-c++`, we provide the following tools:
 
-### `dataflow-sa`
+### `static-dua`
 
 Uses [SVF](https://github.com/SVF-tools/SVF/) to statically derive an upper
 bounds on the number of def-use chains in a BC file. This tool generates JSON
@@ -116,9 +116,9 @@ debug info).
 Collect `fuzzalloc` stats from an instrumented bitcode file. Stats include:
 number of tagged variables, number of instrumented use sites, etc.
 
-### `region-cov`
+### `static-region-cov`
 
-`region-cov` statically extracts Clang's [source-based code
+`static-region-cov` statically extracts Clang's [source-based code
 coverage](https://clang.llvm.org/docs/SourceBasedCodeCoverage.html) from an
 instrumented binary.
 

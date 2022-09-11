@@ -35,12 +35,12 @@ target_link_libraries(llvm-cov-json PRIVATE
 )
 install(TARGETS llvm-cov-json RUNTIME DESTINATION bin)
 
-add_executable(static-def-use-chains static-def-use-chains.cpp)
-target_link_libraries(static-def-use-chains PRIVATE
+add_executable(static-dua static-dua.cpp)
+target_link_libraries(static-dua PRIVATE
   DefUseChain
   ${LLVM_LIBS}
 )
-install(TARGETS static-def-use-chains RUNTIME DESTINATION bin)
+install(TARGETS static-dua RUNTIME DESTINATION bin)
 
 add_executable(static-region-cov static-region-cov.cpp)
 target_link_libraries(static-region-cov PRIVATE

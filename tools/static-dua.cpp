@@ -1,26 +1,21 @@
-//===-- static-def-use-chains.cpp - Static def/use analysis -----*- C++ -*-===//
+//===-- static-dua.cpp - Static def/use analysis ----------------*- C++ -*-===//
 ///
 /// \file
 /// Perform a static def-use chain analysis.
 ///
 //===----------------------------------------------------------------------===//
 
-#include <vector>
-
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/InitializePasses.h>
-#include <llvm/Pass.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/JSON.h>
-#include <llvm/Support/WithColor.h>
 
 #include "fuzzalloc/Analysis/DefUseChain.h"
 #include "fuzzalloc/Streams.h"
 
 using namespace llvm;
-using namespace SVF;
 
 namespace {
 //
