@@ -29,7 +29,8 @@ static cl::opt<std::string> BCFilename(cl::Positional, cl::desc("<BC file>"),
 
 int main(int argc, char *argv[]) {
   cl::HideUnrelatedOptions(Cat);
-  cl::ParseCommandLineOptions(argc, argv, "Static def-use subsumption analysis");
+  cl::ParseCommandLineOptions(argc, argv,
+                              "Static def-use subsumption analysis");
 
   // Parse bitcode
   status_stream() << "Parsing " << BCFilename << "...\n";
@@ -55,6 +56,8 @@ int main(int argc, char *argv[]) {
   PM.run(*Mod);
 
   const auto &DefUseChains = DUA->getDefUseChains();
+  for (const auto &[Def, Uses] : DefUseChains) {
+  }
 
   return 0;
 }

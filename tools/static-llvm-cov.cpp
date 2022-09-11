@@ -17,8 +17,7 @@ namespace {
 // Command-line options
 //
 
-static cl::OptionCategory CRCat("Clang region analysis options");
-
+static cl::OptionCategory CRCat("Clang source-based coverage analysis options");
 static cl::list<std::string> ObjFilenames(cl::Positional,
                                           cl::desc("<Obj file>"),
                                           cl::value_desc("path"), cl::OneOrMore,
@@ -88,7 +87,8 @@ static const ExitOnError ExitOnErr("region-cov: ");
 int main(int argc, char *argv[]) {
   // Parse command-line arguments
   cl::HideUnrelatedOptions(CRCat);
-  cl::ParseCommandLineOptions(argc, argv, "Static Clang region analysis\n");
+  cl::ParseCommandLineOptions(argc, argv,
+                              "Clang source-based coverage analysis\n");
 
   RegionStatistics Stats;
 

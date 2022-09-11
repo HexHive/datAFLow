@@ -8,10 +8,15 @@
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 
+#include "Graphs/VFG.h"
+#include "MemoryModel/PointerAnalysis.h"
 #include "SVF-FE/LLVMModule.h"
 #include "SVF-FE/SVFIRBuilder.h"
 #include "Util/config.h"
 #include "WPA/Andersen.h"
+#include "WPA/AndersenSFR.h"
+#include "WPA/Steensgaard.h"
+#include "WPA/TypeAnalysis.h"
 
 #include "fuzzalloc/Analysis/DefUseChain.h"
 #include "fuzzalloc/Analysis/MemFuncIdentify.h"
@@ -95,14 +100,14 @@ bool DefUseChain::runOnModule(Module &M) {
     }
 
     // XXX This is very hacky
-    const StringRef NameLower = Name.lower();
-    if (NameLower.contains("malloc") || NameLower.contains("calloc")) {
+    if (StringRef(Name.lower()).contains("malloc") ||
+        StringRef(Name.lower()).contains("calloc")) {
       Externals->add_entry(Name.str().c_str(), ExtAPI::extType::EFT_ALLOC,
                            true);
-    } else if (NameLower.contains("realloc")) {
+    } else if (StringRef(Name.lower()).contains("realloc")) {
       Externals->add_entry(Name.str().c_str(), ExtAPI::extType::EFT_REALLOC,
                            true);
-    } else if (NameLower.contains("strdup")) {
+    } else if (StringRef(Name.lower()).contains("strdup")) {
       Externals->add_entry(Name.str().c_str(),
                            ExtAPI::extType::EFT_NOSTRUCT_ALLOC, true);
     }
@@ -117,11 +122,34 @@ bool DefUseChain::runOnModule(Module &M) {
     return Builder.build(SVFMod);
   }();
 
-  // Build pointer analysis
-  auto *Ander = AndersenWaveDiff::createAndersenWaveDiff(IR);
-  auto *VFG = [&Ander]() {
+  // Build and run pointer analysis
+  auto *WPA = [&]() -> BVDataPTAImpl * {
+    switch (AnalysisTy) {
+    case PointerAnalysis::Andersen_WPA:
+      return new Andersen(IR);
+    case PointerAnalysis::AndersenSCD_WPA:
+      return new AndersenSCD(IR);
+    case PointerAnalysis::AndersenSFR_WPA:
+      return new AndersenSFR(IR);
+    case PointerAnalysis::AndersenWaveDiff_WPA:
+      return new AndersenWaveDiff(IR);
+    case PointerAnalysis::Steensgaard_WPA:
+      return new Steensgaard(IR);
+    case PointerAnalysis::FSSPARSE_WPA:
+      return new FlowSensitive(IR);
+    case PointerAnalysis::VFS_WPA:
+      return new VersionedFlowSensitive(IR);
+    case PointerAnalysis::TypeCPP_WPA:
+      return new TypeAnalysis(IR);
+    default:
+      llvm_unreachable("Unsupported pointer analysis");
+    }
+  }();
+
+  WPA->analyze();
+  auto *VFG = [&WPA]() {
     SVFGBuilder Builder(/*WithIndCall=*/true);
-    return Builder.buildFullSVFG(Ander);
+    return Builder.buildFullSVFG(WPA);
   }();
 
   //
@@ -180,15 +208,6 @@ bool DefUseChain::runOnModule(Module &M) {
       }
 
       // A use must be a load or store
-      const auto *V = [&]() -> const Value * {
-        if (const auto *Load = dyn_cast<LoadInst>(UseV)) {
-          return Load->getPointerOperand();
-        } else if (const auto *Store = dyn_cast<StoreInst>(UseV)) {
-          return Store->getPointerOperand();
-        }
-        llvm_unreachable("use must be a load or store");
-      }();
-
       Uses.emplace(Use);
       if (DefUses[Def].emplace(Use).second) {
         NumDefUseChains++;

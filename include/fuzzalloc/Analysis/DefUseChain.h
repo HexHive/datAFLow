@@ -15,6 +15,7 @@
 #include "absl/container/flat_hash_set.h"
 
 #include "Graphs/VFGNode.h"
+#include "MemoryModel/PointerAnalysis.h"
 
 namespace llvm {
 class DebugLoc;
@@ -66,15 +67,19 @@ public:
   using DefUseMap = absl::flat_hash_map<DefSite, UseSet>;
 
   static char ID;
-  DefUseChain() : llvm::ModulePass(ID) {}
+  DefUseChain(SVF::PointerAnalysis::PTATY WPATy =
+                  SVF::PointerAnalysis::AndersenWaveDiff_WPA)
+      : llvm::ModulePass(ID), AnalysisTy(WPATy) {}
   virtual ~DefUseChain();
 
   virtual void getAnalysisUsage(llvm::AnalysisUsage &) const override;
   virtual bool runOnModule(llvm::Module &) override;
 
   const DefUseMap &getDefUseChains() const { return DefUses; }
+  const SVF::PointerAnalysis::PTATY getAnalysisTy() const { return AnalysisTy; }
 
 private:
+  SVF::PointerAnalysis::PTATY AnalysisTy;
   DefUseMap DefUses;
 };
 
