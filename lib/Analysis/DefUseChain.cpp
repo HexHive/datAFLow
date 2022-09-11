@@ -146,6 +146,7 @@ bool DefUseChain::runOnModule(Module &M) {
     }
   }();
 
+  status_stream() << "Doing pointer analysis...\n";
   WPA->analyze();
   auto *VFG = [&WPA]() {
     SVFGBuilder Builder(/*WithIndCall=*/true);
@@ -207,7 +208,7 @@ bool DefUseChain::runOnModule(Module &M) {
         continue;
       }
 
-      // A use must be a load or store
+      // Save uses
       Uses.emplace(Use);
       if (DefUses[Def].emplace(Use).second) {
         NumDefUseChains++;
