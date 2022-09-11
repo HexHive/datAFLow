@@ -22,7 +22,7 @@ namespace {
 // Command-line options
 //
 
-static cl::OptionCategory Cat("Static def/use chain analysis");
+static cl::OptionCategory Cat("Static def-use chain analysis");
 static cl::opt<std::string> BCFilename(cl::Positional, cl::desc("<BC file>"),
                                        cl::value_desc("path"), cl::Required,
                                        cl::cat(Cat));
@@ -32,7 +32,7 @@ static cl::opt<std::string> OutJSON("out", cl::desc("Output JSON"),
 
 int main(int argc, char *argv[]) {
   cl::HideUnrelatedOptions(Cat);
-  cl::ParseCommandLineOptions(argc, argv, "Static def/use chain analysis");
+  cl::ParseCommandLineOptions(argc, argv, "Static def-use chain analysis");
 
   // Parse bitcode
   status_stream() << "Parsing " << BCFilename << "...\n";
@@ -45,7 +45,7 @@ int main(int argc, char *argv[]) {
     ::exit(1);
   }
 
-  // Recover source-level variables
+  // Get static def-use chains
   status_stream() << "Running LLVM passes...\n";
 
   auto &Registry = *PassRegistry::getPassRegistry();

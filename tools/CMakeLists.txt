@@ -42,14 +42,15 @@ target_link_libraries(static-dua PRIVATE
 )
 install(TARGETS static-dua RUNTIME DESTINATION bin)
 
-add_executable(static-region-cov static-region-cov.cpp)
-target_link_libraries(static-region-cov PRIVATE
+add_executable(static-llvm-cov static-llvm-cov.cpp)
+target_link_libraries(static-llvm-cov PRIVATE
   ${LLVM_LIBS}
 )
-install(TARGETS static-region-cov RUNTIME DESTINATION bin)
+install(TARGETS static-llvm-cov RUNTIME DESTINATION bin)
 
-add_executable(subsumption subsumption.cpp)
-target_link_libraries(subsumption PRIVATE
+add_executable(dua-subsumption dua-subsumption.cpp)
+target_link_libraries(dua-subsumption PRIVATE
+  DefUseChain
   Svf
   ${LLVM_LIBS}
 )
