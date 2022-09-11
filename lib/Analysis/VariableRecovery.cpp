@@ -15,7 +15,7 @@
 
 #include "fuzzalloc/Analysis/VariableRecovery.h"
 
-#define DEBUG_TYPE "variable-recovery"
+#define DEBUG_TYPE "fuzzalloc-variable-recovery"
 
 using namespace llvm;
 

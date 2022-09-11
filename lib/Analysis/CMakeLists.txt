@@ -15,6 +15,18 @@ target_link_libraries(DefSiteIdentify PUBLIC
 )
 install(TARGETS DefSiteIdentify LIBRARY DESTINATION lib)
 
+add_library(DefUseChain SHARED
+  DefUseChain.cpp
+)
+target_link_libraries(DefUseChain PUBLIC
+  MemFuncIdentify
+  VariableRecovery
+  Svf
+  absl::flat_hash_map
+  absl::flat_hash_set
+)
+install(TARGETS DefUseChain LIBRARY DESTINATION lib)
+
 add_library(MemFuncIdentify SHARED
   MemFuncIdentify.cpp
 )

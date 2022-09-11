@@ -37,12 +37,8 @@ install(TARGETS llvm-cov-json RUNTIME DESTINATION bin)
 
 add_executable(static-def-use-chains static-def-use-chains.cpp)
 target_link_libraries(static-def-use-chains PRIVATE
-  MemFuncIdentify
-  VariableRecovery
-  Svf
+  DefUseChain
   ${LLVM_LIBS}
-  absl::flat_hash_map
-  absl::flat_hash_set
 )
 install(TARGETS static-def-use-chains RUNTIME DESTINATION bin)
 
@@ -51,3 +47,9 @@ target_link_libraries(static-region-cov PRIVATE
   ${LLVM_LIBS}
 )
 install(TARGETS static-region-cov RUNTIME DESTINATION bin)
+
+add_executable(subsumption subsumption.cpp)
+target_link_libraries(subsumption PRIVATE
+  Svf
+  ${LLVM_LIBS}
+)

@@ -48,8 +48,8 @@ static unsigned NumDefSites = 0;
 char DefSiteIdentify::ID = 0;
 
 void DefSiteIdentify::getAnalysisUsage(AnalysisUsage &AU) const {
-  AU.setPreservesAll();
   AU.addRequired<VariableRecovery>();
+  AU.setPreservesAll();
 }
 
 bool DefSiteIdentify::runOnModule(Module &M) {
