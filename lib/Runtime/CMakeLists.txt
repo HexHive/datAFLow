@@ -8,6 +8,11 @@ add_library(FuzzallocRuntime STATIC
 )
 install(TARGETS FuzzallocRuntime LIBRARY DESTINATION lib)
 
+add_library(LLVMCovRuntime STATIC
+  LLVMCov.c
+)
+install(TARGETS LLVMCovRuntime LIBRARY DESTINATION lib)
+
 add_library(TracerRuntime STATIC
   BaggyBounds.c
   Tracer.cpp
