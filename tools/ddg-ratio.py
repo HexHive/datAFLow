@@ -31,7 +31,7 @@ def main(args):
     num_insts = []
     num_bbs = []
     for line in proc.stderr.split(b'\n'):
-        print(line.decode('utf-8'), file=sys.stderr, end='')
+        print(line.decode('utf-8'), file=sys.stderr)
         match = DDG_RE.search(line)
         if match:
             num_insts.append(int(match[1]))
