@@ -13,12 +13,25 @@ import sys
 
 from bootstrapped import bootstrap as bs
 import bootstrapped.stats_functions as bs_stats
+import numpy as np
 
 
 def get_final_cov(p: Path) -> int:
+    """
+    Get the last coverage element in the coverage-over-inputs list (which
+    corresponds to the max. coverage).
+
+    Each coverage element has the format:
+
+    ```
+    [TEST_CASE_ID, COV]
+    ```
+
+    We ignore the `TEST_CASE_ID` and only look at the `COV` integer.
+    """
     with p.open() as inf:
         root = json.load(inf)
-        return root['coverage'][-1]
+        return root['coverage'][-1][1]
 
 
 def main(args):
@@ -28,7 +41,7 @@ def main(args):
         return 1
 
     # Get coverage
-    covs = [get_final_cov(Path(arg)) for arg in args[1:]]
+    covs = np.array([get_final_cov(Path(arg)) for arg in args[1:]])
 
     # Calculate mean and confidence intervals
     cov_ci = bs.bootstrap(covs, stat_func=bs_stats.mean)
