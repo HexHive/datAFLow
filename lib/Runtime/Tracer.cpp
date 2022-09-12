@@ -5,6 +5,9 @@
 ///
 //===----------------------------------------------------------------------===//
 
+#include <map>
+#include <mutex>
+
 #include <inttypes.h>
 #include <signal.h>
 #include <stdint.h>
@@ -17,9 +20,6 @@
 #include <llvm/ADT/StringExtras.h>
 #include <llvm/Support/JSON.h>
 #include <llvm/Support/raw_ostream.h>
-
-#include "absl/container/flat_hash_map.h"
-#include "absl/synchronization/mutex.h"
 
 #include "fuzzalloc/Runtime/BaggyBounds.h"
 #include "fuzzalloc/fuzzalloc.h"
@@ -54,8 +54,8 @@ static json::Value toJSON(const SrcDef &Def) {
   return {Def.Var, toJSON(Def.Loc)};
 }
 
-using LocationCountMap = absl::flat_hash_map<const SrcLocation *, size_t>;
-using DefUseMap = absl::flat_hash_map<const SrcDef *, LocationCountMap>;
+using LocationCountMap = std::map<const SrcLocation *, size_t>;
+using DefUseMap = std::map<const SrcDef *, LocationCountMap>;
 
 static json::Value toJSON(const LocationCountMap &Locs) {
   std::vector<json::Value> Vec;
@@ -112,7 +112,7 @@ public:
     }
 
     json::Value V = [&]() -> json::Value {
-      absl::MutexLock ML(&Lock);
+      std::scoped_lock SL(Lock);
       return toJSON(DefUses);
     }();
 
@@ -125,19 +125,19 @@ public:
   }
 
   void addDef(const SrcDef *Def) {
-    absl::MutexLock ML(&Lock);
+    std::scoped_lock SL(Lock);
     DefUses.emplace(Def, LocationCountMap());
   }
 
   void addUse(const SrcDef *Def, ptrdiff_t Offset, const SrcLocation *Loc) {
-    absl::MutexLock ML(&Lock);
+    std::scoped_lock SL(Lock);
     DefUses[Def][Loc]++;
   }
 
 private:
   Optional<raw_fd_ostream> OS;
   DefUseMap DefUses;
-  absl::Mutex Lock;
+  std::mutex Lock;
 };
 
 static VarLogger Log;

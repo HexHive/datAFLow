@@ -19,7 +19,5 @@ add_library(TracerRuntime STATIC
 )
 target_link_libraries(TracerRuntime PUBLIC
   ${LLVM_LIBS}
-  absl::flat_hash_map
-  absl::synchronization
 )
 install(TARGETS TracerRuntime LIBRARY DESTINATION lib)
