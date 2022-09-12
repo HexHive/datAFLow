@@ -12,6 +12,7 @@
 #include <sys/time.h>
 
 int __llvm_profile_runtime = 0;
+void __llvm_profile_initialize_file(void);
 void __llvm_profile_register_write_file_atexit(void);
 int __llvm_profile_write_file(void);
 
@@ -23,14 +24,10 @@ static void handleTimeout(int Sig) {
 
 __attribute__((constructor)) static void initializeTimeout() {
   const char *Timeout = getenv("LLVM_PROFILE_TIMEOUT");
-  const char *LLVMProfile = getenv("LLVM_PROFILE_FILE");
   struct sigaction SA;
   struct itimerval It;
 
-  if (!LLVMProfile) {
-    fprintf(stderr, "[llvm-cov] LLVM_PROFILE_FILE not specified. Exiting...\n");
-    exit(1);
-  }
+  __llvm_profile_initialize_file();
 
   if (Timeout) {
     long T = atol(Timeout);
