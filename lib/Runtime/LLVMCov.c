@@ -6,6 +6,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <signal.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <strings.h>
 #include <sys/time.h>
@@ -15,13 +16,21 @@ void __llvm_profile_register_write_file_atexit(void);
 int __llvm_profile_write_file(void);
 
 static void handleTimeout(int Sig) {
-  __llvm_profile_write_file();
+  if (__llvm_profile_write_file()) {
+    fprintf(stderr, "[llvm-cov] Failed to write profile\n");
+  }
 }
 
 __attribute__((constructor)) static void initializeTimeout() {
-  char *Timeout = getenv("LLVM_PROFILE_TIMEOUT");
+  const char *Timeout = getenv("LLVM_PROFILE_TIMEOUT");
+  const char *LLVMProfile = getenv("LLVM_PROFILE_FILE");
   struct sigaction SA;
   struct itimerval It;
+
+  if (!LLVMProfile) {
+    fprintf(stderr, "[llvm-cov] LLVM_PROFILE_FILE not specified. Exiting...\n");
+    exit(1);
+  }
 
   if (Timeout) {
     long T = atol(Timeout);
@@ -34,6 +43,6 @@ __attribute__((constructor)) static void initializeTimeout() {
     It.it_value.tv_usec = (T % 1000) * 1000;
     setitimer(ITIMER_REAL, &It, NULL);
   } else {
-    __llvm_profile_register_write_file_at_exit();
+    __llvm_profile_register_write_file_atexit();
   }
 }
