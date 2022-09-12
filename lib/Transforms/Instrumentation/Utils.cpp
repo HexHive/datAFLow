@@ -132,7 +132,6 @@ static GlobalVariable *createTracerGlobalVariable(Constant *Initializer,
   auto *GV = new GlobalVariable(*M, Initializer->getType(), /*isConstant=*/true,
                                 GlobalValue::PrivateLinkage, Initializer);
   GV->setUnnamedAddr(GlobalValue::UnnamedAddr::Global);
-  GV->setAlignment(Align(1));
   return GV;
 }
 
@@ -165,6 +164,7 @@ Constant *tracerCreateDef(const VarInfo &SrcVar, Module *M) {
 
   auto *Filename = ConstantDataArray::getString(Ctx, DIVar->getFilename());
   auto *FilenameGV = createTracerGlobalVariable(Filename, M);
+  FilenameGV->setAlignment(Align(1));
   auto *FilenamePtr = createGlobalVariablePtr(FilenameGV);
 
   auto *FuncName = [&]() -> Constant * {
@@ -177,6 +177,7 @@ Constant *tracerCreateDef(const VarInfo &SrcVar, Module *M) {
   }();
 
   auto *FuncNameGV = createTracerGlobalVariable(FuncName, M);
+  FuncNameGV->setAlignment(Align(1));
   auto *FuncNamePtr = createGlobalVariablePtr(FuncNameGV);
 
   auto *Line = ConstantInt::get(IntPtrTy, DIVar->getLine());
@@ -184,6 +185,7 @@ Constant *tracerCreateDef(const VarInfo &SrcVar, Module *M) {
 
   auto *VarName = ConstantDataArray::getString(Ctx, DIVar->getName());
   auto *VarNameGV = createTracerGlobalVariable(VarName, M);
+  VarNameGV->setAlignment(Align(1));
   auto *VarNamePtr = createGlobalVariablePtr(VarNameGV);
 
   auto *SrcLocation = ConstantStruct::get(
@@ -212,6 +214,7 @@ Constant *tracerCreateUse(Instruction *I, Module *M) {
     auto *Filename =
         ConstantDataArray::getString(Ctx, SP->getFile()->getFilename());
     auto *FilenameGV = createTracerGlobalVariable(Filename, M);
+    FilenameGV->setAlignment(Align(1));
     FilenamePtr = createGlobalVariablePtr(FilenameGV);
 
     auto *FuncName = ConstantDataArray::getString(Ctx, SP->getName());

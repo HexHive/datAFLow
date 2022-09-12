@@ -181,13 +181,3 @@ void *__bb_lookup(void *Ptr, uintptr_t *Base, size_t MetaSize) {
 
   return *Base + AllocSize - MetaSize;
 }
-
-void *malloc(size_t Size) { return __bb_malloc(kFuzzallocDefaultTag, Size); }
-
-void *calloc(size_t NMemb, size_t Size) {
-  return __bb_calloc(kFuzzallocDefaultTag, NMemb, Size);
-}
-
-void *realloc(void *Ptr, size_t Size) {
-  return __bb_realloc(kFuzzallocDefaultTag, Ptr, Size);
-}

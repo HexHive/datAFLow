@@ -197,9 +197,9 @@ def main():
         inst = None
 
     # Linker args
-    cmd.extend([f'-L{LIB_DIR}', '-lFuzzallocRuntime'])
     if inst == 'afl':
-        cmd.extend(['-O3', f'-L{LIB_DIR}', '-lAFLRuntime'])
+        cmd.extend(['-O3', f'-L{LIB_DIR}',
+                    '-lFuzzallocRuntime', '-lAFLRuntime'])
     elif inst == 'tracer':
         cmd.extend([f'-L{LIB_DIR}', '-lTracerRuntime', '-lstdc++',
                     '-L@LLVM_LIBRARY_DIR@', '-lLLVMSupport',

@@ -4,6 +4,7 @@ llvm_map_components_to_libnames(LLVM_LIBS
 
 add_library(FuzzallocRuntime STATIC
   BaggyBounds.c
+  BaggyBoundsMemAlloc.c
   Hash.c
 )
 install(TARGETS FuzzallocRuntime LIBRARY DESTINATION lib)
