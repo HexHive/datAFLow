@@ -12,7 +12,7 @@
 #include "MemoryModel/PointerAnalysis.h"
 #include "SVF-FE/LLVMModule.h"
 #include "SVF-FE/SVFIRBuilder.h"
-#include "Util/config.h"
+#include "Util/Options.h"
 #include "WPA/Andersen.h"
 #include "WPA/AndersenSFR.h"
 #include "WPA/Steensgaard.h"
@@ -76,7 +76,7 @@ static bool isInstrumentedDeref(const Value *V) {
 char DefUseChain::ID = 0;
 
 DefUseChain::~DefUseChain() {
-  AndersenWaveDiff::releaseAndersenWaveDiff();
+  delete WPA;
   SVFIR::releaseSVFIR();
   LLVMModuleSet::releaseLLVMModuleSet();
 }
@@ -123,32 +123,44 @@ bool DefUseChain::runOnModule(Module &M) {
   }();
 
   // Build and run pointer analysis
-  auto *WPA = [&]() -> BVDataPTAImpl * {
-    switch (AnalysisTy) {
-    case PointerAnalysis::Andersen_WPA:
+
+  // SVF allows multiple pointer analyses to be specified. We only accept the
+  // first
+  status_stream() << "Doing pointer analysis (";
+  WPA = [&]() -> BVDataPTAImpl * {
+    if (Options::PASelected.isSet(PointerAnalysis::Andersen_WPA)) {
+      outs() << "Standard inclusion-based";
       return new Andersen(IR);
-    case PointerAnalysis::AndersenSCD_WPA:
+    } else if (Options::PASelected.isSet(PointerAnalysis::AndersenSCD_WPA)) {
+      outs() << "Selective cycle detection inclusion-based";
       return new AndersenSCD(IR);
-    case PointerAnalysis::AndersenSFR_WPA:
+    } else if (Options::PASelected.isSet(PointerAnalysis::AndersenSFR_WPA)) {
+      outs() << "Stride-based field representation inclusion-based";
       return new AndersenSFR(IR);
-    case PointerAnalysis::AndersenWaveDiff_WPA:
+    } else if (Options::PASelected.isSet(
+                   PointerAnalysis::AndersenWaveDiff_WPA)) {
+      outs() << "Diff wave propagation inclusion-based";
       return new AndersenWaveDiff(IR);
-    case PointerAnalysis::Steensgaard_WPA:
+    } else if (Options::PASelected.isSet(PointerAnalysis::Steensgaard_WPA)) {
+      outs() << "Steensgaard";
       return new Steensgaard(IR);
-    case PointerAnalysis::FSSPARSE_WPA:
+    } else if (Options::PASelected.isSet(PointerAnalysis::FSSPARSE_WPA)) {
+      outs() << "Sparse flow-sensitive";
       return new FlowSensitive(IR);
-    case PointerAnalysis::VFS_WPA:
+    } else if (Options::PASelected.isSet(PointerAnalysis::VFS_WPA)) {
+      outs() << "Versioned sparse flow-sensitive";
       return new VersionedFlowSensitive(IR);
-    case PointerAnalysis::TypeCPP_WPA:
+    } else if (Options::PASelected.isSet(PointerAnalysis::TypeCPP_WPA)) {
+      outs() << "Type-based fast";
       return new TypeAnalysis(IR);
-    default:
+    } else {
       llvm_unreachable("Unsupported pointer analysis");
     }
   }();
+  outs() << ")...\n";
 
-  status_stream() << "Doing pointer analysis...\n";
   WPA->analyze();
-  auto *VFG = [&WPA]() {
+  auto *VFG = [&]() {
     SVFGBuilder Builder(/*WithIndCall=*/true);
     return Builder.buildFullSVFG(WPA);
   }();

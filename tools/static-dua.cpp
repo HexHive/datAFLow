@@ -12,10 +12,13 @@
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/JSON.h>
 
+#include "MemoryModel/PointerAnalysis.h"
+
 #include "fuzzalloc/Analysis/DefUseChain.h"
 #include "fuzzalloc/Streams.h"
 
 using namespace llvm;
+using namespace SVF;
 
 namespace {
 //
@@ -31,7 +34,6 @@ static cl::opt<std::string> OutJSON("out", cl::desc("Output JSON"),
 } // anonymous namespace
 
 int main(int argc, char *argv[]) {
-  cl::HideUnrelatedOptions(Cat);
   cl::ParseCommandLineOptions(argc, argv, "Static def-use chain analysis");
 
   // Parse bitcode
@@ -46,8 +48,6 @@ int main(int argc, char *argv[]) {
   }
 
   // Get static def-use chains
-  status_stream() << "Running LLVM passes...\n";
-
   auto &Registry = *PassRegistry::getPassRegistry();
   initializeCore(Registry);
   initializeAnalysis(Registry);
