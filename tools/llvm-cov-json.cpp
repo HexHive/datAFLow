@@ -218,12 +218,10 @@ static Error genCoverage(
     // Construct target command line
     SmallVector<StringRef, 16> ProfInstArgs{Target};
     ProfInstArgs.append(TargetArgs.begin(), TargetArgs.end());
-    ProfInstArgs.push_back("-timeout=10");
-    ProfInstArgs.push_back("-rss_limit_mb=2048");
     if (AtAtIt == TargetArgs.end()) {
       ProfInstArgs.push_back(Testcase);
     } else {
-      ProfInstArgs[std::distance(TargetArgs.begin(), AtAtIt)] = Testcase;
+      ProfInstArgs[std::distance(TargetArgs.begin(), AtAtIt) + 1] = Testcase;
     }
 
     // Configure environment
@@ -235,8 +233,8 @@ static Error genCoverage(
     Env.push_back(ProfrawEnv);
 
     // Run target. Ignore output and return code
-    sys::ExecuteAndWait(ProfInstArgs[0], ProfInstArgs, ArrayRef(Env),
-                        Redirects);
+    sys::ExecuteAndWait(ProfInstArgs[0], ProfInstArgs, ArrayRef(Env), Redirects,
+                        /*SecondsToWait=*/10);
   };
 
   std::error_code EC;
@@ -415,7 +413,7 @@ int main(int argc, char *argv[]) {
   // Collect raw coverage
   const auto NumTestcases = ExitOnErr(getNumFiles(QueueDir));
   status_stream() << "Generating raw profiles for " << NumTestcases
-                  << " testcases...\n";
+                  << " testcases using target `" << Target << "`...\n";
   ExitOnErr(genCoverage(Target, TargetArgs, QueueDir, CovDir, NumThreads));
   const auto NumCovFiles = ExitOnErr(getNumFiles(CovDir));
   success_stream() << NumCovFiles << " raw profiles generated\n";
