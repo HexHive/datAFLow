@@ -22,7 +22,7 @@ static void handleTimeout(int Sig) {
   }
 }
 
-__attribute__((constructor)) static void initializeTimeout() {
+__attribute__((constructor)) static void __llvm_cov_initialize_timeout() {
   const char *Timeout = getenv("LLVM_PROFILE_TIMEOUT");
   struct sigaction SA;
   struct itimerval It;

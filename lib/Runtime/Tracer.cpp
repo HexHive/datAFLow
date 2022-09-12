@@ -144,11 +144,11 @@ static VarLogger Log;
 
 static void handleTimeout(int) { Log.serialize(); }
 
-__attribute__((constructor)) static void initializeTimeout() {
+__attribute__((constructor)) static void __dua_trace_initialize_timeout() {
   struct sigaction SA;
   struct itimerval It;
 
-  if (const auto *Timeout = getenv("FUZZCOMET_TIMEOUT")) {
+  if (const auto *Timeout = getenv("FUZZALLOC_TIMEOUT")) {
     unsigned T;
     if (to_integer(Timeout, T)) {
       bzero(&SA, sizeof(struct sigaction));
