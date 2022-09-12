@@ -193,6 +193,7 @@ bool UseSite::runOnModule(Module &M) {
     case UseSiteCapture::UseWithValue:
       return "value";
     }
+    llvm_unreachable("Invalid use site capture");
   }() << '\n';
   success_stream() << "[" << M.getName()
                    << "] Num. instrumented reads: " << NumInstrumentedReads
