@@ -20,6 +20,7 @@ DDG_RE = re.compile(b'''DDG - Instrumented (\d+) locations over a total of (\d+)
 def main(args):
     """The main function."""
     if len(args) <= 1:
+        print(f'usage: {args[0]} ...')
         return 1
 
     env = os.environ.copy()

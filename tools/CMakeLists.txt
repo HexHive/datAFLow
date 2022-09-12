@@ -14,6 +14,11 @@ llvm_map_components_to_libnames(LLVM_LIBS
   coverage
 )
 
+install(PROGRAMS bootstrap-cov.py
+  RENAME bootstrap-cov
+  TYPE BIN
+)
+
 configure_file(dataflow-cc.py.in dataflow-cc @ONLY)
 configure_file(dataflow-cc.py.in dataflow-c++ @ONLY)
 
