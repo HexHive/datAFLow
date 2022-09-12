@@ -25,6 +25,8 @@
 #include <llvm/Support/Threading.h>
 #include <llvm/Support/raw_ostream.h>
 
+#include "absl/container/btree_set.h"
+
 #include "fuzzalloc/Streams.h"
 
 using namespace llvm;
@@ -99,8 +101,9 @@ static Expected<size_t> getNumFiles(const StringRef &P) {
   return N;
 }
 
-static Expected<std::vector<std::string>> getTestcases(const StringRef &Dir) {
-  std::vector<std::string> TCs;
+static Expected<absl::btree_set<std::string>>
+getTestcases(const StringRef &Dir) {
+  absl::btree_set<std::string> TCs;
   if (!sys::fs::is_directory(Dir)) {
     return createStringError(inconvertibleErrorCode(), "%s is not a directory",
                              Dir.str().c_str());
@@ -109,7 +112,7 @@ static Expected<std::vector<std::string>> getTestcases(const StringRef &Dir) {
   std::error_code EC;
   for (sys::fs::directory_iterator F(Dir, EC), E; F != E && !EC;
        F.increment(EC)) {
-    TCs.push_back(F->path());
+    TCs.insert(F->path());
   }
   if (EC) {
     return errorCodeToError(EC);
