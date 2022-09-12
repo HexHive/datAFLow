@@ -56,7 +56,7 @@ static cl::list<std::string> TargetArgs(cl::ConsumeAfter, cl::desc("[...]"),
 
 /// Accumulated coverage
 struct Coverage {
-  using TestcaseCov = std::pair</*Path=*/StringRef, /*Region count=*/int64_t>;
+  using TestcaseCov = std::pair</*Path=*/std::string, /*Region count=*/int64_t>;
 
   const std::vector<TestcaseCov> Testcases; ///< Per testcase coverage
   const std::unique_ptr<coverage::CoverageMapping>
@@ -69,11 +69,11 @@ struct Coverage {
 };
 } // anonymous namespace
 
-namespace llvm {
+namespace std {
 json::Value toJSON(const Coverage::TestcaseCov &Cov) {
   return {Cov.first, Cov.second};
 }
-} // namespace llvm
+} // namespace std
 
 namespace {
 //
