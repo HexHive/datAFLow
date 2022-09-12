@@ -6,6 +6,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <llvm/IR/LegacyPassManager.h>
+#include <llvm/IR/Module.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 
 #include "Graphs/VFG.h"
@@ -68,6 +69,20 @@ static bool isInstrumentedDeref(const Value *V) {
   return false;
 }
 } // anonymous namespace
+
+//
+// Definition site
+//
+
+DefSite::DefSite(const VFGNode *N, const DIVariable *DIVar, const DebugLoc *DL)
+    : Node(N), Val(Node->getValue()), DIVar(DIVar), Loc(DL) {}
+
+//
+// Use site
+//
+
+UseSite::UseSite(const VFGNode *N)
+    : Node(N), Val(N->getValue()), Loc(cast<Instruction>(Val)->getDebugLoc()) {}
 
 //
 // Def-use chains

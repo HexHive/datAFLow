@@ -14,9 +14,6 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 
-#include "Graphs/VFGNode.h"
-#include "MemoryModel/PointerAnalysisImpl.h"
-
 namespace llvm {
 class DebugLoc;
 class DIVariable;
@@ -24,11 +21,15 @@ class Instruction;
 class Value;
 } // namespace llvm
 
+namespace SVF {
+class BVDataPTAImpl;
+class VFGNode;
+} // namespace SVF
+
 /// A variable definition
 struct DefSite {
-  DefSite(const SVF::VFGNode *Node, const llvm::DIVariable *DIVar,
-          const llvm::DebugLoc *Loc)
-      : Node(Node), Val(Node->getValue()), DIVar(DIVar), Loc(Loc) {}
+  DefSite(const SVF::VFGNode *, const llvm::DIVariable *,
+          const llvm::DebugLoc *);
 
   bool operator==(const DefSite &Other) const { return Node == Other.Node; }
 
@@ -44,9 +45,7 @@ struct DefSite {
 
 /// A variable use
 struct UseSite {
-  UseSite(const SVF::VFGNode *Node)
-      : Node(Node), Val(Node->getValue()),
-        Loc(cast<llvm::Instruction>(Val)->getDebugLoc()) {}
+  UseSite(const SVF::VFGNode *);
 
   bool operator==(const UseSite &Other) const { return Node == Other.Node; }
 
