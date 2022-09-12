@@ -30,7 +30,7 @@ __attribute__((constructor)) static void initializeTimeout() {
   __llvm_profile_initialize_file();
 
   if (Timeout) {
-    long T = atol(Timeout);
+    long long T = atoll(Timeout);
     bzero(&SA, sizeof(struct sigaction));
     SA.sa_handler = handleTimeout;
     sigaction(SIGALRM, &SA, NULL);
@@ -39,7 +39,7 @@ __attribute__((constructor)) static void initializeTimeout() {
     It.it_value.tv_sec = T / 1000;
     It.it_value.tv_usec = (T % 1000) * 1000;
     setitimer(ITIMER_REAL, &It, NULL);
-  } else {
-    __llvm_profile_register_write_file_atexit();
   }
+
+  __llvm_profile_register_write_file_atexit();
 }
