@@ -373,7 +373,7 @@ static Expected<std::unique_ptr<Coverage>> accumulateCoverage(
       }
     }
 
-    TestcaseCovs.emplace_back(CovFile, Count);
+    TestcaseCovs.emplace_back(sys::path::filename(CovFile).str(), Count);
 
     const auto &Idx = CovFileEnum.index();
     if (Idx % ((NumCovFiles + (10 - 1)) / 10) == 0) {
