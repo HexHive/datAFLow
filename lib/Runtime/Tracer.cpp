@@ -39,29 +39,46 @@ struct __attribute__((packed)) SrcLocation {
 };
 
 /// Source-level variable def site
-struct __attribute__((packed)) SrcDef {
+struct __attribute__((packed)) SrcDefinition {
   const SrcLocation Loc; ///< Location
   const char *Var;       ///< Variable name
 };
 } // extern "C"
 
 namespace {
+/// Runtime location
+struct RuntimeLocation {
+  const SrcLocation *SrcLoc; ///< Source location
+  const uintptr_t PC;        ///< Program counter
+
+  RuntimeLocation() = delete;
+  RuntimeLocation(const SrcLocation *Loc, uintptr_t PC) : SrcLoc(Loc), PC(PC) {}
+
+  constexpr bool operator<(const RuntimeLocation &Other) const {
+    return PC < Other.PC;
+  }
+};
+
 static json::Value toJSON(const SrcLocation &Loc) {
   return {Loc.File, Loc.Func, Loc.Line, Loc.Column};
 }
 
-static json::Value toJSON(const SrcDef &Def) {
+static json::Value toJSON(const RuntimeLocation &Loc) {
+  return {toJSON(*Loc.SrcLoc), Loc.PC};
+}
+
+static json::Value toJSON(const SrcDefinition &Def) {
   return {Def.Var, toJSON(Def.Loc)};
 }
 
-using LocationCountMap = std::map<const SrcLocation *, size_t>;
-using DefUseMap = std::map<const SrcDef *, LocationCountMap>;
+using LocationCountMap = std::map<RuntimeLocation, size_t>;
+using DefUseMap = std::map<const SrcDefinition *, LocationCountMap>;
 
 static json::Value toJSON(const LocationCountMap &Locs) {
   std::vector<json::Value> Vec;
 
   for (const auto &[Loc, Count] : Locs) {
-    Vec.push_back({toJSON(*Loc), Count});
+    Vec.push_back({toJSON(Loc), Count});
   }
 
   return Vec;
@@ -124,14 +141,20 @@ public:
     OS.reset();
   }
 
-  void addDef(const SrcDef *Def) {
+  void addDef(const SrcDefinition *Def, uintptr_t PC) {
+    // XXX Ignore for now
+    (void)PC;
+
     std::scoped_lock SL(Lock);
     DefUses.emplace(Def, LocationCountMap());
   }
 
-  void addUse(const SrcDef *Def, ptrdiff_t Offset, const SrcLocation *Loc) {
+  void addUse(const SrcDefinition *Def, ptrdiff_t Offset,
+              const SrcLocation *Loc, uintptr_t PC) {
+    RuntimeLocation RLoc(Loc, PC);
+
     std::scoped_lock SL(Lock);
-    DefUses[Def][Loc]++;
+    DefUses[Def][RLoc]++;
   }
 
 private:
@@ -169,15 +192,18 @@ __attribute__((constructor)) static void __dua_trace_initialize_timeout() {
 //
 
 extern "C" {
-void __tracer_def(const SrcDef *Def) { Log.addDef(Def); }
+void __tracer_def(const SrcDefinition *Def) {
+  Log.addDef(Def, (uintptr_t)__builtin_return_address(0));
+}
 
 void __tracer_use(const SrcLocation *Loc, void *Ptr, size_t Size) {
   uintptr_t Base;
-  SrcDef **Def = (SrcDef **)__bb_lookup(Ptr, &Base, sizeof(SrcDef *));
+  SrcDefinition **Def =
+      (SrcDefinition **)__bb_lookup(Ptr, &Base, sizeof(SrcDefinition *));
 
   if (likely(Def != nullptr)) {
     ptrdiff_t Offset = (uintptr_t)Ptr - Base;
-    Log.addUse(*Def, Offset, Loc);
+    Log.addUse(*Def, Offset, Loc, (uintptr_t)__builtin_return_address(0));
   }
 }
 }

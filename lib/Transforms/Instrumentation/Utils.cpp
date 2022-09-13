@@ -156,8 +156,9 @@ Constant *tracerCreateDef(const VarInfo &SrcVar, Module *M) {
   auto *TracerSrcLocationTy =
       StructType::create({Int8PtrTy, Int8PtrTy, IntPtrTy, IntPtrTy},
                          "fuzzalloc.SrcLocation", /*isPacked=*/true);
-  auto *TracerSrcDefTy = StructType::create(
-      {TracerSrcLocationTy, Int8PtrTy}, "fuzzalloc.SrcDef", /*isPacked=*/true);
+  auto *TracerSrcDefTy =
+      StructType::create({TracerSrcLocationTy, Int8PtrTy},
+                         "fuzzalloc.SrcDefinition", /*isPacked=*/true);
 
   const auto *DIVar = SrcVar.getDbgVar();
   const auto *Loc = SrcVar.getLoc();

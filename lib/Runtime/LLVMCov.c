@@ -26,9 +26,7 @@ static void writeProfile() {
   __llvm_profile_write_file();
 }
 
-static void handleTimeout(int Sig) {
-  exit(0);
-}
+static void handleTimeout(int Sig) { exit(0); }
 
 __attribute__((constructor)) static void __llvm_cov_initialize_timeout() {
   const char *Timeout = getenv("LLVM_PROFILE_TIMEOUT");
