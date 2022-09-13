@@ -13,21 +13,27 @@
 
 int __llvm_profile_runtime = 0;
 void __llvm_profile_initialize_file(void);
-void __llvm_profile_register_write_file_atexit(void);
 int __llvm_profile_write_file(void);
 
+static void writeProfile() {
+  struct itimerval It;
+
+  // Cancel timer
+  bzero(&It, sizeof(struct itimerval));
+  setitimer(ITIMER_REAL, &It, NULL);
+
+  __llvm_profile_initialize_file();
+  __llvm_profile_write_file();
+}
+
 static void handleTimeout(int Sig) {
-  if (__llvm_profile_write_file()) {
-    fprintf(stderr, "[llvm-cov] Failed to write profile\n");
-  }
+  exit(0);
 }
 
 __attribute__((constructor)) static void __llvm_cov_initialize_timeout() {
   const char *Timeout = getenv("LLVM_PROFILE_TIMEOUT");
   struct sigaction SA;
   struct itimerval It;
-
-  __llvm_profile_initialize_file();
 
   if (Timeout) {
     long long T = atoll(Timeout);
@@ -41,5 +47,5 @@ __attribute__((constructor)) static void __llvm_cov_initialize_timeout() {
     setitimer(ITIMER_REAL, &It, NULL);
   }
 
-  __llvm_profile_register_write_file_atexit();
+  atexit(writeProfile);
 }

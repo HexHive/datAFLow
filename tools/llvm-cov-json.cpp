@@ -234,12 +234,16 @@ static Error genCoverage(
     sys::path::append(ProfrawEnvVal, OutDir, sys::path::filename(Testcase));
     const auto ProfrawEnv =
         "LLVM_PROFILE_FILE=" + std::string(ProfrawEnvVal.c_str());
-
-    // Assumes the target has been linked with LLVMCovRuntime
-    const auto Timeout = "LLVM_PROFILE_TIMEOUT=10000";
-
     Env.push_back(ProfrawEnv);
-    Env.push_back(Timeout);
+
+    // Set a default timeout. Assumes the target has been linked with the
+    // LLVMCovRuntime
+    //
+    // TODO check this by reading the target's symbol table
+    if (!getenv("LLVM_PROFILE_TIMEOUT")) {
+      const auto Timeout = "LLVM_PROFILE_TIMEOUT=10000";
+      Env.push_back(Timeout);
+    }
 
     // Run target. Ignore output and return code
     sys::ExecuteAndWait(ProfInstArgs[0], ProfInstArgs, ArrayRef(Env),
