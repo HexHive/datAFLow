@@ -25,8 +25,6 @@
 #include <llvm/Support/Threading.h>
 #include <llvm/Support/raw_ostream.h>
 
-#include "absl/container/btree_set.h"
-
 #include "fuzzalloc/Streams.h"
 
 #include "CovJSONCommon.h"
@@ -63,82 +61,6 @@ static const ExitOnError ExitOnErr("llvm-cov-json: ");
 //
 // Coverage functions
 //
-
-static Error genCoverage(
-    const StringRef &Target,                 ///< Path to instrumented target
-    const ArrayRef<std::string> &TargetArgs, ///< Target program arguments
-    const StringRef &InDir,  ///< Directory containing target inputs
-    const StringRef &OutDir, ///< Directory storing coverage results
-    unsigned NumThreads = 0  ///< Number of simultaneous threads
-) {
-  static const Optional<StringRef> Redirects[3] = {None, StringRef(),
-                                                   StringRef()};
-
-  const auto AtAtIt =
-      std::find_if(TargetArgs.begin(), TargetArgs.end(),
-                   [](const auto &S) { return S.compare("@@") == 0; });
-
-  //
-  // Initialize thread pool
-  //
-
-  if (NumThreads == 0) {
-    NumThreads = (ExitOnErr((getNumFiles(InDir))) + 1) / 2;
-    NumThreads =
-        std::min(hardware_concurrency().compute_thread_count(), NumThreads);
-  }
-  ThreadPool Pool(hardware_concurrency(NumThreads));
-
-  //
-  // Generate raw coverage files
-  //
-
-  const auto GenProfRaw = [&](const auto &Testcase) {
-    // Construct target command line
-    SmallVector<StringRef, 16> ProfInstArgs{Target};
-    ProfInstArgs.append(TargetArgs.begin(), TargetArgs.end());
-    if (AtAtIt == TargetArgs.end()) {
-      ProfInstArgs.push_back(Testcase);
-    } else {
-      ProfInstArgs[std::distance(TargetArgs.begin(), AtAtIt) + 1] = Testcase;
-    }
-
-    // Configure environment
-    auto Env = toStringRefArray(environ);
-
-    SmallString<32> ProfrawEnvVal;
-    sys::path::append(ProfrawEnvVal, OutDir, sys::path::filename(Testcase));
-    const auto ProfrawEnv =
-        "LLVM_PROFILE_FILE=" + std::string(ProfrawEnvVal.c_str());
-    Env.push_back(ProfrawEnv);
-
-    // Set a default timeout. Assumes the target has been linked with the
-    // LLVMCovRuntime
-    //
-    // TODO check this by reading the target's symbol table
-    if (!getenv("LLVM_PROFILE_TIMEOUT")) {
-      const auto Timeout = "LLVM_PROFILE_TIMEOUT=10000";
-      Env.push_back(Timeout);
-    }
-
-    // Run target. Ignore output and return code
-    sys::ExecuteAndWait(ProfInstArgs[0], ProfInstArgs, ArrayRef(Env),
-                        Redirects);
-  };
-
-  std::error_code EC;
-  for (sys::fs::directory_iterator F(InDir, EC), E; F != E && !EC;
-       F.increment(EC)) {
-    Pool.async(GenProfRaw, F->path());
-  }
-  if (EC) {
-    return errorCodeToError(EC);
-  }
-
-  Pool.wait();
-
-  return Error::success();
-}
 
 /// Accumulate coverage over all testcases
 static Expected<TestcaseCoverages> accumulateCoverage(
@@ -288,8 +210,8 @@ int main(int argc, char *argv[]) {
   cl::HideUnrelatedOptions(LLVMCovJSON);
   cl::ParseCommandLineOptions(
       argc, argv,
-      "Generate coverage over time/executions by replaying sampled test cases "
-      "through an LLVM SanCov-instrumented binary\n");
+      "Generate coverage over time by replaying sampled test cases through an "
+      "LLVM SanCov-instrumented binary\n");
 
   if (!sys::fs::is_directory(QueueDir)) {
     error_stream() << QueueDir << " is an invalid directory\n";

@@ -43,6 +43,11 @@ llvm::Expected<size_t> getNumFiles(const llvm::StringRef &);
 llvm::Expected<absl::btree_set<std::string>>
 getTestcases(const llvm::StringRef &);
 
+llvm::Error genCoverage(const llvm::StringRef &,
+                        const llvm::ArrayRef<std::string> &,
+                        const llvm::StringRef &, const llvm::StringRef &,
+                        unsigned = 0);
+
 /// Write final JSON file
 llvm::Error writeJSON(const llvm::StringRef &, const TestcaseCoverages &);
 

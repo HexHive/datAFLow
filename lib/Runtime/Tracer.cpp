@@ -64,7 +64,8 @@ static json::Value toJSON(const SrcLocation &Loc) {
 }
 
 static json::Value toJSON(const RuntimeLocation &Loc) {
-  return {toJSON(*Loc.SrcLoc), Loc.PC};
+  const auto *SLoc = Loc.SrcLoc;
+  return {SLoc->File, SLoc->Func, SLoc->Line, SLoc->Column, Loc.PC};
 }
 
 static json::Value toJSON(const SrcDefinition &Def) {
@@ -100,7 +101,7 @@ public:
     std::string OutPath;
     raw_string_ostream SS(OutPath);
 
-    if (const auto *Log = getenv("FUZZALLOC_TRACE_FILE")) {
+    if (const auto *Log = getenv("LLVM_PROFILE_FILE")) {
       SS << Log;
     } else {
       SS << "dua." << getpid() << ".json";
@@ -171,7 +172,7 @@ __attribute__((constructor)) static void __dua_trace_initialize_timeout() {
   struct sigaction SA;
   struct itimerval It;
 
-  if (const auto *Timeout = getenv("FUZZALLOC_TIMEOUT")) {
+  if (const auto *Timeout = getenv("LLVM_PROFILE_TIMEOUT")) {
     unsigned T;
     if (to_integer(Timeout, T)) {
       bzero(&SA, sizeof(struct sigaction));

@@ -30,6 +30,17 @@ install(PROGRAMS ddg-ratio.py
   TYPE BIN
 )
 
+add_executable(dua-cov-json
+  dua-cov-json.cpp
+  CovJSONCommon.cpp
+)
+target_link_libraries(dua-cov-json PRIVATE
+  ${LLVM_LIBS}
+  absl::flat_hash_map
+  absl::flat_hash_set
+)
+install(TARGETS dua-cov-json RUNTIME DESTINATION bin)
+
 add_executable(inst-stats inst-stats.cpp)
 target_link_libraries(inst-stats PRIVATE
   CollectStats
