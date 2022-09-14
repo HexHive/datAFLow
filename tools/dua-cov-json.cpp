@@ -49,7 +49,7 @@ struct Location {
       : File(File.str()), Func(Func.str()), Line(Line), Column(Column),
         PC(None) {}
 
-  constexpr bool operator==(const Location &Other) const {
+  bool operator==(const Location &Other) const {
     return File == Other.File && Func == Other.Func && Line == Other.Line &&
            Column == Other.Column && PC == Other.PC;
   }
@@ -68,7 +68,7 @@ struct Definition {
   Definition(const Location &Loc, const StringRef &V)
       : Loc(Loc), Var(V.str()) {}
 
-  constexpr bool operator==(const Definition &Other) const {
+  bool operator==(const Definition &Other) const {
     return Loc == Other.Loc && Var == Other.Var;
   }
 
@@ -143,6 +143,7 @@ static Expected<TestcaseCoverages> accumulateCoverage(
 
   DefUseMap AccumDefUses;
   DefUseMap DefUses;
+  auto Count = 0;
 
   //
   // Parse tracer coverage
@@ -221,7 +222,6 @@ static Expected<TestcaseCoverages> accumulateCoverage(
     // Calculate coverage
     //
 
-    auto Count = 0;
     for (const auto &[Def, Uses] : DefUses) {
       for (const auto &Use : Uses) {
         if (AccumDefUses[Def].emplace(Use).second) {
