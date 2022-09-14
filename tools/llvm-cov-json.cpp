@@ -33,17 +33,7 @@
 
 using namespace llvm;
 
-//
-// Aliases
-//
-
 namespace {
-//
-// Aliases
-//
-
-using LLVMCoverage = Coverage<coverage::CoverageMapping>;
-
 //
 // Command-line options
 //
@@ -69,44 +59,6 @@ static cl::list<std::string> TargetArgs(cl::ConsumeAfter, cl::desc("[...]"),
 //
 
 static const ExitOnError ExitOnErr("llvm-cov-json: ");
-
-//
-// JSON functions
-//
-// Most of these functions are adapted from llvm-cov/CoverageExporterJson.cpp
-//
-
-static json::Array renderRegion(const coverage::CountedRegion &Region) {
-  return json::Array(
-      {Region.LineStart, Region.ColumnStart, Region.LineEnd, Region.ColumnEnd,
-       clamp_uint64_to_int64(Region.ExecutionCount), Region.FileID,
-       Region.ExpandedFileID, static_cast<int64_t>(Region.Kind)});
-}
-
-static json::Array renderRegions(ArrayRef<coverage::CountedRegion> Regions) {
-  json::Array RegionArray;
-  for (const auto &Region : Regions) {
-    if (Region.Kind == coverage::CountedRegion::RegionKind::CodeRegion &&
-        Region.ExecutionCount > 0) {
-      RegionArray.push_back(renderRegion(Region));
-    }
-  }
-  return RegionArray;
-}
-
-static json::Array renderFunctions(
-    const iterator_range<coverage::FunctionRecordIterator> &Functions) {
-  json::Array FunctionArray;
-  for (const auto &F : Functions) {
-    FunctionArray.push_back(
-        json::Object({{"name", F.Name},
-                      {"count", clamp_uint64_to_int64(F.ExecutionCount)},
-                      {"regions", renderRegions(F.CountedRegions)},
-                      {"filenames", json::Array(F.Filenames)}}));
-  }
-
-  return FunctionArray;
-}
 
 //
 // Coverage functions
@@ -189,7 +141,7 @@ static Error genCoverage(
 }
 
 /// Accumulate coverage over all testcases
-static Expected<std::unique_ptr<LLVMCoverage>> accumulateCoverage(
+static Expected<TestcaseCoverages> accumulateCoverage(
     const StringRef &CovDir, ///< Directory containing raw coverage files
     const StringRef &Target  ///< Clang source-code-instrumented target program
 ) {
@@ -200,7 +152,7 @@ static Expected<std::unique_ptr<LLVMCoverage>> accumulateCoverage(
   }
   const auto NumCovFiles = *NumCovFilesOrErr;
 
-  // Get the actual coverage JSON files
+  // Get the actual coverage files
   auto TestcasesOrErr = getTestcases(CovDir);
   if (auto E = TestcasesOrErr.takeError()) {
     return std::move(E);
@@ -212,7 +164,7 @@ static Expected<std::unique_ptr<LLVMCoverage>> accumulateCoverage(
     return errorCodeToError(EC);
   }
 
-  std::vector<LLVMCoverage::TestcaseCov> TestcaseCovs;
+  TestcaseCoverages TestcaseCovs;
   TestcaseCovs.reserve(NumCovFiles);
 
   // Initialize a profile writer (for indexing the raw coverage profiles)
@@ -323,23 +275,9 @@ static Expected<std::unique_ptr<LLVMCoverage>> accumulateCoverage(
   }
   outs() << '\n';
 
-  return std::make_unique<LLVMCoverage>(std::move(TestcaseCovs),
-                                        std::move(CovMap));
+  return TestcaseCovs;
 }
 } // anonymous namespace
-
-static json::Value toJSON(const LLVMCoverage &Cov) {
-  std::vector<json::Value> JTestcases;
-  JTestcases.reserve(Cov.Testcases.size());
-
-  for (const auto &TC : Cov.Testcases) {
-    JTestcases.push_back({TC.first, TC.second});
-  }
-
-  json::Value JAccum = renderFunctions(Cov.Accumulated->getCoveredFunctions());
-
-  return json::Object({{"coverage", JTestcases}, {"accum_coverage", JAccum}});
-}
 
 //
 // The main function
@@ -380,7 +318,7 @@ int main(int argc, char *argv[]) {
 
   // Write to JSON
   status_stream() << "Writing coverage to " << OutJSON << "...\n";
-  ExitOnErr(writeJSON(OutJSON, *Cov));
+  ExitOnErr(writeJSON(OutJSON, Cov));
 
   return 0;
 }

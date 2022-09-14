@@ -11,6 +11,13 @@
 
 using namespace llvm;
 
+namespace {
+static int64_t clamp_uint64_to_int64(uint64_t u) {
+  return std::min(u,
+                  static_cast<uint64_t>(std::numeric_limits<int64_t>::max()));
+}
+} // anonymous namespace
+
 Expected<size_t> getNumFiles(const StringRef &P) {
   std::error_code EC;
   size_t N = 0;
@@ -43,7 +50,20 @@ Expected<absl::btree_set<std::string>> getTestcases(const StringRef &Dir) {
   return TCs;
 }
 
-int64_t clamp_uint64_to_int64(uint64_t u) {
-  return std::min(u,
-                  static_cast<uint64_t>(std::numeric_limits<int64_t>::max()));
+json::Value toJSON(const TestcaseCoverage &Cov) {
+  return {Cov.Path, clamp_uint64_to_int64(Cov.Count)};
+}
+
+llvm::Error writeJSON(const llvm::StringRef &Out,
+                      const TestcaseCoverages &Cov) {
+  std::error_code EC;
+  llvm::raw_fd_ostream OS(Out, EC, llvm::sys::fs::OF_Text);
+  if (EC) {
+    return llvm::errorCodeToError(EC);
+  }
+
+  OS << json::Value(Cov);
+  OS.close();
+
+  return llvm::Error::success();
 }

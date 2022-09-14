@@ -31,7 +31,7 @@ def get_final_cov(p: Path) -> int:
     """
     with p.open() as inf:
         root = json.load(inf)
-        return root['coverage'][-1][1]
+        return root[-1][1]
 
 
 def main(args):
