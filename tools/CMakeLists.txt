@@ -37,7 +37,10 @@ target_link_libraries(inst-stats PRIVATE
 )
 install(TARGETS inst-stats RUNTIME DESTINATION bin)
 
-add_executable(llvm-cov-json llvm-cov-json.cpp)
+add_executable(llvm-cov-json
+  llvm-cov-json.cpp
+  CovJSONCommon.cpp
+)
 target_link_libraries(llvm-cov-json PRIVATE
   ${LLVM_LIBS}
 )
