@@ -308,7 +308,8 @@ static Expected<std::unique_ptr<Coverage>> accumulateCoverage(
     // Create instrumentation profile reader
     auto ProfReaderOrErr = InstrProfReader::create(CovFile.c_str());
     if (auto E = ProfReaderOrErr.takeError()) {
-      return std::move(E);
+      warning_stream() << '`' << CovFile << "`: " << E << ". Skipping...\n";
+      continue;
     }
     const auto &ProfReader = std::move(*ProfReaderOrErr);
 
