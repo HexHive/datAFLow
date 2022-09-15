@@ -32,6 +32,9 @@ def parse_args():
     def_arg_group.add_argument('--def-mem-funcs', type=Path, metavar='TXT',
                                help='LLVM special case list of custom memory '
                                'allocation functions')
+    def_arg_group.add_argument('--def-ignore-dyn-mem', action='store_true',
+                                default=False,
+                                help='Ignore dynamic memory allocation routines')
     def_arg_group.add_argument('--def-sensitivity', default=[], action='append',
                                choices=('array', 'struct'),
                                help='def site sensitivity')
@@ -173,8 +176,18 @@ def main():
 
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libGlobalVariableTag.so',
         '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libLocalVariableTag.so',
-        '-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libHeapTag.so',
     ])
+
+    # Def ignore dynamic memory allocations
+    if 'FUZZALLOC_DEF_IGNORE_DYN_MEM' in env:
+        def_ignore_dyn_mem = True
+    elif args.def_ignore_dyn_mem:
+        def_ignore_dyn_mem = True
+    else:
+        def_ignore_dyn_mem = False
+
+    if not def_ignore_dyn_mem:
+        cmd.extend(['-Xclang', '-load', '-Xclang', f'{LIB_DIR}/libHeapTag.so'])
 
     is_assembler = check_if_assembler(clang_args)
     if not is_assembler:
