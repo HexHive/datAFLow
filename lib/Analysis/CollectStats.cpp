@@ -28,14 +28,18 @@ void CollectStats::getAnalysisUsage(AnalysisUsage &AU) const {
 
 void CollectStats::print(raw_ostream &O, const Module *) const {
   O << "  num. basic blocks: " << NumBasicBlocks << "\n";
+
   O << "  num. local arrays: " << NumLocalArrays << "\n";
   O << "  num. local structs: " << NumLocalStructs << "\n";
   O << "  num. global arrays: " << NumGlobalArrays << "\n";
   O << "  num. global structs: " << NumGlobalStructs << "\n";
+
   O << "  num. tagged local arrays: " << NumTaggedLocalArrays << "\n";
   O << "  num. tagged local structs: " << NumTaggedLocalStructs << "\n";
   O << "  num. tagged local arrays: " << NumTaggedGlobalArrays << "\n";
   O << "  num. tagged local structs: " << NumTaggedGlobalStructs << "\n";
+  O << "  num. tagged dynamic mem. allocations: " << NumTaggedDynAllocs << "\n";
+
   O << "  num. instrumented use sites: " << NumInstrumentedUseSites << "\n";
 }
 
@@ -51,6 +55,7 @@ bool CollectStats::doInitialization(Module &M) {
   this->NumTaggedLocalStructs = 0;
   this->NumTaggedGlobalArrays = 0;
   this->NumTaggedGlobalStructs = 0;
+  this->NumTaggedDynAllocs = 0;
 
   this->NumInstrumentedUseSites = 0;
 
@@ -82,11 +87,15 @@ bool CollectStats::runOnModule(Module &M) {
 
       for (auto &I : BB) {
         if (I.getMetadata(M.getMDKindID(kFuzzallocTagVarMD))) {
-          const auto *Ty = Vars.lookup(&I).getType();
-          if (isa<ArrayType>(Ty)) {
-            NumTaggedLocalArrays++;
-          } else if (isa<StructType>(Ty)) {
-            NumTaggedLocalStructs++;
+          if (auto *Alloca = dyn_cast<AllocaInst>(&I)) {
+            const auto *Ty = Alloca->getAllocatedType();
+            if (isa<ArrayType>(Ty)) {
+              NumTaggedLocalArrays++;
+            } else if (isa<StructType>(Ty)) {
+              NumTaggedLocalStructs++;
+            }
+          } else {
+            NumTaggedDynAllocs++;
           }
         } else if (I.getMetadata(
                        M.getMDKindID(kFuzzallocInstrumentedUseSiteMD))) {
@@ -99,7 +108,7 @@ bool CollectStats::runOnModule(Module &M) {
   for (auto &G : M.globals()) {
     if (auto *GV = dyn_cast<GlobalVariable>(&G)) {
       if (GV->getMetadata(M.getMDKindID(kFuzzallocTagVarMD))) {
-        const auto *Ty = Vars.lookup(GV).getType();
+        const auto *Ty = GV->getValueType();
         if (isa<ArrayType>(Ty)) {
           NumTaggedGlobalArrays++;
         } else if (isa<StructType>(Ty)) {

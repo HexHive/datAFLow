@@ -35,20 +35,25 @@ public:
   unsigned long getNumTaggedGlobalStructs() const {
     return NumTaggedGlobalStructs;
   }
+  unsigned long getNumTaggedDynAllocs() const { return NumTaggedDynAllocs; }
   unsigned long getNumInstrumenteduseSites() const {
     return NumInstrumentedUseSites;
   }
 
 private:
   unsigned long NumBasicBlocks;
+
   unsigned long NumLocalArrays;
   unsigned long NumLocalStructs;
-  unsigned long NumTaggedLocalArrays;
-  unsigned long NumTaggedLocalStructs;
   unsigned long NumGlobalArrays;
   unsigned long NumGlobalStructs;
+
+  unsigned long NumTaggedLocalArrays;
+  unsigned long NumTaggedLocalStructs;
   unsigned long NumTaggedGlobalArrays;
   unsigned long NumTaggedGlobalStructs;
+  unsigned long NumTaggedDynAllocs;
+
   unsigned long NumInstrumentedUseSites;
 };
 
