@@ -21,20 +21,34 @@ public:
   bool runOnModule(llvm::Module &) override;
 
   unsigned long getNumBasicBlocks() const { return NumBasicBlocks; }
-  unsigned long getNumLocalVars() const { return NumLocalVars; }
-  unsigned long getNumTaggedLocalVars() const { return NumTaggedLocalVars; }
-  unsigned long getNumGlobalVars() const { return NumGlobalVars; }
-  unsigned long getNumTaggedGlobalVars() const { return NumTaggedGlobalVars; }
+  unsigned long getNumLocalArrays() const { return NumLocalArrays; }
+  unsigned long getNumLocalStructs() const { return NumLocalStructs; }
+  unsigned long getNumTaggedLocalArrays() const { return NumTaggedLocalArrays; }
+  unsigned long getNumTaggedLocalStructs() const {
+    return NumTaggedLocalStructs;
+  }
+  unsigned long getNumGlobalArrays() const { return NumGlobalArrays; }
+  unsigned long getNumGlobalStructs() const { return NumGlobalStructs; }
+  unsigned long getNumTaggedGlobalArrays() const {
+    return NumTaggedGlobalArrays;
+  }
+  unsigned long getNumTaggedGlobalStructs() const {
+    return NumTaggedGlobalStructs;
+  }
   unsigned long getNumInstrumenteduseSites() const {
     return NumInstrumentedUseSites;
   }
 
 private:
   unsigned long NumBasicBlocks;
-  unsigned long NumLocalVars;
-  unsigned long NumTaggedLocalVars;
-  unsigned long NumGlobalVars;
-  unsigned long NumTaggedGlobalVars;
+  unsigned long NumLocalArrays;
+  unsigned long NumLocalStructs;
+  unsigned long NumTaggedLocalArrays;
+  unsigned long NumTaggedLocalStructs;
+  unsigned long NumGlobalArrays;
+  unsigned long NumGlobalStructs;
+  unsigned long NumTaggedGlobalArrays;
+  unsigned long NumTaggedGlobalStructs;
   unsigned long NumInstrumentedUseSites;
 };
 

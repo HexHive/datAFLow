@@ -28,19 +28,30 @@ void CollectStats::getAnalysisUsage(AnalysisUsage &AU) const {
 
 void CollectStats::print(raw_ostream &O, const Module *) const {
   O << "  num. basic blocks: " << NumBasicBlocks << "\n";
-  O << "  num. local variables: " << NumLocalVars << "\n";
-  O << "  num. global variables: " << NumGlobalVars << "\n";
-  O << "  num. tagged local variables: " << NumTaggedLocalVars << "\n";
-  O << "  num. tagged local variables: " << NumTaggedGlobalVars << "\n";
+  O << "  num. local arrays: " << NumLocalArrays << "\n";
+  O << "  num. local structs: " << NumLocalStructs << "\n";
+  O << "  num. global arrays: " << NumGlobalArrays << "\n";
+  O << "  num. global structs: " << NumGlobalStructs << "\n";
+  O << "  num. tagged local arrays: " << NumTaggedLocalArrays << "\n";
+  O << "  num. tagged local structs: " << NumTaggedLocalStructs << "\n";
+  O << "  num. tagged local arrays: " << NumTaggedGlobalArrays << "\n";
+  O << "  num. tagged local structs: " << NumTaggedGlobalStructs << "\n";
   O << "  num. instrumented use sites: " << NumInstrumentedUseSites << "\n";
 }
 
 bool CollectStats::doInitialization(Module &M) {
   this->NumBasicBlocks = 0;
-  this->NumLocalVars = 0;
-  this->NumTaggedLocalVars = 0;
-  this->NumGlobalVars = 0;
-  this->NumTaggedGlobalVars = 0;
+
+  this->NumLocalArrays = 0;
+  this->NumLocalStructs = 0;
+  this->NumGlobalArrays = 0;
+  this->NumGlobalStructs = 0;
+
+  this->NumTaggedLocalArrays = 0;
+  this->NumTaggedLocalStructs = 0;
+  this->NumTaggedGlobalArrays = 0;
+  this->NumTaggedGlobalStructs = 0;
+
   this->NumInstrumentedUseSites = 0;
 
   return false;
@@ -48,21 +59,35 @@ bool CollectStats::doInitialization(Module &M) {
 
 bool CollectStats::runOnModule(Module &M) {
   const auto &Vars = getAnalysis<VariableRecovery>().getVariables();
-  for (const auto &[_, Var] : Vars) {
-    if (isa<DILocalVariable>(Var.getDbgVar())) {
-      NumLocalVars++;
-    } else {
-      NumGlobalVars++;
+  for (const auto &[_, VI] : Vars) {
+    const auto *Ty = VI.getType();
+    if (isa<DILocalVariable>(VI.getDbgVar())) {
+      if (isa<ArrayType>(Ty)) {
+        NumLocalArrays++;
+      } else if (isa<StructType>(Ty)) {
+        NumLocalStructs++;
+      }
+    } else if (isa<DIGlobalVariable>(VI.getDbgVar())) {
+      if (isa<ArrayType>(Ty)) {
+        NumGlobalArrays++;
+      } else if (isa<StructType>(Ty)) {
+        NumGlobalStructs++;
+      }
     }
   }
 
-  for (const auto &F : M.functions()) {
+  for (auto &F : M.functions()) {
     for (auto &BB : F) {
       NumBasicBlocks++;
 
       for (auto &I : BB) {
         if (I.getMetadata(M.getMDKindID(kFuzzallocTagVarMD))) {
-          NumTaggedLocalVars++;
+          const auto *Ty = Vars.lookup(&I).getType();
+          if (isa<ArrayType>(Ty)) {
+            NumTaggedLocalArrays++;
+          } else if (isa<StructType>(Ty)) {
+            NumTaggedLocalStructs++;
+          }
         } else if (I.getMetadata(
                        M.getMDKindID(kFuzzallocInstrumentedUseSiteMD))) {
           NumInstrumentedUseSites++;
@@ -71,10 +96,15 @@ bool CollectStats::runOnModule(Module &M) {
     }
   }
 
-  for (const auto &G : M.globals()) {
+  for (auto &G : M.globals()) {
     if (auto *GV = dyn_cast<GlobalVariable>(&G)) {
       if (GV->getMetadata(M.getMDKindID(kFuzzallocTagVarMD))) {
-        NumTaggedGlobalVars++;
+        const auto *Ty = Vars.lookup(GV).getType();
+        if (isa<ArrayType>(Ty)) {
+          NumTaggedGlobalArrays++;
+        } else if (isa<StructType>(Ty)) {
+          NumTaggedGlobalStructs++;
+        }
       }
     }
   }
