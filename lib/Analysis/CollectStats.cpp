@@ -36,8 +36,8 @@ void CollectStats::print(raw_ostream &O, const Module *) const {
 
   O << "  num. tagged local arrays: " << NumTaggedLocalArrays << "\n";
   O << "  num. tagged local structs: " << NumTaggedLocalStructs << "\n";
-  O << "  num. tagged local arrays: " << NumTaggedGlobalArrays << "\n";
-  O << "  num. tagged local structs: " << NumTaggedGlobalStructs << "\n";
+  O << "  num. tagged global arrays: " << NumTaggedGlobalArrays << "\n";
+  O << "  num. tagged global structs: " << NumTaggedGlobalStructs << "\n";
   O << "  num. tagged dynamic mem. allocations: " << NumTaggedDynAllocs << "\n";
 
   O << "  num. instrumented use sites: " << NumInstrumentedUseSites << "\n";
