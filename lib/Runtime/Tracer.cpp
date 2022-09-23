@@ -59,6 +59,22 @@ struct RuntimeLocation {
   }
 };
 
+struct SigAlarmBlock {
+  SigAlarmBlock() {
+    sigset_t SigSet;
+    sigemptyset(&SigSet);
+    sigaddset(&SigSet, SIGALRM);
+    sigprocmask(SIG_BLOCK, &SigSet, nullptr);
+  }
+
+  ~SigAlarmBlock() {
+    sigset_t SigSet;
+    sigemptyset(&SigSet);
+    sigaddset(&SigSet, SIGALRM);
+    sigprocmask(SIG_UNBLOCK, &SigSet, nullptr);
+  }
+};
+
 static json::Value toJSON(const SrcLocation &Loc) {
   return {Loc.File, Loc.Func, Loc.Line, Loc.Column};
 }
@@ -129,7 +145,7 @@ public:
       return;
     }
 
-    json::Value V = [&]() -> json::Value {
+    json::Value V = [this]() -> json::Value {
       std::scoped_lock SL(Lock);
       return toJSON(DefUses);
     }();
@@ -146,6 +162,7 @@ public:
     // XXX Ignore for now
     (void)PC;
 
+    SigAlarmBlock();
     std::scoped_lock SL(Lock);
     DefUses.emplace(Def, LocationCountMap());
   }
@@ -154,6 +171,7 @@ public:
               const SrcLocation *Loc, uintptr_t PC) {
     RuntimeLocation RLoc(Loc, PC);
 
+    SigAlarmBlock();
     std::scoped_lock SL(Lock);
     DefUses[Def][RLoc]++;
   }
