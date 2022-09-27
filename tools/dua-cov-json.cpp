@@ -164,7 +164,8 @@ static Expected<TestcaseCoverages> accumulateCoverage(
 
     auto CovJSONOrErr = json::parse(CovOrErr.get()->getBuffer());
     if (auto E = CovJSONOrErr.takeError()) {
-      return std::move(E);
+      warning_stream() << '`' << CovFile << "`: " << E << ". Skipping...\n";
+      continue;
     }
 
     assert(CovJSONOrErr->getAsArray());
