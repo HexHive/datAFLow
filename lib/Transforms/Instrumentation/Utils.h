@@ -52,8 +52,8 @@ llvm::Instruction *insertFree(llvm::Type *, llvm::Value *, llvm::Instruction *);
 // Tracer functionality
 //
 
-/// Log a variable definition in the def-use tracer
-llvm::Instruction *tracerLogDef(llvm::Constant *, llvm::Instruction *);
+/// Insert the def-use tracer log function into the given module
+llvm::FunctionCallee insertTracerDef(llvm::Module *);
 
 /// Create a constant `SrcDef` struct for tracing variable definitions
 llvm::Constant *tracerCreateDef(const VarInfo &, llvm::Module *);

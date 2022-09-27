@@ -60,6 +60,8 @@ private:
 
   FunctionCallee BBRegisterFn;
   FunctionCallee BBDeregisterFn;
+
+  FunctionCallee TracerDefFn;
 };
 
 char LocalVarTag::ID = 0;
@@ -180,7 +182,10 @@ AllocaInst *LocalVarTag::tag(AllocaInst *OrigAlloca, Constant *Metadata) {
 
   // Tracer: log variable definition
   if (ClInstType == InstType::InstTrace) {
-    tracerLogDef(Metadata, BBRegisterCall);
+    auto *MetadataTy = TracerDefFn.getFunctionType()->getParamType(0);
+    CallInst::Create(TracerDefFn,
+                     {ConstantExpr::getPointerCast(Metadata, MetadataTy)}, "",
+                     OrigAlloca);
   }
 
   // Now cache and update the other users
@@ -249,6 +254,10 @@ bool LocalVarTag::runOnModule(Module &M) {
     cast<Function>(BBDeregisterFn.getCallee())->setDoesNotThrow();
     cast<Function>(BBDeregisterFn.getCallee())
         ->addParamAttr(0, Attribute::NonNull);
+  }
+
+  if (ClInstType == InstType::InstTrace) {
+    TracerDefFn = insertTracerDef(Mod);
   }
 
   const auto &DefSites = getAnalysis<DefSiteIdentify>().getDefSites();

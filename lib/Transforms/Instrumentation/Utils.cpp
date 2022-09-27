@@ -5,6 +5,7 @@
 ///
 //===----------------------------------------------------------------------===//
 
+#include <llvm/IR/Attributes.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DebugInfo.h>
 #include <llvm/IR/DerivedTypes.h>
@@ -114,17 +115,31 @@ Value *readPC(Instruction *InsertPt) {
   return CallInst::Create(ReadPCAsm, "", InsertPt);
 }
 
-Instruction *tracerLogDef(Constant *DefMetadata, Instruction *InsertPt) {
-  auto *M = InsertPt->getFunction()->getParent();
+FunctionCallee insertTracerDef(Module *M) {
   auto &Ctx = M->getContext();
+  auto &DL = M->getDataLayout();
+
+  auto *Int8PtrTy = Type::getInt8PtrTy(Ctx);
+  auto *IntPtrTy = DL.getIntPtrType(Ctx);
+
+  auto *TracerSrcLocationTy =
+      StructType::create({Int8PtrTy, Int8PtrTy, IntPtrTy, IntPtrTy},
+                         "fuzzalloc.SrcLocation", /*isPacked=*/true);
+  auto *TracerSrcDefTy =
+      StructType::create({TracerSrcLocationTy, Int8PtrTy},
+                         "fuzzalloc.SrcDefinition", /*isPacked=*/true);
+
+  AttributeList AL;
+  AL = AL.addAttribute(Ctx, AttributeList::FunctionIndex, Attribute::NoUnwind)
+           .addParamAttribute(Ctx, 0, Attribute::NonNull)
+           .addParamAttribute(Ctx, 0, Attribute::ReadOnly);
 
   auto *TracerDefFnTy =
-      FunctionType::get(Type::getVoidTy(Ctx), {DefMetadata->getType()},
+      FunctionType::get(Type::getVoidTy(Ctx), {TracerSrcDefTy->getPointerTo()},
                         /*isVarArg=*/false);
-  auto TracerDefFn = M->getOrInsertFunction("__tracer_def", TracerDefFnTy);
-  assert(TracerDefFn);
+  auto TracerDef = M->getOrInsertFunction("__tracer_def", TracerDefFnTy, AL);
 
-  return CallInst::Create(TracerDefFn, {DefMetadata}, "", InsertPt);
+  return TracerDef;
 }
 
 static GlobalVariable *createTracerGlobalVariable(Constant *Initializer,
