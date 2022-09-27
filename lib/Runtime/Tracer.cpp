@@ -160,8 +160,8 @@ private:
 };
 
 static VarLogger &Log() {
-  static VarLogger *L = new VarLogger;
-  return *L;
+  static VarLogger L;
+  return L;
 }
 
 static void handleTimeout(int) { Log().serialize(); }
