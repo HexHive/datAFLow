@@ -159,9 +159,12 @@ private:
   std::mutex Lock;
 };
 
-static VarLogger Log;
+static VarLogger &Log() {
+  static VarLogger *L = new VarLogger;
+  return *L;
+}
 
-static void handleTimeout(int) { Log.serialize(); }
+static void handleTimeout(int) { Log().serialize(); }
 
 __attribute__((constructor)) static void __dua_trace_initialize_timeout() {
   struct sigaction SA;
@@ -189,7 +192,7 @@ __attribute__((constructor)) static void __dua_trace_initialize_timeout() {
 
 extern "C" {
 void __tracer_def(const SrcDefinition *Def) {
-  Log.addDef(Def, (uintptr_t)__builtin_return_address(0));
+  Log().addDef(Def, (uintptr_t)__builtin_return_address(0));
 }
 
 void __tracer_use(const SrcLocation *Loc, void *Ptr, size_t Size) {
@@ -199,7 +202,7 @@ void __tracer_use(const SrcLocation *Loc, void *Ptr, size_t Size) {
 
   if (likely(Def != nullptr)) {
     ptrdiff_t Offset = (uintptr_t)Ptr - Base;
-    Log.addUse(*Def, Offset, Loc, (uintptr_t)__builtin_return_address(0));
+    Log().addUse(*Def, Offset, Loc, (uintptr_t)__builtin_return_address(0));
   }
 }
 }
