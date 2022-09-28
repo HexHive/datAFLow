@@ -125,6 +125,10 @@ public:
   }
 
   void serialize() {
+    // Cancel timer
+    struct itimerval It = {};
+    setitimer(ITIMER_REAL, &It, nullptr);
+
     if (!OS) {
       return;
     }
@@ -167,17 +171,15 @@ static VarLogger &Log() {
 static void handleTimeout(int) { Log().serialize(); }
 
 __attribute__((constructor)) static void __dua_trace_initialize_timeout() {
-  struct sigaction SA;
-  struct itimerval It;
+  struct sigaction SA = {};
+  struct itimerval It = {};
 
   if (const auto *Timeout = getenv("LLVM_PROFILE_TIMEOUT")) {
     unsigned T;
     if (to_integer(Timeout, T)) {
-      bzero(&SA, sizeof(struct sigaction));
       SA.sa_handler = handleTimeout;
       sigaction(SIGALRM, &SA, nullptr);
 
-      bzero(&It, sizeof(struct itimerval));
       It.it_value.tv_sec = T / 1000;
       It.it_value.tv_usec = (T % 1000) * 1000;
       setitimer(ITIMER_REAL, &It, nullptr);
