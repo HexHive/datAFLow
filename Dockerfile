@@ -13,11 +13,20 @@ ADD include include
 ADD lib lib
 ADD tools tools
 
+#RUN git clone https://github.com/HexHive/datAFLow /opt/dataflow && \
+#    cd /opt/dataflow && \
+#    git submodule update --init
+
 ARG BUILD_TYPE=Release
-RUN mkdir build && \
+RUN cd /opt/dataflow && \
+    cd ext/aflplusplus && \
+    make clean
+RUN cd /opt/dataflow && \
+    mkdir -p build && \
     cd build && \
     cmake .. -DLLVM_DIR=`llvm-config-12 --cmakedir` \
         -DCMAKE_C_COMPILER=clang-12 -DCMAKE_CXX_COMPILER=clang++-12 \
         -DCMAKE_BUILD_TYPE=$BUILD_TYPE && \
+    make clean && \
     make -j && \
     make -j install

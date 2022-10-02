@@ -133,9 +133,9 @@ reports logging covered def-use chains.
 
 Generate control-flow coverage over time from an AFL++ queue output directory.
 Relies on a version of the target program instrumented with Clang's source-based
-coverage (as described [here](https://clang.llvm.org/docs/SourceBasedCodeCoverage.html);
-i.e., compiled using Clang's `-fprofile-instr-generate -fcoverage-mapping` flags)
-to replay the queue through, generating JSON reports logging covered def-use chains.
+coverage (i.e., compiled using Clang's `-fprofile-instr-generate
+-fcoverage-mapping` flags) to replay the queue through, generating JSON reports
+logging covered def-use chains.
 
 # Evaluation Reproduction
 
