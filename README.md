@@ -122,6 +122,21 @@ number of tagged variables, number of instrumented use sites, etc.
 coverage](https://clang.llvm.org/docs/SourceBasedCodeCoverage.html) from an
 instrumented binary.
 
+### `dua-cov-json`
+
+Generate data-flow coverage over time from an AFL++ queue output directory.
+Relies on a version of the target program instrumented with trace mode (i.e.,
+setting `FUZZALLOC_INST=trace`) to replay the queue through, generating JSON
+reports logging covered def-use chains.
+
+### `llvm-cov-json`
+
+Generate control-flow coverage over time from an AFL++ queue output directory.
+Relies on a version of the target program instrumented with Clang's source-based
+coverage (as described [here](https://clang.llvm.org/docs/SourceBasedCodeCoverage.html);
+i.e., compiled using Clang's `-fprofile-instr-generate -fcoverage-mapping` flags)
+to replay the queue through, generating JSON reports logging covered def-use chains.
+
 # Evaluation Reproduction
 
 See [README.magma.md](evaluation/README.magma.md) and
