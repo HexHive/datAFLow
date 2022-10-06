@@ -28,11 +28,12 @@ wrapper).
 
 ### Building `z3`
 
-Z3 is required if using [SVF](https://github.com/svf-tools/svf) for static
-analysis.
+Z3 is required by [SVF](https://github.com/svf-tools/svf) (for static analysis).
+If running datAFLow on Ubuntu 20.04, you can install z3 via `apt`.
 
 ```bash
 git clone https://github.com/z3prover/z3
+git -C z3 checkout z3-4.8.8
 mkdir -p z3/build
 cd z3/build
 cmake .. \
@@ -43,21 +44,23 @@ make install
 
 ### Building `fuzzalloc`
 
-`FUZZALLOC_SRC` variable refers to this directory. Ensure all submodules are
-initialized.
+`FUZZALLOC_SRC` variable refers to this directory (i.e., the root source
+directory). Ensure all submodules are initialized.
 
 ```bash
 cd $FUZZALLOC_SRC
 git submodule update --init --recursive
 ```
 
-Then build.
+Then build. The `Z3_DIR` option is only required of z3 was built from source.
 
 ```bash
+cd $FUZZALLOC_SRC
 mkdir build
 cd build
-cmake $FUZZALLOC_SRC \
-    -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+cmake .. \
+    -DCMAKE_C_COMPILER=clang-12 -DCMAKE_CXX_COMPILER=clang++-12 \
+    -DLLVM_DIR=$(llvm-config-12 --cmakedir) \
     -DZ3_DIR=/path/to/z3/install
 make -j
 ```

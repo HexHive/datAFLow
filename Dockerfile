@@ -1,9 +1,9 @@
-FROM ubuntu:focal
+FROM ubuntu:20.04
 
 RUN export DEBIAN_FRONTEND=noninteractive && \
     apt-get update -y && \
     apt-get install -y \
-        python3 python3-pip cmake llvm-12-dev clang-12 lld-12
+        python3 python3-pip cmake llvm-12-dev clang-12 lld-12 z3
 
 RUN mkdir -p /opt/dataflow
 WORKDIR /opt/dataflow
