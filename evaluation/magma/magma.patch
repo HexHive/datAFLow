@@ -4607,20 +4607,6 @@ index 00000000..0f8b9a01
 +
 +fun:zend_mm_alloc_rel
 +fun:zend_mm_realloc_rel
-diff --git a/targets/poppler/fetch.sh b/targets/poppler/fetch.sh
-index 65966e99..6914407c 100755
---- a/targets/poppler/fetch.sh
-+++ b/targets/poppler/fetch.sh
-@@ -9,6 +9,6 @@ git clone --no-checkout https://gitlab.freedesktop.org/poppler/poppler.git \
-     "$TARGET/repo"
- git -C "$TARGET/repo" checkout 1d23101ccebe14261c6afc024ea14f29d209e760
- 
--git clone --no-checkout git://git.sv.nongnu.org/freetype/freetype2.git \
--    "$TARGET/freetype2"
-+git clone --no-checkout https://gitlab.freedesktop.org/freetype/freetype.git \
-+	"$TARGET/freetype2"
- git -C "$TARGET/freetype2" checkout 50d0033f7ee600c5f5831b28877353769d1f7d48
-\ No newline at end of file
 diff --git a/targets/sqlite3/src/.gitkeep b/targets/sqlite3/src/.gitkeep
 new file mode 100644
 index 00000000..e69de29b
