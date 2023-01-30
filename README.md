@@ -83,7 +83,7 @@ custom memory allocation routines
 * `FUZZALLOC_USE_CAPTURE`: What to capture at each use site. One of `use`,
 `offset`, or `value`.
 
-* `FUZZALLOC_INST`: Instrumentation. One of: `afl` (for fuzzing); `trace` (for
+* `FUZZALLOC_INST`: Instrumentation. One of: `afl` (for fuzzing); `tracer` (for
 accurate tracing of def-use chains); or `none`.
 
 ### Custom memory allocators
