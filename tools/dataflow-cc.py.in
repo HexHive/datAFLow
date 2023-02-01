@@ -211,8 +211,9 @@ def main():
 
     # Linker args
     if inst == 'afl':
-        cmd.extend(['-O3',
-                    f'-L{LIB_DIR}', '-lFuzzallocRuntime', '-lAFLRuntime',
+        if 'AFL_DONT_OPTIMIZE' not in env:
+            cmd.append('-O3')
+        cmd.extend([f'-L{LIB_DIR}', '-lFuzzallocRuntime', '-lAFLRuntime',
                     '@LLVM_PTHREAD_LIB@'])
     elif inst == 'tracer':
         cmd.extend([f'-L{LIB_DIR}', '-lTracerRuntime', '-lstdc++',
