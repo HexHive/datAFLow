@@ -14,9 +14,10 @@ execute_process(
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/aflplusplus"
 )
 
-add_library(AFLRuntime OBJECT
+add_library(AFLRuntime STATIC
   aflplusplus/instrumentation/afl-compiler-rt.o.c
 )
+install(TARGETS AFLRuntime LIBRARY DESTINATION lib)
 
 add_custom_target(aflplusplus
   ALL
