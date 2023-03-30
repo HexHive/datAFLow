@@ -114,6 +114,8 @@ bounds on the number of def-use chains in a BC file. This tool generates JSON
 output tying these def-use chains to source-level variables (recovered through
 debug info).
 
+Note that you must run CMake with the `-DUSE_SVF=On` option to build this tool.
+
 ### `dataflow-stats`
 
 Collect `fuzzalloc` stats from an instrumented bitcode file. Stats include:

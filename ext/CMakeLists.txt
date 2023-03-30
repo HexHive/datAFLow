@@ -34,4 +34,6 @@ install(PROGRAMS
 # SVF
 #
 
-add_subdirectory(svf)
+if(USE_SVF)
+  add_subdirectory(svf)
+endif(USE_SVF)

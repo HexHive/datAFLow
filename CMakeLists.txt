@@ -18,7 +18,11 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # LLVM
 #
 
-find_package(LLVM 12 REQUIRED)
+if(NOT (DEFINED LLVM_MAJOR_VERSION))
+  set(LLVM_MAJOR_VERSION 12)
+endif()
+
+find_package(LLVM ${LLVM_MAJOR_VERSION} REQUIRED)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION} in ${LLVM_CMAKE_DIR}")
 
 list(APPEND CMAKE_MODULE_PATH ${LLVM_CMAKE_DIR})
@@ -44,6 +48,8 @@ include_directories(
   ext/aflplusplus/include
   ext/svf/include
 )
+
+option(USE_SVF "Enable SVF-based analysis" OFF)
 
 add_subdirectory(ext)
 add_subdirectory(lib)
