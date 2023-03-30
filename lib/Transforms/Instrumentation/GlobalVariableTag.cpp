@@ -149,7 +149,12 @@ GlobalVariable *GlobalVarTag::tag(GlobalVariable *OrigGV, Constant *Metadata,
         OrigTy, OrigGV->getType()->getPointerAddressSpace(),
         OrigGV->getLinkage(), OrigGV->getName(), Aliasee, Mod);
     GVAlias->takeName(OrigGV);
-    GVAlias->copyAttributesFrom(OrigGV);
+    GVAlias->setVisibility(OrigGV->getVisibility());
+    GVAlias->setUnnamedAddr(OrigGV->getUnnamedAddr());
+    GVAlias->setThreadLocalMode(OrigGV->getThreadLocalMode());
+    GVAlias->setDLLStorageClass(OrigGV->getDLLStorageClass());
+    GVAlias->setDSOLocal(OrigGV->isDSOLocal());
+    GVAlias->setPartition(OrigGV->getPartition());
   } else {
     NewGV->takeName(OrigGV);
   }

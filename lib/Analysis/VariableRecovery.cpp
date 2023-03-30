@@ -10,7 +10,9 @@
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/Passes/PassBuilder.h>
 #include <llvm/Support/CommandLine.h>
+#include <llvm/Support/FileSystem.h>
 #include <llvm/Support/SpecialCaseList.h>
+#include <llvm/Support/VirtualFileSystem.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 
 #include "fuzzalloc/Analysis/VariableRecovery.h"
@@ -69,7 +71,7 @@ static FuncIgnoreList getFuncIgnoreList() {
     OS << "fuzzalloc def ignore function list does not exist at "
        << ClFuncIgnoreList;
     OS.flush();
-    report_fatal_error(Err);
+    report_fatal_error(StringRef(Err));
   }
 
   return FuncIgnoreList(SpecialCaseList::createOrDie(

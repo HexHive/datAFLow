@@ -12,7 +12,9 @@
 #include <llvm/IR/Module.h>
 #include <llvm/Pass.h>
 #include <llvm/Support/CommandLine.h>
+#include <llvm/Support/FileSystem.h>
 #include <llvm/Support/SpecialCaseList.h>
+#include <llvm/Support/VirtualFileSystem.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 
 #include "fuzzalloc/Analysis/MemFuncIdentify.h"
@@ -69,7 +71,7 @@ static MemFuncList getMemFuncList() {
     raw_string_ostream OS(Err);
     OS << "fuzzalloc memory function list does not exist at " << ClMemFuncs;
     OS.flush();
-    report_fatal_error(Err);
+    report_fatal_error(StringRef(Err));
   }
 
   return MemFuncList(

@@ -145,7 +145,7 @@ void LowerNewDelete::lowerDelete(User *U, Function *DeleteFn) const {
   }
 
   if (auto *CB = dyn_cast<CallBase>(U)) {
-    auto *Ptr = CB->getArgOperand(CB->getNumArgOperands() - 1);
+    auto *Ptr = CB->getArgOperand(CB->getNumOperands() - 1);
 
     auto *Free = CallInst::CreateFree(Ptr, CB);
     Free->takeName(CB);

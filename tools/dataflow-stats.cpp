@@ -11,6 +11,7 @@
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Pass.h>
 #include <llvm/Support/CommandLine.h>
+#include <llvm/Support/SourceMgr.h>
 #include <llvm/Support/WithColor.h>
 
 #include "fuzzalloc/Analysis/CollectStats.h"

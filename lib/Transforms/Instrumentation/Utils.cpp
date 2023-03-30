@@ -130,7 +130,8 @@ FunctionCallee insertTracerDef(Module *M) {
                          "fuzzalloc.SrcDefinition", /*isPacked=*/true);
 
   AttributeList AL;
-  AL = AL.addAttribute(Ctx, AttributeList::FunctionIndex, Attribute::NoUnwind)
+  AL = AL.addAttributeAtIndex(Ctx, AttributeList::FunctionIndex,
+                              Attribute::NoUnwind)
            .addParamAttribute(Ctx, 0, Attribute::NonNull)
            .addParamAttribute(Ctx, 0, Attribute::ReadOnly);
 

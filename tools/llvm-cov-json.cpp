@@ -115,13 +115,6 @@ static Expected<TestcaseCoverages> accumulateCoverage(
     // Accumulate and index the raw coverage profile
     //
 
-    if (ProfWriter.setIsIRLevelProfile(ProfReader->isIRLevelProfile(),
-                                       ProfReader->hasCSIRLevelProfile())) {
-      return createStringError(
-          inconvertibleErrorCode(),
-          "Merging IR generated profile with clang generated profile");
-    }
-
     for (auto &Func : *ProfReader) {
       ProfWriter.addRecord(std::move(Func), /*Weight=*/1, nullptr);
     }

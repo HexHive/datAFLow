@@ -52,12 +52,14 @@ target_link_libraries(llvm-cov-json PRIVATE
 )
 install(TARGETS llvm-cov-json RUNTIME DESTINATION bin)
 
-add_executable(static-dua static-dua.cpp)
-target_link_libraries(static-dua PRIVATE
-  DefUseChain
-  ${LLVM_LIBS}
-)
-install(TARGETS static-dua RUNTIME DESTINATION bin)
+if(USE_SVF)
+  add_executable(static-dua static-dua.cpp)
+  target_link_libraries(static-dua PRIVATE
+    DefUseChain
+    ${LLVM_LIBS}
+  )
+  install(TARGETS static-dua RUNTIME DESTINATION bin)
+endif(USE_SVF)
 
 add_executable(static-llvm-cov static-llvm-cov.cpp)
 target_link_libraries(static-llvm-cov PRIVATE

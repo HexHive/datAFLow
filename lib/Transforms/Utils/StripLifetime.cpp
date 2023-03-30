@@ -46,7 +46,7 @@ bool StripLifetime::runOnModule(Module &M) {
 
   for (auto *U : ToDelete) {
     if (auto *II = dyn_cast<IntrinsicInst>(U)) {
-      auto *Ptr = II->getArgOperand(II->getNumArgOperands() - 1);
+      auto *Ptr = II->getArgOperand(II->getNumOperands() - 1);
       II->eraseFromParent();
       RecursivelyDeleteTriviallyDeadInstructions(Ptr);
       Changed = true;
