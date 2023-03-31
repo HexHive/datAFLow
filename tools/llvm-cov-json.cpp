@@ -20,6 +20,7 @@
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/JSON.h>
 #include <llvm/Support/NativeFormatting.h>
+#include <llvm/Support/Path.h>
 #include <llvm/Support/Program.h>
 #include <llvm/Support/ThreadPool.h>
 #include <llvm/Support/Threading.h>

@@ -146,7 +146,12 @@ Function *HeapTag::tagFunction(const Function *OrigF) const {
   // Insert the tagged function body
   SmallVector<ReturnInst *, 8> Returns;
   CloneFunctionInto(TaggedF, OrigF, VMap,
-                    CloneFunctionChangeType::GlobalChanges, Returns);
+#if LLVM_VERSION_MAJOR > 12
+                    CloneFunctionChangeType::GlobalChanges,
+#else
+                    /*ModuleLevelChanges=*/true,
+#endif
+                    Returns);
 
   // Update allocsize attribute (if it exists). Just move the allocsize index up
   // one (to take into account the tag being inserted as the first function

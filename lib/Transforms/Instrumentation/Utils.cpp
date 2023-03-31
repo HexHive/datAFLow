@@ -130,8 +130,13 @@ FunctionCallee insertTracerDef(Module *M) {
                          "fuzzalloc.SrcDefinition", /*isPacked=*/true);
 
   AttributeList AL;
-  AL = AL.addAttributeAtIndex(Ctx, AttributeList::FunctionIndex,
-                              Attribute::NoUnwind)
+  AL = AL.
+#if LLVM_VERSION_MAJOR > 13
+       addAttributeAtIndex
+#else
+       addAttribute
+#endif
+       (Ctx, AttributeList::FunctionIndex, Attribute::NoUnwind)
            .addParamAttribute(Ctx, 0, Attribute::NonNull)
            .addParamAttribute(Ctx, 0, Attribute::ReadOnly);
 
