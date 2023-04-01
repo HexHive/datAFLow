@@ -18,18 +18,20 @@ object metadata scheme based on the "Padding Area MetaData"
 
 More details are available in our registered report, published at the [1st
 International Fuzzing Workshop (FUZZING)
-2022](https://fuzzingworkshop.github.io/). You can read our report
-[here](https://www.ndss-symposium.org/wp-content/uploads/fuzzing2022_23001_paper.pdf).
+2022](https://fuzzingworkshop.github.io/), and in our TOSEM paper. You can read the report
+[here](https://www.ndss-symposium.org/wp-content/uploads/fuzzing2022_23001_paper.pdf) and
+the final journal paper [here](https://dl.acm.org/doi/10.1145/3587156).
 
 ## Requirements
 
-datAFLow is built on LLVM v12. Python is also required (for the `dataflow-cc`
+datAFLow is built on LLVM v12-14. Python is also required (for the `dataflow-cc`
 wrapper).
 
 ### Building `z3`
 
 Z3 is required by [SVF](https://github.com/svf-tools/svf) (for static analysis).
-If running datAFLow on Ubuntu 20.04, you can install z3 via `apt`.
+SVF is an optional component. If running datAFLow on Ubuntu 20.04, you can
+install z3 via `apt`.
 
 ```bash
 git clone https://github.com/z3prover/z3
@@ -52,7 +54,7 @@ cd $FUZZALLOC_SRC
 git submodule update --init --recursive
 ```
 
-Then build. The `Z3_DIR` option is only required of z3 was built from source.
+Then build.
 
 ```bash
 cd $FUZZALLOC_SRC
@@ -64,6 +66,10 @@ cmake .. \
     -DZ3_DIR=/path/to/z3/install
 make -j
 ```
+
+To build the SVF-based static analysis, pass the `-DUSE_SVF=True` option to cmake.
+As described above, SVF requires z3. If z3 was built from source, the
+`-DZ3_DIR=/path/to/z3/install` option is also required.
 
 ## Instrumenting a Target
 
