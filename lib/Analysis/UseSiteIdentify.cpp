@@ -198,7 +198,7 @@ void UseSiteIdentify::getInterestingMemoryOperands(
         NumReadUseSites++;
       }
     } else {
-      for (unsigned ArgNo = 0; ArgNo < Call->getNumOperands(); ++ArgNo) {
+      for (unsigned ArgNo = 0; ArgNo < Call->arg_size(); ++ArgNo) {
         if (!ClTrackByval || !Call->isByValArgument(ArgNo) ||
             ignoreAccess(Call->getArgOperand(ArgNo))) {
           return;
