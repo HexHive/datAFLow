@@ -158,6 +158,23 @@ char *__bb_strdup(tag_t Tag, const char *S) {
   return Ptr;
 }
 
+char *__bb_strndup(tag_t Tag, const char *S, size_t Size) {
+  if (!S) {
+    return NULL;
+  }
+
+  size_t Len = strlen(S) + 1;
+  if (Len > Size) {
+    Len = Size;
+  }
+  void *Ptr = __bb_malloc(Tag, Len);
+  if (Ptr) {
+    memcpy(Ptr, S, Len);
+    ((char *)Ptr)[Len - 1] = '\0';
+  }
+  return Ptr;
+}
+
 void *__bb_lookup(void *Ptr, uintptr_t *Base, size_t MetaSize) {
   if (!Ptr) {
     *Base = 0;
